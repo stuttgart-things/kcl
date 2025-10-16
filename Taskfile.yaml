@@ -5,6 +5,21 @@ includes:
     taskfile: https://raw.githubusercontent.com/stuttgart-things/platform-engineering-showcase/refs/heads/main/taskfiles/git.yaml
 
 tasks:
+  create:
+    desc: Create new module
+    cmds:
+      - |
+        MODULE_NAME=$(gum input --placeholder "Enter module name" --value "")
+        mkdir -p "$MODULE_NAME" && cd "$MODULE_NAME"
+        kcl mod init
+
+        PROVIDER=$(gum choose "none" "crossplane-provider-kubernetes" "crossplane-provider-aws" "crossplane-provider-azure" --header "Select a provider to add:")
+        if [ "$PROVIDER" != "none" ]; then
+          kcl mod add "$PROVIDER"
+        else
+          echo "Skipping provider addition."
+        fi
+
   do:
     desc: Select a task to run
     cmds:
@@ -14,6 +29,3 @@ tasks:
 
         # Run the selected task
         [ -n "$task_name" ] && task "$task_name"
-
-
-# task -l
