@@ -9,6 +9,10 @@ macAddr = option("params")?.oxr?.spec.macAddr or ""
 
 cluster = option("params")?.oxr?.spec.cluster or ""
 
+# Helm Release parameters
+helmRelease = option("params")?.oxr?.spec.helmRelease or {}
+enableHelmRelease = option("params")?.oxr?.spec.enableHelmRelease or False
+
 # Boolean flag to control output - check explicitly for False
 _printItemsValue = option("params")?.oxr?.spec.printItems
 printItems = False if _printItemsValue == False else True
