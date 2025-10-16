@@ -49,4 +49,56 @@ workflow_object = obj.Object {
     }
 }
 
-items = [workflow_object] if printItems else []
+# Helm Release object - creates a Crossplane Object that wraps a Helm Release
+helm_release_object = obj.Object {
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
+    metadata = {
+        name = name + "-helm-release"
+    }
+    spec = {
+        forProvider = {
+            manifest = {
+                apiVersion = "helm.crossplane.io/v1beta1"
+                kind = "Release"
+                metadata = {
+                    name = helmRelease.get("name", name + "-release")
+                }
+                spec = {
+                    rollbackLimit = helmRelease.get("rollbackLimit", 3)
+                    forProvider = {
+                        chart = {
+                            name = helmRelease.get("chart", {}).get("name", "wordpress")
+                            repository = helmRelease.get("chart", {}).get("repository", "oci://localhost:5000/helm-charts")
+                            version = helmRelease.get("chart", {}).get("version", "15.2.5")
+                        }
+                        namespace = helmRelease.get("namespace", "default")
+                        insecureSkipTLSVerify = helmRelease.get("insecureSkipTLSVerify", True)
+                        skipCRDs = helmRelease.get("skipCRDs", True)
+                        values = helmRelease.get("values", {
+                            "service": {
+                                "type": "ClusterIP"
+                            }
+                        })
+                        set = helmRelease.get("set", [
+                            {
+                                "name": "param1"
+                                "value": "value1"
+                            }
+                        ])
+                    }
+                    providerConfigRef = {
+                        name = helmRelease.get("providerConfig", "helm-provider")
+                    }
+                }
+            }
+        }
+        deletionPolicy = "Delete"
+        managementPolicies = ["*"] 
+        providerConfigRef = {
+            name = cluster
+        }
+    }
+} if enableHelmRelease else None
+
+items = [workflow_object] + ([helm_release_object] if helm_release_object and printItems else []) if printItems else []
