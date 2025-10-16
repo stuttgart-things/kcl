@@ -640,5 +640,3 @@ schema HelmCrossplaneIoV1beta1ReleaseStatusConditionsItems0:
     status: str
 
     $type: str
-
-

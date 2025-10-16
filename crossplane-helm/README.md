@@ -57,7 +57,7 @@ postgres = helm.Release {
             namespace: "databases"
             values: {
                 auth: {
-                    postgresPassword: "changeme"
+                    postgresPassword: "changeme" # pragma: allowlist secret
                 }
                 primary: {
                     persistence: {
