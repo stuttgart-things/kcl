@@ -1,6 +1,6 @@
 # Crossplane Helm Release KCL Module
 
-This KCL module creates a Crossplane Helm Release resource for deploying Helm charts through Crossplane.
+This KCL module creates a Crossplane Kubernetes Object resource for deploying Helm charts through Crossplane using the Kubernetes provider.
 
 ## Usage
 
@@ -40,4 +40,4 @@ kcl run main.k -D params='{
 
 ## Output
 
-Creates a `helm.crossplane.io/v1beta1/Release` resource that can be applied to a Kubernetes cluster with Crossplane and the Helm provider installed.
+Creates a `kubernetes.crossplane.io/v1alpha2/Object` resource that wraps a `helm.cattle.io/v1/HelmChart` resource for deployment through Crossplane with the Kubernetes provider.
