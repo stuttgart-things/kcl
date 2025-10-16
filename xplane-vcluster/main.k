@@ -62,33 +62,33 @@ helm_release_object = obj.Object {
                 apiVersion = "helm.crossplane.io/v1beta1"
                 kind = "Release"
                 metadata = {
-                    name = helmRelease.get("name", name + "-release")
+                    name = helmRelease.name if helmRelease.name else name + "-release"
                 }
                 spec = {
-                    rollbackLimit = helmRelease.get("rollbackLimit", 3)
+                    rollbackLimit = helmRelease.rollbackLimit if helmRelease.rollbackLimit else 3
                     forProvider = {
                         chart = {
-                            name = helmRelease.get("chart", {}).get("name", "wordpress")
-                            repository = helmRelease.get("chart", {}).get("repository", "oci://localhost:5000/helm-charts")
-                            version = helmRelease.get("chart", {}).get("version", "15.2.5")
+                            name = helmRelease.chart.name if helmRelease.chart?.name else "wordpress"
+                            repository = helmRelease.chart.repository if helmRelease.chart?.repository else "oci://localhost:5000/helm-charts"
+                            version = helmRelease.chart.version if helmRelease.chart?.version else "15.2.5"
                         }
-                        namespace = helmRelease.get("namespace", "default")
-                        insecureSkipTLSVerify = helmRelease.get("insecureSkipTLSVerify", True)
-                        skipCRDs = helmRelease.get("skipCRDs", True)
-                        values = helmRelease.get("values", {
+                        namespace = helmRelease.namespace if helmRelease.namespace else "default"
+                        insecureSkipTLSVerify = helmRelease.insecureSkipTLSVerify if helmRelease.insecureSkipTLSVerify != None else True
+                        skipCRDs = helmRelease.skipCRDs if helmRelease.skipCRDs != None else True
+                        values = helmRelease.values if helmRelease.values else {
                             "service": {
                                 "type": "ClusterIP"
                             }
-                        })
-                        set = helmRelease.get("set", [
+                        }
+                        set = helmRelease.set if helmRelease.set else [
                             {
                                 "name": "param1"
                                 "value": "value1"
                             }
-                        ])
+                        ]
                     }
                     providerConfigRef = {
-                        name = helmRelease.get("providerConfig", "helm-provider")
+                        name = helmRelease.providerConfig if helmRelease.providerConfig else "helm-provider"
                     }
                 }
             }
