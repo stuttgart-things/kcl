@@ -1,0 +1,9 @@
+{
+  "workdir": "/workdir",
+  "base_image": "ubuntu:24.04",
+  "setup_commands": [
+    "apt-get update",
+    "apt-get install -y curl wget git ca-certificates",
+    "curl -fsSL https://kcl-lang.io/script/install-cli.sh | bash"
+  ]
+}
