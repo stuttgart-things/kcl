@@ -7,6 +7,7 @@ This KCL module creates a Crossplane Helm Release for deploying VCluster with pr
 - **VCluster Deployment**: Creates VCluster instances via Crossplane Helm Provider
 - **Production Ready**: Pre-configured with persistence, NodePort service, and custom SANs
 - **Flexible Configuration**: Customizable storage classes, ports, and networking
+- **Cross-Cluster Secret Access**: Optional observe pattern for accessing VCluster secrets from management cluster
 - **Stuttgart-Things Provider**: Uses custom Crossplane Helm Provider
 
 ## Usage
@@ -40,6 +41,34 @@ kcl run main.k -D params='{
     }
   }
 }' | yq '.items[]' > xplane-test.yaml
+
+# VCluster with Cross-Cluster Secret Observation
+kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "name": "xplane-test",
+      "version": "0.29.0",
+      "clusterName": "in-cluster",
+      "targetNamespace": "vcluster-xplane-test",
+      "storageClass": "standard",
+      "bindAddress": "0.0.0.0",
+      "proxyPort": 8443,
+      "nodePort": 32444,
+      "extraSANs": [
+        "maverick.tiab.labda.sva.de",
+        "10.100.136.150",
+        "localhost"
+      ],
+      "serverUrl": "https://10.100.136.150:32444",
+      "observeSecret": {
+        "enabled": true,
+        "clusterName": "k3s-tink1",
+        "secretName": "vc-xplane-test",
+        "secretNamespace": "vcluster-xplane-test"
+      }
+    }
+  }
+}' | yq '.items[]' > xplane-test-with-observer.yaml
 ```
 
 #### 2. Apply to Crossplane Cluster
@@ -88,6 +117,12 @@ vcluster connect my-vcluster -n vcluster-my-vcluster
 - `serverUrl`: External server URL for kubeconfig (default: "https://localhost:32443")
 - `values`: Additional custom Helm values (default: {})
 
+### Observe Secret Configuration
+- `observeSecret.enabled`: Enable cross-cluster secret observation (default: false)
+- `observeSecret.clusterName`: Target cluster provider config for secret observation (default: same as clusterName)
+- `observeSecret.secretName`: Name of the VCluster secret to observe (default: "vc-{name}-kubeconfig")
+- `observeSecret.secretNamespace`: Namespace of the VCluster secret to observe (default: same as targetNamespace)
+
 ## Generated Configuration
 
 The module creates a VCluster with:
@@ -127,7 +162,12 @@ exportKubeConfig:
 
 ## Output
 
-Creates a `helm.crossplane.io/v1beta1/Release` resource for VCluster deployment through Crossplane.
+Creates the following Crossplane resources:
+
+1. **`helm.crossplane.io/v1beta1/Release`** - VCluster deployment via Helm
+2. **`kubernetes.crossplane.io/v1alpha2/Object`** - Secret observer (optional, when `observeSecret.enabled=true`)
+
+The observe object allows access to VCluster kubeconfig secrets from the management cluster without manual secret copying.
 
 ## Prerequisites
 
@@ -155,6 +195,7 @@ spec:
 ## Dependencies
 
 - Stuttgart-Things Crossplane Helm Provider: `ghcr.io/stuttgart-things/crossplane-provider-helm:0.1.1`
+- Crossplane Kubernetes Provider: `crossplane-provider-kubernetes:0.18.0` (for observe functionality)
 - VCluster Helm Chart: `https://charts.loft.sh/vcluster`
 
 ## Examples
@@ -213,6 +254,32 @@ done
 
 # Apply all at once
 kubectl apply -f dev-vcluster.yaml -f staging-vcluster.yaml -f prod-vcluster.yaml
+```
+
+### VCluster with Secret Observation
+```bash
+# Generate VCluster with automatic secret observation
+kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "name": "monitored-vcluster",
+      "clusterName": "management-cluster",
+      "targetNamespace": "vcluster-ns",
+      "observeSecret": {
+        "enabled": true,
+        "clusterName": "remote-k3s",
+        "secretName": "vc-monitored-vcluster",
+        "secretNamespace": "vcluster-ns"
+      }
+    }
+  }
+}' | yq '.items[]' > monitored-vcluster.yaml
+
+# Apply both VCluster and observer
+kubectl apply -f monitored-vcluster.yaml
+
+# Extract kubeconfig from observed secret
+kubectl get object monitored-vcluster-secret-observer -o jsonpath='{.status.atProvider.manifest.data.config}' | base64 -d > monitored-vcluster-kubeconfig.yaml
 ```
 
 ## Cross-Cluster Secret Access
