@@ -11,41 +11,62 @@ This KCL module creates a Crossplane Helm Release for deploying VCluster with pr
 
 ## Usage
 
-### Basic VCluster Deployment
+### Generate and Apply VCluster Release
+
+#### 1. Generate YAML for Crossplane
 
 ```bash
+# Basic VCluster Release
+kcl run main.k -D params='{"oxr":{"spec":{"name":"my-vcluster"}}}' | yq '.items[]' > my-vcluster.yaml
+
+# Production VCluster with Custom Configuration
 kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "name": "my-vcluster"
-    }
-  }
-}'
-```
-
-### Production VCluster with Custom Configuration
-
-```bash
-kcl run main.k -D params='{
-  "oxr": {
-    "spec": {
-      "name": "maverick-vcluster",
+      "name": "xplane-test",
       "version": "0.29.0",
-      "clusterName": "production-cluster",
-      "targetNamespace": "vcluster",
-      "storageClass": "fast-ssd",
+      "clusterName": "in-cluster",
+      "targetNamespace": "vcluster-xplane-test",
+      "storageClass": "standard",
       "bindAddress": "0.0.0.0",
       "proxyPort": 8443,
-      "nodePort": 32443,
+      "nodePort": 32444,
       "extraSANs": [
         "maverick.tiab.labda.sva.de",
         "10.100.136.150",
         "localhost"
       ],
-      "serverUrl": "https://10.100.136.150:32443"
+      "serverUrl": "https://10.100.136.150:32444"
     }
   }
-}'
+}' | yq '.items[]' > xplane-test.yaml
+```
+
+#### 2. Apply to Crossplane Cluster
+
+```bash
+# Set your Crossplane cluster context
+export KUBECONFIG=~/.kube/your-crossplane-cluster
+
+# Apply the generated release
+kubectl apply -f my-vcluster.yaml
+
+# Check the release status
+kubectl get releases
+kubectl describe release my-vcluster
+```
+
+#### 3. Monitor VCluster Deployment
+
+```bash
+# Watch the helm release
+kubectl get releases -w
+
+# Check the VCluster pods (use actual namespace)
+kubectl get pods -n vcluster-my-vcluster
+
+# Get VCluster kubeconfig (after deployment)
+vcluster connect my-vcluster -n vcluster-my-vcluster
 ```
 
 ## Parameters
@@ -108,6 +129,29 @@ exportKubeConfig:
 
 Creates a `helm.crossplane.io/v1beta1/Release` resource for VCluster deployment through Crossplane.
 
+## Prerequisites
+
+### Required Tools
+- **KCL**: `curl -fsSL https://kcl-lang.io/script/install-cli.sh | bash`
+- **yq**: `https://github.com/mikefarah/yq#install`
+- **kubectl**: Configured with Crossplane cluster access
+
+### Crossplane Setup
+Your cluster must have:
+1. **Crossplane installed**: `helm install crossplane crossplane-stable/crossplane --namespace crossplane-system --create-namespace`
+2. **Helm Provider installed**: `kubectl apply -f provider-helm.yaml`
+3. **Provider Configuration**: Configured Helm provider for target cluster
+
+```yaml
+# provider-helm.yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-helm
+spec:
+  package: ghcr.io/stuttgart-things/crossplane-provider-helm:0.1.1
+```
+
 ## Dependencies
 
 - Stuttgart-Things Crossplane Helm Provider: `ghcr.io/stuttgart-things/crossplane-provider-helm:0.1.1`
@@ -117,7 +161,7 @@ Creates a `helm.crossplane.io/v1beta1/Release` resource for VCluster deployment 
 
 ### Development Environment
 ```bash
-# Minimal setup for development
+# Generate minimal development VCluster
 kcl run main.k -D params='{
   "oxr": {
     "spec": {
@@ -125,12 +169,20 @@ kcl run main.k -D params='{
       "storageClass": "local-path"
     }
   }
-}'
+}' | yq '.items[]' > dev-vcluster.yaml
+
+```bash
+# Apply to cluster
+kubectl apply -f dev-vcluster.yaml
+
+# Monitor deployment
+kubectl get releases dev-vcluster -w
+```
 ```
 
 ### Production Environment
 ```bash
-# Full production setup
+# Generate full production VCluster
 kcl run main.k -D params='{
   "oxr": {
     "spec": {
@@ -145,5 +197,137 @@ kcl run main.k -D params='{
       "serverUrl": "https://vcluster.company.com:32443"
     }
   }
-}'
+}' | yq '.items[]' > prod-vcluster.yaml
+
+# Apply to production cluster
+export KUBECONFIG=~/.kube/production-cluster
+kubectl apply -f prod-vcluster.yaml
+```
+
+### Batch Generation
+```bash
+# Generate multiple VCluster configurations
+for env in dev staging prod; do
+  kcl run main.k -D params="{\"oxr\":{\"spec\":{\"name\":\"${env}-vcluster\",\"clusterName\":\"${env}-cluster\"}}}" | yq '.items[]' > ${env}-vcluster.yaml
+done
+
+# Apply all at once
+kubectl apply -f dev-vcluster.yaml -f staging-vcluster.yaml -f prod-vcluster.yaml
+```
+
+## Cross-Cluster Secret Access
+
+### Accessing VCluster Kubeconfig from Management Cluster
+
+VCluster kubeconfig secrets remain in the target cluster by design. To access them from your Crossplane management cluster, use the "Observe" pattern:
+
+#### 1. Create Observe Object
+
+```yaml
+# observe-vcluster-secret.yaml
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: vc-test-vcluster-localpath-secret
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: vc-test-vcluster-localpath
+        namespace: vcluster-test
+  managementPolicies: ["Observe"]
+  providerConfigRef:
+    name: k3s-tink1  # Reference to your target cluster provider config
+```
+
+#### 2. Apply and Extract Kubeconfig
+
+```bash
+# Apply the observe object
+kubectl apply -f observe-vcluster-secret.yaml
+
+# Extract the kubeconfig
+kubectl get object vc-test-vcluster-localpath-secret -o jsonpath='{.status.atProvider.manifest.data.config}' | base64 -d > vcluster-kubeconfig.yaml
+
+# Use the VCluster
+KUBECONFIG=vcluster-kubeconfig.yaml kubectl get nodes
+```
+
+#### 3. Prerequisites for Observe Pattern
+
+- **Kubernetes Provider**: Must be installed in management cluster
+- **Provider Config**: Target cluster must be configured as provider config
+- **RBAC**: Crossplane must have permissions to read secrets in target cluster
+
+```bash
+# Install Kubernetes Provider
+kubectl apply -f - <<EOF
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-kubernetes
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v0.14.0
+EOF
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. CRD Not Found Error
+```bash
+# Error: no matches for kind "Release" in version "helm.crossplane.io/v1beta1"
+# Solution: Install Crossplane Helm Provider
+kubectl apply -f - <<EOF
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-helm
+spec:
+  package: ghcr.io/stuttgart-things/crossplane-provider-helm:0.1.1
+EOF
+
+# Wait for provider to be ready
+kubectl wait --for=condition=Healthy provider/provider-helm --timeout=300s
+```
+
+#### 2. Provider Configuration Missing
+```bash
+# Check if provider config exists
+kubectl get providerconfigs
+
+# Create provider config if missing
+kubectl apply -f - <<EOF
+apiVersion: helm.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: in-cluster
+spec:
+  credentials:
+    source: InjectedIdentity
+EOF
+```
+
+#### 3. Validate Generated YAML
+```bash
+# Check the generated YAML before applying
+kcl run main.k -D params='{"oxr":{"spec":{"name":"test"}}}' | yq '.items[]' | kubectl --dry-run=client -f -
+
+# Validate with server-side dry run
+kubectl apply --dry-run=server -f your-vcluster.yaml
+```
+
+#### 4. Monitor Release Status
+```bash
+# Check release status
+kubectl get releases -o wide
+
+# Check release events
+kubectl describe release your-vcluster-name
+
+# Check provider logs
+kubectl logs -n crossplane-system -l pkg.crossplane.io/provider=provider-helm
 ```
