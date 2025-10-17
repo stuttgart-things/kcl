@@ -1,3 +1,14 @@
+# SCHEMA HELM RELEASE
+
+```bash
+# ADD DEP TO kcl.mod
+[dependencies]
+crossplane-provider-helm = { oci = "oci://ghcr.io/stuttgart-things/crossplane-provider-helm", tag = "0.1.1" }
+```
+
+
+```bash
+# main.k
 import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
 
 # --- Get XR spec fields ---
@@ -31,3 +42,14 @@ release = helm.Release {
 }
 
 items = [release]
+```
+
+```bash
+kcl run -D params='{
+  "oxr": {
+    "spec": {
+      "name": "my-release"
+    }
+  }
+}'
+```
