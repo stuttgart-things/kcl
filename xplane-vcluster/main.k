@@ -36,7 +36,45 @@ release = helm.Release {
                 version = version
             }
             namespace = targetNamespace
-            values: {}
+            values: {
+                controlPlane = {
+                    statefulSet = {
+                        persistence = {
+                            volumeClaim = {
+                                storageClass = storageClass
+                            }
+                        }
+                    }
+                    distro = {
+                        k8s = {
+                            enabled = True
+                        }
+                    }
+                    proxy = {
+                        bindAddress = bindAddress
+                        port = proxyPort
+                        extraSANs = extraSANs
+                    }
+                    service = {
+                        enabled = True
+                        spec = {
+                            type = "NodePort"
+                            ports = [
+                                {
+                                    name = "https"
+                                    port = 443
+                                    targetPort = proxyPort
+                                    nodePort = nodePort
+                                    protocol = "TCP"
+                                }
+                            ]
+                        }
+                    }
+                }
+                exportKubeConfig = {
+                    server = serverUrl
+                }
+            } | customValues
         }
     }
 }
