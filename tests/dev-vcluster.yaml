@@ -1,0 +1,149 @@
+---
+apiVersion: helm.crossplane.io/v1beta1
+kind: Release
+metadata:
+  name: vlcuster-k3s-tink1
+spec:
+  deletionPolicy: Delete
+  forProvider:
+    chart:
+      name: vcluster
+      repository: https://charts.loft.sh
+      version: '0.29.0'
+    namespace: vcluster-k3s-tink1
+    values:
+      controlPlane:
+        statefulSet:
+          persistence:
+            volumeClaim:
+              storageClass: local-path
+        distro:
+          k8s:
+            enabled: true
+        proxy:
+          bindAddress: '0.0.0.0'
+          port: 8443
+          extraSANs:
+            - test-k3s1.labul.sva.de
+            - '10.31.103.23'
+            - localhost
+        service:
+          enabled: true
+          spec:
+            type: NodePort
+            ports:
+              - name: https
+                port: 443
+                targetPort: 8443
+                nodePort: 32444
+                protocol: TCP
+      exportKubeConfig:
+        server: https://10.31.103.23:32444
+        additionalSecrets:
+          - name: vc-vlcuster-k3s-tink1-crossplane
+            namespace: vcluster-k3s-tink1
+            context: vcluster-crossplane-context
+            server: https://10.31.103.23:32444
+  managementPolicies:
+    - '*'
+  providerConfigRef:
+    name: k3s-tink1
+---
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: vcluster-kubeconfig-reader
+spec:
+  deletionPolicy: Delete
+  managementPolicies:
+    - Observe  # Important: Only observe, don't manage!
+  providerConfigRef:
+    name: k3s-tink1
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: vc-vlcuster-k3s-tink1
+        namespace: vcluster-k3s-tink1
+  connectionDetails:
+    - apiVersion: v1
+      kind: Secret
+      name: vc-vlcuster-k3s-tink1
+      namespace: vcluster-k3s-tink1
+      fieldPath: data.config
+      toConnectionSecretKey: kubeconfig
+    - apiVersion: v1
+      kind: Secret
+      name: vc-vlcuster-k3s-tink1
+      namespace: vcluster-k3s-tink1
+      fieldPath: data.certificate-authority
+      toConnectionSecretKey: ca.crt
+  writeConnectionSecretToRef:
+    name: vcluster-k3s-tink1-connection  # This is what gets created
+    namespace: crossplane-system
+---
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: vcluster-k3s-tink1
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: vcluster-k3s-tink1-connection  # Fixed: matches the Object's output
+      key: kubeconfig
+---
+# Helm ProviderConfig for vcluster
+apiVersion: helm.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: vcluster-k3s-tink1-helm
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: vcluster-k3s-tink1-connection
+      key: kubeconfig
+---
+# 🧪 TEST 1: Create a namespace in vcluster
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: test-namespace-in-vcluster
+spec:
+  deletionPolicy: Delete
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: test-namespace
+        labels:
+          environment: test
+          managed-by: crossplane
+  providerConfigRef:
+    name: vcluster-k3s-tink1
+---
+# 🧪 TEST 2: Create a ConfigMap in vcluster
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: test-configmap-in-vcluster
+spec:
+  deletionPolicy: Delete
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: test-config
+        namespace: default
+      data:
+        message: "Hello from Crossplane in vcluster!"
+        timestamp: "2025-10-18"
+  providerConfigRef:
+    name: vcluster-k3s-tink1
+---

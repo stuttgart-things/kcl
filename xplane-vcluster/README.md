@@ -43,7 +43,7 @@ kcl run main.k -D params='{
 }' | yq '.items[]' > xplane-test.yaml
 
 # VCluster with Cross-Cluster Secret Observation
-kcl run main.k -D params='{
+kcl run main.k --format yaml -D params='{
   "oxr": {
     "spec": {
       "name": "xplane-test",
@@ -63,12 +63,57 @@ kcl run main.k -D params='{
       "observeSecret": {
         "enabled": true,
         "clusterName": "k3s-tink1",
-        "secretName": "vc-xplane-test",
-        "secretNamespace": "vcluster-xplane-test"
+        "secretName": "vc-xplane-test", # pragma: allowlist secret
+        "secretNamespace": "vcluster-xplane-test" # pragma: allowlist secret
       }
     }
   }
-}' | yq '.items[]' > xplane-test-with-observer.yaml
+}' | yq '.items[]' | sed 's/^/---\n/;1s/^---//' #| > xplane-test-with-observer.yaml
+```
+
+#### 1.1. One-Step Render and Apply
+
+For direct deployment without intermediate files:
+
+```bash
+# VCluster with local-path storage, additionalSecrets, and cross-cluster observation
+cd xplane-vcluster && kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "name": "vlcuster-k3s-tink1",
+      "version": "0.29.0",
+      "clusterName": "k3s-tink1",
+      "targetNamespace": "vcluster-k3s-tink1",
+      "storageClass": "local-path",
+      "bindAddress": "0.0.0.0",
+      "proxyPort": 8443,
+      "nodePort": 32444,
+      "extraSANs": [
+        "test-k3s1.labul.sva.de",
+        "10.31.103.23",
+        "localhost"
+      ],
+      "serverUrl": "https://10.31.103.23:32444",
+      "additionalSecrets": [
+        {
+          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "namespace": "vcluster-k3s-tink1",
+          "context": "vcluster-crossplane-context",
+          "server": "https://10.31.103.23:32444"
+        }
+      ],
+      "observeSecret": {
+        "enabled": true,
+        "clusterName": "k3s-tink1",
+        "secretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "secretNamespace": "vcluster-k3s-tink1" # pragma: allowlist secret
+      }
+    }
+  }
+}' | yq '.items[]' > dev-vcluster.yaml
+
+
+| kubectl apply -f -
 ```
 
 #### 2. Apply to Crossplane Cluster
@@ -94,8 +139,33 @@ kubectl get releases -w
 # Check the VCluster pods (use actual namespace)
 kubectl get pods -n vcluster-my-vcluster
 
-# Get VCluster kubeconfig (after deployment)
+# Check VCluster release status
+kubectl get release my-vcluster -o yaml
+
+# Traditional VCluster CLI method
 vcluster connect my-vcluster -n vcluster-my-vcluster
+```
+
+#### 4. Extract Kubeconfig via Observe Pattern
+
+When using `observeSecret.enabled: true`, extract the kubeconfig from the management cluster:
+
+```bash
+# Check if observe object is ready
+kubectl get object vlcuster-k3s-tink1-secret-observer
+
+# Extract kubeconfig from observed secret
+kubectl get object vlcuster-k3s-tink1-secret-observer -o jsonpath='{.status.atProvider.manifest.data.config}' | base64 -d > vlcuster-k3s-tink1-kubeconfig.yaml
+
+# Test VCluster connectivity
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl get nodes
+
+# Create test resources in VCluster
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl create namespace test-vcluster
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl run test-pod --image=nginx:alpine -n test-vcluster
+
+# Verify test pod
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl get pods -n test-vcluster
 ```
 
 ## Parameters
@@ -116,6 +186,13 @@ vcluster connect my-vcluster -n vcluster-my-vcluster
 - `extraSANs`: Additional Subject Alternative Names (default: ["localhost"])
 - `serverUrl`: External server URL for kubeconfig (default: "https://localhost:32443")
 - `values`: Additional custom Helm values (default: {})
+
+### Additional Secrets Configuration
+- `additionalSecrets`: List of additional kubeconfig secrets to create (default: [])
+  - `name`: Name of the additional secret
+  - `namespace`: Namespace for the secret (optional, defaults to targetNamespace)
+  - `context`: Custom context name for the kubeconfig (optional)
+  - `server`: Custom server URL for the kubeconfig (optional)
 
 ### Observe Secret Configuration
 - `observeSecret.enabled`: Enable cross-cluster secret observation (default: false)
@@ -268,8 +345,8 @@ kcl run main.k -D params='{
       "observeSecret": {
         "enabled": true,
         "clusterName": "remote-k3s",
-        "secretName": "vc-monitored-vcluster",
-        "secretNamespace": "vcluster-ns"
+        "secretName": "vc-monitored-vcluster", # pragma: allowlist secret
+        "secretNamespace": "vcluster-ns" # pragma: allowlist secret
       }
     }
   }
@@ -282,11 +359,192 @@ kubectl apply -f monitored-vcluster.yaml
 kubectl get object monitored-vcluster-secret-observer -o jsonpath='{.status.atProvider.manifest.data.config}' | base64 -d > monitored-vcluster-kubeconfig.yaml
 ```
 
+### Complete Local-Path VCluster Testing Workflow
+
+```bash
+# 1. Deploy VCluster with local-path storage and observe pattern
+cd xplane-vcluster && kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "name": "vlcuster-k3s-tink1",
+      "version": "0.29.0",
+      "clusterName": "k3s-tink1",
+      "targetNamespace": "vcluster-k3s-tink1",
+      "storageClass": "local-path",
+      "bindAddress": "0.0.0.0",
+      "proxyPort": 8443,
+      "nodePort": 32444,
+      "extraSANs": [
+        "test-k3s1.labul.sva.de",
+        "10.31.103.23",
+        "localhost"
+      ],
+      "serverUrl": "https://10.31.103.23:32444",
+      "additionalSecrets": [
+        {
+          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "namespace": "default",
+          "context": "vcluster-crossplane-context",
+          "server": "https://10.31.103.23:32444"
+        }
+      ],
+      "observeSecret": {
+        "enabled": true,
+        "clusterName": "k3s-tink1",
+        "secretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "secretNamespace": "vcluster-k3s-tink1" # pragma: allowlist secret
+      }
+    }
+  }
+}' | yq '.items[]' | kubectl apply -f -
+
+# 2. Monitor deployment progress
+kubectl get releases vlcuster-k3s-tink1 -w
+
+# 3. Check observe object status
+kubectl get object vlcuster-k3s-tink1-secret-observer
+
+# 4. Extract kubeconfig when ready
+kubectl get object vlcuster-k3s-tink1-secret-observer -o jsonpath='{.status.atProvider.manifest.data.config}' | base64 -d > vlcuster-k3s-tink1-kubeconfig.yaml
+
+# 5. Test VCluster connectivity
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl get nodes
+
+# 6. Create test namespace and pod
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl create namespace test-vcluster
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl run test-pod --image=nginx:alpine -n test-vcluster
+
+# 7. Verify deployment
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl get pods -n test-vcluster -w
+```
+
 ## Cross-Cluster Secret Access
 
 ### Accessing VCluster Kubeconfig from Management Cluster
 
 VCluster kubeconfig secrets remain in the target cluster by design. To access them from your Crossplane management cluster, use the "Observe" pattern:
+
+### Creating ProviderConfig for VCluster
+
+Once you have the observed secret, create a ProviderConfig to use the VCluster from Crossplane:
+
+VCluster can create properly formatted kubeconfig secrets directly using `additionalSecrets`. This eliminates the need for manual extraction scripts:
+
+```yaml
+# vcluster-provider-config.yaml
+# ProviderConfigs using VCluster additionalSecrets (no manual extraction needed)
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: vcluster-k3s-tink1
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: default
+      name: vc-vlcuster-k3s-tink1-crossplane  # Created by VCluster additionalSecrets
+      key: config
+---
+apiVersion: helm.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: vcluster-k3s-tink1-helm
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: default
+      name: vc-vlcuster-k3s-tink1-crossplane  # Created by VCluster additionalSecrets
+      key: config
+```
+
+```bash
+# Step 1: Deploy VCluster with additionalSecrets (creates the secret automatically)
+# Step 2: Apply the ProviderConfig
+kubectl apply -f vcluster-provider-config.yaml
+
+# Step 3: Verify ProviderConfig is ready
+kubectl get providerconfig vcluster-k3s-tink1
+kubectl get providerconfig vcluster-k3s-tink1-helm
+
+# Now you can use the VCluster as a target for Crossplane resources
+# Example: Deploy resources to the VCluster using providerConfigRef: "vcluster-k3s-tink1"
+```
+
+#### Using the VCluster ProviderConfig
+
+Deploy Kubernetes resources to the VCluster using the Kubernetes Provider:
+
+```yaml
+# Example: Deploy ConfigMap to VCluster
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: vcluster-test-configmap
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: test-configmap
+        namespace: default
+      data:
+        message: "Hello from VCluster via Crossplane!"
+        cluster: "vcluster-k3s-tink1"
+  providerConfigRef:
+    name: vcluster-k3s-tink1  # References the VCluster ProviderConfig
+
+# Example: Create Namespace in VCluster
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: vcluster-test-namespace
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: crossplane-deployed
+        labels:
+          managed-by: crossplane
+          target-cluster: vcluster
+  providerConfigRef:
+    name: vcluster-k3s-tink1  # References the VCluster ProviderConfig
+```
+
+```bash
+# Apply example resources to VCluster
+kubectl apply -f vcluster-kubernetes-example.yaml
+
+# Verify resources were created in VCluster
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl get configmap test-configmap
+KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl get namespace crossplane-deployed
+```
+
+#### Complete Working Example
+
+```bash
+# 1. Deploy VCluster with additionalSecrets (no manual extraction needed)
+# The VCluster automatically creates the properly formatted secret
+
+# 2. Apply ProviderConfigs (uses the automatically created secret)
+kubectl apply -f vcluster-provider-config.yaml
+
+# 3. Deploy test resources to VCluster
+kubectl apply -f vcluster-kubernetes-example.yaml
+
+# 4. Verify Crossplane objects are synced and ready
+kubectl get object vcluster-test-configmap vcluster-test-namespace
+# Expected output:
+# NAME                      KIND        PROVIDERCONFIG       SYNCED   READY   AGE
+# vcluster-test-configmap   ConfigMap   vcluster-k3s-tink1   True     True    30s
+# vcluster-test-namespace   Namespace   vcluster-k3s-tink1   True     True    30s
+
+# 5. Verify the automatically created secret exists
+kubectl get secret vc-vlcuster-k3s-tink1-crossplane -n default
+```
 
 #### 1. Create Observe Object
 
@@ -397,4 +655,25 @@ kubectl describe release your-vcluster-name
 
 # Check provider logs
 kubectl logs -n crossplane-system -l pkg.crossplane.io/provider=provider-helm
+```
+
+#### 5. ProviderConfig Issues
+
+```bash
+# Verify the additionalSecret was created by VCluster
+kubectl get secret vc-vlcuster-k3s-tink1-crossplane -n default
+
+# Check if the secret has the correct format
+kubectl get secret vc-vlcuster-k3s-tink1-crossplane -n default -o jsonpath='{.data.config}' | base64 -d | head -5
+
+# Verify ProviderConfig status
+kubectl get providerconfigs.kubernetes.crossplane.io vcluster-k3s-tink1
+kubectl describe providerconfigs.kubernetes.crossplane.io vcluster-k3s-tink1
+
+# Test Object status
+kubectl get object vcluster-test-configmap -o yaml
+kubectl describe object vcluster-test-configmap
+
+# Check VCluster release status
+kubectl get release vlcuster-k3s-tink1 -o yaml
 ```

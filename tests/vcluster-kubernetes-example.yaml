@@ -1,0 +1,37 @@
+# VCluster Kubernetes Provider Example
+# This demonstrates how to use the VCluster as a target for Kubernetes resources
+
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: vcluster-test-configmap
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: test-configmap
+        namespace: default
+      data:
+        message: "Hello from VCluster via Crossplane!"
+        cluster: "vcluster-k3s-tink1"
+  providerConfigRef:
+    name: vcluster-k3s-tink1  # References the VCluster ProviderConfig
+---
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: vcluster-test-namespace
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: crossplane-deployed
+        labels:
+          managed-by: crossplane
+          target-cluster: vcluster
+  providerConfigRef:
+    name: vcluster-k3s-tink1  # References the VCluster ProviderConfig
