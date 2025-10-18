@@ -1,7 +1,4 @@
 import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
-import crossplane_provider_kubernetes.v1alpha2.kubernetes_crossplane_io_v1alpha2_object as obj
-import crossplane_provider_kubernetes.v1alpha1.kubernetes_crossplane_io_v1alpha1_provider_config as kube_pc
-import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_provider_config as helm_pc
 
 # --- Get XR spec fields ---
 name = option("params")?.oxr?.spec?.name or "test"
