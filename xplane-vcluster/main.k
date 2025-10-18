@@ -185,6 +185,5 @@ vcluster_helm_provider_config = helm_pc.ProviderConfig {
 
 # Build items list
 base_items = [release]
-connection_items = ([kubeconfig_reader, vcluster_kube_provider_config, vcluster_helm_provider_config] 
-                   if enableConnectionSecret else [])
+connection_items = [kubeconfig_reader, vcluster_kube_provider_config, vcluster_helm_provider_config] if enableConnectionSecret else []
 items = base_items + connection_items
