@@ -1,5 +1,7 @@
 import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
 import crossplane_provider_kubernetes.v1alpha2.kubernetes_crossplane_io_v1alpha2_object as obj
+import crossplane_provider_kubernetes.v1alpha1.kubernetes_crossplane_io_v1alpha1_provider_config as kube_pc
+import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_provider_config as helm_pc
 
 # --- Get XR spec fields ---
 name = option("params")?.oxr?.spec?.name or "test"
@@ -23,12 +25,14 @@ customValues = option("params")?.oxr?.spec?.values or {}
 # Additional secrets configuration for better Crossplane integration
 additionalSecrets = option("params")?.oxr?.spec?.additionalSecrets or []
 
-# Observe configuration for secret access
-enableObserve = option("params")?.oxr?.spec?.observeSecret?.enabled or False
-observeClusterName = option("params")?.oxr?.spec?.observeSecret?.clusterName or clusterName
-observeSecretName = option("params")?.oxr?.spec?.observeSecret?.secretName or "vc-{}-kubeconfig".format(name)
-observeSecretNamespace = option("params")?.oxr?.spec?.observeSecret?.secretNamespace or targetNamespace
+# Connection secret configuration
+enableConnectionSecret = option("params")?.oxr?.spec?.connectionSecret?.enabled or True
+connectionSecretName = option("params")?.oxr?.spec?.connectionSecret?.name or "{}-connection".format(name)
+connectionSecretNamespace = option("params")?.oxr?.spec?.connectionSecret?.namespace or "crossplane-system"
+vclusterSecretName = option("params")?.oxr?.spec?.connectionSecret?.vclusterSecretName or "vc-{}".format(name)
+vclusterSecretNamespace = option("params")?.oxr?.spec?.connectionSecret?.vclusterSecretNamespace or targetNamespace
 
+# VCluster Helm Release
 release = helm.Release {
     apiVersion = "helm.crossplane.io/v1beta1"
     kind = "Release"
@@ -36,9 +40,11 @@ release = helm.Release {
         name = name
     }
     spec = {
+        deletionPolicy = "Delete"
         providerConfigRef: {
             name = clusterName
         }
+        managementPolicies = ["*"]
         forProvider: {
             chart: {
                 name = chartName
@@ -91,58 +97,94 @@ release = helm.Release {
     }
 }
 
-# Create observe object for VCluster kubeconfig secret if enabled
-observe_object = obj.Object {
+# Kubernetes Object to create connection secret from VCluster kubeconfig
+kubeconfig_reader = obj.Object {
     apiVersion = "kubernetes.crossplane.io/v1alpha2"
     kind = "Object"
     metadata = {
-        name = "{}-secret-observer".format(name)
+        name = "vcluster-kubeconfig-reader"
     }
     spec = {
+        deletionPolicy = "Delete"
+        managementPolicies = ["Observe"]  # Important: Only observe, don't manage!
+        providerConfigRef = {
+            name = clusterName
+        }
         forProvider = {
             manifest = {
                 apiVersion = "v1"
                 kind = "Secret"
                 metadata = {
-                    name = observeSecretName
-                    namespace = observeSecretNamespace
+                    name = vclusterSecretName
+                    namespace = vclusterSecretNamespace
                 }
             }
         }
-        managementPolicies = ["Observe"]
-        providerConfigRef = {
-            name = observeClusterName
+        connectionDetails = [
+            {
+                apiVersion = "v1"
+                kind = "Secret"
+                name = vclusterSecretName
+                namespace = vclusterSecretNamespace
+                fieldPath = "data.config"
+                toConnectionSecretKey = "kubeconfig"
+            }
+            {
+                apiVersion = "v1"
+                kind = "Secret"
+                name = vclusterSecretName
+                namespace = vclusterSecretNamespace
+                fieldPath = "data.certificate-authority"
+                toConnectionSecretKey = "ca.crt"
+            }
+        ]
+        writeConnectionSecretToRef = {
+            name = connectionSecretName  # This is what gets created
+            namespace = connectionSecretNamespace
         }
     }
-} if enableObserve else {}
+} if enableConnectionSecret else {}
 
-# Create observe objects for additional secrets
-additional_observe_objects = [
-    obj.Object {
-        apiVersion = "kubernetes.crossplane.io/v1alpha2"
-        kind = "Object"
-        metadata = {
-            name = "{}-{}-observer".format(name, secret.name)
-        }
-        spec = {
-            forProvider = {
-                manifest = {
-                    apiVersion = "v1"
-                    kind = "Secret"
-                    metadata = {
-                        name = secret.name
-                        namespace = secret.get("namespace", targetNamespace)
-                    }
-                }
-            }
-            managementPolicies = ["Observe"]
-            providerConfigRef = {
-                name = observeClusterName
+# Kubernetes ProviderConfig for VCluster
+vcluster_kube_provider_config = kube_pc.ProviderConfig {
+    apiVersion = "kubernetes.crossplane.io/v1alpha1"
+    kind = "ProviderConfig"
+    metadata = {
+        name = name
+    }
+    spec = {
+        credentials = {
+            source = "Secret"
+            secretRef = {
+                namespace = connectionSecretNamespace
+                name = connectionSecretName  # Fixed: matches the Object's output
+                key = "kubeconfig"
             }
         }
-    } for secret in additionalSecrets if enableObserve
-]
+    }
+} if enableConnectionSecret else {}
 
-# Build items list conditionally
-observe_objects = ([observe_object] if enableObserve else []) + additional_observe_objects
-items = [release] + observe_objects
+# Helm ProviderConfig for VCluster
+vcluster_helm_provider_config = helm_pc.ProviderConfig {
+    apiVersion = "helm.crossplane.io/v1beta1"
+    kind = "ProviderConfig"
+    metadata = {
+        name = "{}-helm".format(name)
+    }
+    spec = {
+        credentials = {
+            source = "Secret"
+            secretRef = {
+                namespace = connectionSecretNamespace
+                name = connectionSecretName
+                key = "kubeconfig"
+            }
+        }
+    }
+} if enableConnectionSecret else {}
+
+# Build items list
+base_items = [release]
+connection_items = ([kubeconfig_reader, vcluster_kube_provider_config, vcluster_helm_provider_config] 
+                   if enableConnectionSecret else [])
+items = base_items + connection_items
