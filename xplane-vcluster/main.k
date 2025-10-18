@@ -20,6 +20,9 @@ serverUrl = option("params")?.oxr?.spec?.serverUrl or "https://localhost:32443"
 # Additional values
 customValues = option("params")?.oxr?.spec?.values or {}
 
+# Additional secrets configuration for better Crossplane integration
+additionalSecrets = option("params")?.oxr?.spec?.additionalSecrets or []
+
 # Observe configuration for secret access
 enableObserve = option("params")?.oxr?.spec?.observeSecret?.enabled or False
 observeClusterName = option("params")?.oxr?.spec?.observeSecret?.clusterName or clusterName
@@ -80,7 +83,9 @@ release = helm.Release {
                 }
                 exportKubeConfig = {
                     server = serverUrl
-                }
+                } | ({
+                    additionalSecrets = additionalSecrets
+                } if additionalSecrets else {})
             } | customValues
         }
     }
@@ -111,5 +116,33 @@ observe_object = obj.Object {
     }
 } if enableObserve else {}
 
+# Create observe objects for additional secrets
+additional_observe_objects = [
+    obj.Object {
+        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        kind = "Object"
+        metadata = {
+            name = "{}-{}-observer".format(name, secret.name)
+        }
+        spec = {
+            forProvider = {
+                manifest = {
+                    apiVersion = "v1"
+                    kind = "Secret"
+                    metadata = {
+                        name = secret.name
+                        namespace = secret.get("namespace", targetNamespace)
+                    }
+                }
+            }
+            managementPolicies = ["Observe"]
+            providerConfigRef = {
+                name = observeClusterName
+            }
+        }
+    } for secret in additionalSecrets if enableObserve
+]
+
 # Build items list conditionally
-items = [release] + ([observe_object] if enableObserve else [])
+observe_objects = ([observe_object] if enableObserve else []) + additional_observe_objects
+items = [release] + observe_objects
