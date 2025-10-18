@@ -27,41 +27,87 @@ VCluster Pod → Creates Secret → Object observes Secret → Connection Secret
 
 ### Generate and Apply VCluster Release
 
-#### 1. One-Step Deployment
+#### 1. Generate YAML Only (Preview)
 
 ```bash
-# VCluster with connection secrets and ProviderConfigs
+# Only generate YAML for review (no apply)
 cd xplane-vcluster && kcl run main.k -D params='{
   "oxr": {
     "spec": {
       "name": "vlcuster-k3s-tink1",
       "version": "0.29.0",
       "clusterName": "k3s-tink1",
-      "targetNamespace": "vcluster-k3s-tink1",
+      "targetNamespace": "vcluster-k3s-tink2",
       "storageClass": "local-path",
       "bindAddress": "0.0.0.0",
       "proxyPort": 8443,
-      "nodePort": 32444,
+      "nodePort": 32445,
       "extraSANs": [
         "test-k3s1.labul.sva.de",
         "10.31.103.23",
         "localhost"
       ],
-      "serverUrl": "https://10.31.103.23:32444",
+      "serverUrl": "https://10.31.103.23:32445",
       "additionalSecrets": [
         {
           "name": "vc-vlcuster-k3s-tink1-crossplane",
-          "namespace": "vcluster-k3s-tink1",
+          "namespace": "vcluster-k3s-tink2",
           "context": "vcluster-crossplane-context",
-          "server": "https://10.31.103.23:32444"
+          "server": "https://10.31.103.23:32445"
         }
-      ]
+      ],
+      "connectionSecret": {
+        "name": "vcluster-k3s-tink2-connection",
+        "namespace": "crossplane-system",
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
+        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+      }
+    }
+  }
+}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d'
+```
+
+#### 2. One-Step Deployment (Direct Apply)
+
+```bash
+# VCluster with connection secrets and ProviderConfigs - direct apply
+cd xplane-vcluster && kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "name": "vlcuster-k3s-tink1",
+      "version": "0.29.0",
+      "clusterName": "k3s-tink1",
+      "targetNamespace": "vcluster-k3s-tink2",
+      "storageClass": "local-path",
+      "bindAddress": "0.0.0.0",
+      "proxyPort": 8443,
+      "nodePort": 32445,
+      "extraSANs": [
+        "test-k3s1.labul.sva.de",
+        "10.31.103.23",
+        "localhost"
+      ],
+      "serverUrl": "https://10.31.103.23:32445",
+      "additionalSecrets": [
+        {
+          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "namespace": "vcluster-k3s-tink2",
+          "context": "vcluster-crossplane-context",
+          "server": "https://10.31.103.23:32445"
+        }
+      ],
+      "connectionSecret": {
+        "name": "vcluster-k3s-tink2-connection",
+        "namespace": "crossplane-system",
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
+        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+      }
     }
   }
 }' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | kubectl apply -f -
 ```
 
-#### 2. Generate YAML Files
+#### 3. Generate to File and Apply Separately
 
 ```bash
 # Generate all resources to file
@@ -71,31 +117,40 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "name": "vlcuster-k3s-tink1",
       "version": "0.29.0",
       "clusterName": "k3s-tink1",
-      "targetNamespace": "vcluster-k3s-tink1",
+      "targetNamespace": "vcluster-k3s-tink2",
       "storageClass": "local-path",
       "bindAddress": "0.0.0.0",
       "proxyPort": 8443,
-      "nodePort": 32444,
+      "nodePort": 32445,
       "extraSANs": [
         "test-k3s1.labul.sva.de",
         "10.31.103.23",
         "localhost"
       ],
-      "serverUrl": "https://10.31.103.23:32444",
+      "serverUrl": "https://10.31.103.23:32445",
       "additionalSecrets": [
         {
           "name": "vc-vlcuster-k3s-tink1-crossplane",
-          "namespace": "vcluster-k3s-tink1",
+          "namespace": "vcluster-k3s-tink2",
           "context": "vcluster-crossplane-context",
-          "server": "https://10.31.103.23:32444"
+          "server": "https://10.31.103.23:32445"
         }
-      ]
+      ],
+      "connectionSecret": {
+        "name": "vcluster-k3s-tink2-connection",
+        "namespace": "crossplane-system",
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
+        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+      }
     }
   }
-}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' > vlcuster-k3s-tink1-complete.yaml
+}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' > vcluster-k3s-tink2.yaml
+
+# Review the generated file
+cat vcluster-k3s-tink2.yaml
 
 # Apply to cluster
-kubectl apply -f vlcuster-k3s-tink1-complete.yaml
+kubectl apply -f vcluster-k3s-tink2.yaml
 ```
 
 #### 3. Monitor Deployment
@@ -105,28 +160,54 @@ kubectl apply -f vlcuster-k3s-tink1-complete.yaml
 kubectl get releases vlcuster-k3s-tink1 -w
 
 # Check VCluster pods
-kubectl get pods -n vcluster-k3s-tink1
+kubectl get pods -n vcluster-k3s-tink2
 
 # Verify connection secret was created
-kubectl get secret vlcuster-k3s-tink1-connection -n crossplane-system
+kubectl get secret vcluster-k3s-tink2-connection -n crossplane-system
 
 # Check ProviderConfigs are ready
 kubectl get providerconfig vlcuster-k3s-tink1
 kubectl get providerconfig vlcuster-k3s-tink1-helm
 ```
 
-#### 4. Test VCluster Access
+#### 4. Extract and Test VCluster Kubeconfig
 
 ```bash
 # Extract kubeconfig from connection secret
-kubectl get secret vlcuster-k3s-tink1-connection -n crossplane-system -o jsonpath='{.data.kubeconfig}' | base64 -d > vlcuster-k3s-tink1-kubeconfig.yaml
+kubectl -n crossplane-system get secret vcluster-k3s-tink2-connection -o jsonpath='{.data.kubeconfig}' | base64 -d > /tmp/vcluster-kubeconfig.yaml
+
+# Alternative: Direct to named file
+kubectl -n crossplane-system get secret vcluster-k3s-tink2-connection -o jsonpath='{.data.kubeconfig}' | base64 -d > vcluster-k3s-tink2-kubeconfig.yaml
 
 # Test VCluster connectivity
-KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl get nodes
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl get nodes
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl cluster-info
+
+# Test with named file
+KUBECONFIG=vcluster-k3s-tink2-kubeconfig.yaml kubectl get nodes
+KUBECONFIG=vcluster-k3s-tink2-kubeconfig.yaml kubectl get namespaces
 
 # Create test resources in VCluster
-KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl create namespace test-vcluster
-KUBECONFIG=vlcuster-k3s-tink1-kubeconfig.yaml kubectl run test-pod --image=nginx:alpine -n test-vcluster
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl create namespace test-vcluster
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl run test-pod --image=nginx:alpine -n test-vcluster
+
+# Verify test resources
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl get pods -n test-vcluster
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl get namespaces
+
+# Test NodePort access (if accessible from your machine)
+curl -k https://10.31.103.23:32445/api/v1/namespaces
+```
+
+#### 5. Cleanup Test Resources
+
+```bash
+# Remove test resources from VCluster
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl delete pod test-pod -n test-vcluster
+KUBECONFIG=/tmp/vcluster-kubeconfig.yaml kubectl delete namespace test-vcluster
+
+# Clean up kubeconfig files
+rm /tmp/vcluster-kubeconfig.yaml vcluster-k3s-tink2-kubeconfig.yaml
 ```
 
 ## Generated Resources
@@ -146,15 +227,15 @@ spec:
       name: vcluster
       repository: https://charts.loft.sh
       version: '0.29.0'
-    namespace: vcluster-k3s-tink1
+    namespace: vcluster-k3s-tink2
     values:
       controlPlane:
         # ... VCluster configuration
       exportKubeConfig:
-        server: https://10.31.103.23:32444
+        server: https://10.31.103.23:32445
         additionalSecrets:
           - name: vc-vlcuster-k3s-tink1-crossplane
-            namespace: vcluster-k3s-tink1
+            namespace: vcluster-k3s-tink2
   managementPolicies: ["*"]
   providerConfigRef:
     name: k3s-tink1
@@ -177,16 +258,16 @@ spec:
       kind: Secret
       metadata:
         name: vc-vlcuster-k3s-tink1
-        namespace: vcluster-k3s-tink1
+        namespace: vcluster-k3s-tink2
   connectionDetails:
     - apiVersion: v1
       kind: Secret
       name: vc-vlcuster-k3s-tink1
-      namespace: vcluster-k3s-tink1
+      namespace: vcluster-k3s-tink2
       fieldPath: data.config
       toConnectionSecretKey: kubeconfig
   writeConnectionSecretToRef:
-    name: vlcuster-k3s-tink1-connection
+    name: vcluster-k3s-tink2-connection
     namespace: crossplane-system
 ```
 
@@ -201,7 +282,7 @@ spec:
     source: Secret
     secretRef:
       namespace: crossplane-system
-      name: vlcuster-k3s-tink1-connection
+      name: vcluster-k3s-tink2-connection
       key: kubeconfig
 ```
 
@@ -216,7 +297,7 @@ spec:
     source: Secret
     secretRef:
       namespace: crossplane-system
-      name: vlcuster-k3s-tink1-connection
+      name: vcluster-k3s-tink2-connection
       key: kubeconfig
 ```
 
@@ -332,38 +413,43 @@ spec:
 
 ## Examples
 
-### Basic Development VCluster
-```bash
-kcl run main.k -D params='{
-  "oxr": {
-    "spec": {
-      "name": "dev-vcluster",
-      "storageClass": "local-path",
-      "nodePort": 32443
-    }
-  }
-}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | kubectl apply -f -
-```
+### VCluster
 
-### Production VCluster with Custom Configuration
 ```bash
 kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "name": "prod-vcluster",
+      "name": "vlcuster-k3s-tink1",
       "version": "0.29.0",
-      "clusterName": "production-cluster",
-      "targetNamespace": "production-vcluster",
-      "storageClass": "fast-ssd",
-      "nodePort": 32443,
+      "clusterName": "k3s-tink1",
+      "targetNamespace": "vcluster-k3s-tink2",
+      "storageClass": "local-path",
+      "bindAddress": "0.0.0.0",
+      "proxyPort": 8443,
+      "nodePort": 32445,
       "extraSANs": [
-        "vcluster.company.com",
-        "10.0.0.100"
+        "test-k3s1.labul.sva.de",
+        "10.31.103.23",
+        "localhost"
       ],
-      "serverUrl": "https://vcluster.company.com:32443"
+      "serverUrl": "https://10.31.103.23:32445",
+      "additionalSecrets": [
+        {
+          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "namespace": "vcluster-k3s-tink2",
+          "context": "vcluster-crossplane-context",
+          "server": "https://10.31.103.23:32445"
+        }
+      ],
+      "connectionSecret": {
+        "name": "vcluster-k3s-tink2-connection",
+        "namespace": "crossplane-system",
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
+        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+      }
     }
   }
-}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | kubectl apply -f -
+}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | - kubectl apply -f
 ```
 
 ## Troubleshooting
