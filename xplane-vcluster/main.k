@@ -163,8 +163,8 @@ vcluster_kube_provider_config = kube_pc.ProviderConfig {
     }
 } if enableConnectionSecret else {}
 
-# Helm ProviderConfig for VCluster
-vcluster_helm_provider_config = helm_pc.ProviderConfig {
+# Helm ProviderConfig for VCluster (created as raw YAML)
+vcluster_helm_provider_config = {
     apiVersion = "helm.crossplane.io/v1beta1"
     kind = "ProviderConfig"
     metadata = {
