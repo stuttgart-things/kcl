@@ -23,9 +23,58 @@ VCluster Pod → Creates Secret → Object observes Secret → Connection Secret
 3. **Connection Secret** extracts kubeconfig and creates secret in crossplane-system
 4. **ProviderConfigs** reference the connection secret for Kubernetes/Helm access
 
+## Publishing to OCI Registry
+
+### Push Module to Registry
+
+```bash
+# Push the KCL module to OCI registry
+cd xplane-vcluster && kcl mod push oci://ghcr.io/stuttgart-things/xplane-vcluster
+```
+
 ## Usage
 
-### Generate and Apply VCluster Release
+### Using from OCI Registry
+
+```bash
+# Use module directly from OCI registry (no local clone needed)
+kcl run oci://ghcr.io/stuttgart-things/xplane-vcluster -D params='{
+  "oxr": {
+    "spec": {
+      "name": "vlcuster-k3s-tink1",
+      "version": "0.29.0",
+      "clusterName": "k3s-tink1",
+      "targetNamespace": "vcluster-k3s-tink2",
+      "storageClass": "local-path",
+      "bindAddress": "0.0.0.0",
+      "proxyPort": 8443,
+      "nodePort": 32445,
+      "extraSANs": [
+        "test-k3s1.labul.sva.de",
+        "10.31.103.23",
+        "localhost"
+      ],
+      "serverUrl": "https://10.31.103.23:32445",
+      "additionalSecrets": [
+        {
+          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "namespace": "vcluster-k3s-tink2",
+          "context": "vcluster-crossplane-context",
+          "server": "https://10.31.103.23:32445"
+        }
+      ],
+      "connectionSecret": {
+        "name": "vcluster-k3s-tink2-connection",
+        "namespace": "crossplane-system",
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
+        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+      }
+    }
+  }
+}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | kubectl apply -f -
+```
+
+### Generate and Apply VCluster Release (Local Development)
 
 #### 1. Generate YAML Only (Preview)
 
