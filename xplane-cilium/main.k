@@ -1,4 +1,4 @@
-import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+import crossplane_provider_helm.v1beta1.helm_crossplane_io_v1beta1_release as helm
 
 # --- Get XR spec fields ---
 name = option("params")?.oxr?.spec.name or "cilium"
@@ -31,7 +31,7 @@ cilium_release = helm.Release {
         providerConfigRef: { name = clusterName }
         forProvider: {
             chart: {
-                name = "cilium/cilium"
+                name = "cilium"
                 repository: "https://helm.cilium.io"
                 version = version
             }
