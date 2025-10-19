@@ -7,13 +7,32 @@ vault_addr = option("params")?.oxr?.spec?.vaultAddr or "https://vault.example.co
 cluster_name = option("params")?.oxr?.spec?.clusterName or "dev-cluster"
 context = option("params")?.oxr?.spec?.context or "default"
 kubeconfig_path = option("params")?.oxr?.spec?.kubeconfigPath or "/home/user/.kube/config"
+skip_tls_verify = option("params")?.oxr?.spec?.skipTlsVerify or True
+csi_enabled = option("params")?.oxr?.spec?.csiEnabled or True
+namespace_csi = option("params")?.oxr?.spec?.namespaceCsi or "vault"
+vso_enabled = option("params")?.oxr?.spec?.vsoEnabled or True
+namespace_vso = option("params")?.oxr?.spec?.namespaceVso or "vault"
+k8s_auths = option("params")?.oxr?.spec?.k8sAuths or [
+    {
+        name = "dev"
+        namespace = "default"
+        token_policies = ["read-k8s"]
+        token_ttl = 3600
+    }
+]
 
-# Vault configuration with safe navigation and defaults
+# Vault configuration with all variables for stuttgart-things/vault-base-setup
 vault_config = {
     vault_addr = vault_addr
     cluster_name = cluster_name
     context = context
+    skip_tls_verify = skip_tls_verify
     kubeconfig_path = kubeconfig_path
+    csi_enabled = csi_enabled
+    namespace_csi = namespace_csi
+    vso_enabled = vso_enabled
+    namespace_vso = namespace_vso
+    k8s_auths = k8s_auths
 }
 
 # Generate Secret for Terraform variables (JSON format as required by stuttgart-things/vault-base-setup)
