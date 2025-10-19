@@ -64,4 +64,4 @@ workspace = {
 }
 
 # Output all resources
-[secret, workspace]
+manifests = [secret, workspace]
