@@ -82,5 +82,67 @@ workspace = {
     }
 }
 
+# Alternative Terraform Workspace with inline vars (cleaner approach)
+workspace_inline = {
+    apiVersion = "tf.crossplane.io/v1alpha1"
+    kind = "Workspace"
+    metadata = {
+        name = "${name}-inline"
+        namespace = namespace
+    }
+    spec = {
+        forProvider = {
+            source = "Remote"
+            module = "https://github.com/stuttgart-things/vault-base-setup"
+            # Variables can be specified inline
+            vars = [
+                {
+                    key = "vault_addr"
+                    value = vault_addr
+                },
+                {
+                    key = "cluster_name" 
+                    value = cluster_name
+                },
+                {
+                    key = "context"
+                    value = context
+                },
+                {
+                    key = "skip_tls_verify"
+                    value = str(skip_tls_verify)
+                },
+                {
+                    key = "kubeconfig_path"
+                    value = kubeconfig_path
+                },
+                {
+                    key = "csi_enabled"
+                    value = str(csi_enabled)
+                },
+                {
+                    key = "namespace_csi"
+                    value = namespace_csi
+                },
+                {
+                    key = "vso_enabled"
+                    value = str(vso_enabled)
+                },
+                {
+                    key = "namespace_vso"
+                    value = namespace_vso
+                },
+                {
+                    key = "k8s_auths"
+                    value = json.encode(k8s_auths)
+                }
+            ]
+        }
+        writeConnectionSecretsToRef = {
+            namespace = namespace
+        }
+    }
+}
+
 # Output all resources
 manifests = [secret, workspace]
