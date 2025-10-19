@@ -145,4 +145,4 @@ workspace_inline = {
 }
 
 # Output all resources
-manifests = [secret, workspace]
+manifests = [secret, workspace, workspace_inline]
