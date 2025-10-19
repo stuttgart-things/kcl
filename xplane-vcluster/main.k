@@ -94,7 +94,7 @@ helm_release_object = obj.Object {
             }
         }
         deletionPolicy = "Delete"
-        managementPolicies = ["*"] 
+        managementPolicies = ["*"]
         providerConfigRef = {
             name = cluster
         }

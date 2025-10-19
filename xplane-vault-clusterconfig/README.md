@@ -104,7 +104,7 @@ The module generates a JSON-formatted `terraform.tfvars.json` file containing:
 ```json
 {
   "vault_addr": "https://vault.demo-infra.example.com",
-  "cluster_name": "kind-dev2", 
+  "cluster_name": "kind-dev2",
   "context": "kind-dev2",
   "skip_tls_verify": true,
   "kubeconfig_path": "/home/sthings/.kube/kind-dev2",
@@ -120,7 +120,7 @@ The module generates a JSON-formatted `terraform.tfvars.json` file containing:
       "token_ttl": 7200
     },
     {
-      "name": "prod", 
+      "name": "prod",
       "namespace": "production",
       "token_policies": ["read-only"],
       "token_ttl": 3600

@@ -101,7 +101,7 @@ workspace_inline = {
                     value = vault_addr
                 },
                 {
-                    key = "cluster_name" 
+                    key = "cluster_name"
                     value = cluster_name
                 },
                 {
