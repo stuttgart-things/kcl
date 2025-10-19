@@ -62,9 +62,41 @@ The module generates a JSON-formatted `terraform.tfvars.json` file containing:
   "vault_addr": "https://vault.demo-infra.example.com",
   "cluster_name": "kind-dev2", 
   "context": "kind-dev2",
-  "kubeconfig_path": "/home/sthings/.kube/kind-dev2"
+  "skip_tls_verify": true,
+  "kubeconfig_path": "/home/sthings/.kube/kind-dev2",
+  "csi_enabled": true,
+  "namespace_csi": "vault",
+  "vso_enabled": true,
+  "namespace_vso": "vault",
+  "k8s_auths": [
+    {
+      "name": "dev",
+      "namespace": "default",
+      "token_policies": ["read-k8s", "write-secrets"],
+      "token_ttl": 7200
+    },
+    {
+      "name": "prod", 
+      "namespace": "production",
+      "token_policies": ["read-only"],
+      "token_ttl": 3600
+    }
+  ]
 }
 ```
+
+### Variable Defaults
+
+- `vault_addr`: "https://vault.example.com"
+- `cluster_name`: "dev-cluster"
+- `context`: "default"
+- `skip_tls_verify`: true
+- `kubeconfig_path`: "/home/user/.kube/config"
+- `csi_enabled`: true
+- `namespace_csi`: "vault"
+- `vso_enabled`: true
+- `namespace_vso`: "vault"
+- `k8s_auths`: Default single auth for "dev" namespace
 
 This JSON format is compatible with the [stuttgart-things/vault-base-setup](https://github.com/stuttgart-things/vault-base-setup) Terraform module variables.
 
