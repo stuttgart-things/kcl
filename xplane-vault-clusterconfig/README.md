@@ -53,6 +53,21 @@ name = option("params")?.oxr?.spec?.name or "vault-cluster"
 1. **Kubernetes Secret**: Contains Terraform variables in JSON format
 2. **Terraform Workspace**: References the vault-base-setup module
 
+## Generated Terraform Variables
+
+The module generates a JSON-formatted `terraform.tfvars.json` file containing:
+
+```json
+{
+  "vault_addr": "https://vault.demo-infra.example.com",
+  "cluster_name": "kind-dev2", 
+  "context": "kind-dev2",
+  "kubeconfig_path": "/home/sthings/.kube/kind-dev2"
+}
+```
+
+This JSON format is compatible with the [stuttgart-things/vault-base-setup](https://github.com/stuttgart-things/vault-base-setup) Terraform module variables.
+
 ## Dependencies
 
 - JSON package for variable encoding
