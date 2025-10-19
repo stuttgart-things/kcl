@@ -10,7 +10,7 @@ spec:
       name: vcluster
       repository: https://charts.loft.sh
       version: '0.29.0'
-    namespace: vcluster-k3s-tink1
+    namespace: vcluster-k3s-tink2
     values:
       controlPlane:
         statefulSet:
@@ -35,15 +35,15 @@ spec:
               - name: https
                 port: 443
                 targetPort: 8443
-                nodePort: 32444
+                nodePort: 32445
                 protocol: TCP
       exportKubeConfig:
-        server: https://10.31.103.23:32444
+        server: https://10.31.103.23:32445
         additionalSecrets:
           - name: vc-vlcuster-k3s-tink1-crossplane
-            namespace: vcluster-k3s-tink1
+            namespace: vcluster-k3s-tink2
             context: vcluster-crossplane-context
-            server: https://10.31.103.23:32444
+            server: https://10.31.103.23:32445
   managementPolicies:
     - '*'
   providerConfigRef:
@@ -65,47 +65,47 @@ spec:
       kind: Secret
       metadata:
         name: vc-vlcuster-k3s-tink1
-        namespace: vcluster-k3s-tink1
+        namespace: vcluster-k3s-tink2
   connectionDetails:
     - apiVersion: v1
       kind: Secret
       name: vc-vlcuster-k3s-tink1
-      namespace: vcluster-k3s-tink1
+      namespace: vcluster-k3s-tink2
       fieldPath: data.config
-      toConnectionSecretKey: kubeconfig
+      toConnectionSecretKey: kubeconfig # pragma: allowlist secret
     - apiVersion: v1
       kind: Secret
       name: vc-vlcuster-k3s-tink1
-      namespace: vcluster-k3s-tink1
+      namespace: vcluster-k3s-tink2
       fieldPath: data.certificate-authority
-      toConnectionSecretKey: ca.crt
+      toConnectionSecretKey: ca.crt # pragma: allowlist secret
   writeConnectionSecretToRef:
-    name: vcluster-k3s-tink1-connection  # This is what gets created
+    name: vcluster-k3s-tink2-connection  # This is what gets created
     namespace: crossplane-system
 ---
 apiVersion: kubernetes.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: vcluster-k3s-tink1
+  name: vcluster-k3s-tink2
 spec:
   credentials:
     source: Secret
     secretRef:
       namespace: crossplane-system
-      name: vcluster-k3s-tink1-connection  # Fixed: matches the Object's output
+      name: vcluster-k3s-tink2-connection  # Fixed: matches the Object's output
       key: kubeconfig
 ---
 # Helm ProviderConfig for vcluster
 apiVersion: helm.crossplane.io/v1beta1
 kind: ProviderConfig
 metadata:
-  name: vcluster-k3s-tink1-helm
+  name: vcluster-k3s-tink2-helm
 spec:
   credentials:
     source: Secret
     secretRef:
       namespace: crossplane-system
-      name: vcluster-k3s-tink1-connection
+      name: vcluster-k3s-tink2-connection
       key: kubeconfig
 ---
 # 🧪 TEST 1: Create a namespace in vcluster
@@ -125,7 +125,7 @@ spec:
           environment: test
           managed-by: crossplane
   providerConfigRef:
-    name: vcluster-k3s-tink1
+    name: vcluster-k3s-tink2
 ---
 # 🧪 TEST 2: Create a ConfigMap in vcluster
 apiVersion: kubernetes.crossplane.io/v1alpha2
@@ -145,5 +145,5 @@ spec:
         message: "Hello from Crossplane in vcluster!"
         timestamp: "2025-10-18"
   providerConfigRef:
-    name: vcluster-k3s-tink1
+    name: vcluster-k3s-tink2
 ---

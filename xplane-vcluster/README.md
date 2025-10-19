@@ -66,8 +66,8 @@ kcl run oci://ghcr.io/stuttgart-things/xplane-vcluster -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
-        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
   }
@@ -108,8 +108,8 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
-        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
   }
@@ -148,8 +148,8 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
-        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
   }
@@ -188,8 +188,8 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
-        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
   }
@@ -493,8 +493,8 @@ kcl run main.k -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1",
-        "vclusterSecretNamespace": "vcluster-k3s-tink2"
+        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
   }

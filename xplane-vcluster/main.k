@@ -37,6 +37,9 @@ release = helm.Release {
     kind = "Release"
     metadata = {
         name = name
+        annotations = {
+            "krm.kcl.dev/composition-resource-name": "vcluster-release"
+        }
     }
     spec = {
         deletionPolicy = "Delete"
@@ -102,6 +105,9 @@ kubeconfig_reader = obj.Object {
     kind = "Object"
     metadata = {
         name = "vcluster-kubeconfig-reader"
+        annotations = {
+            "krm.kcl.dev/composition-resource-name": "vcluster-kube-reader"
+        }
     }
     spec = {
         deletionPolicy = "Delete"
@@ -126,7 +132,7 @@ kubeconfig_reader = obj.Object {
                 name = vclusterSecretName
                 namespace = vclusterSecretNamespace
                 fieldPath = "data.config"
-                toConnectionSecretKey = "kubeconfig"
+                toConnectionSecretKey = "kubeconfig" # pragma: allowlist secret
             }
             {
                 apiVersion = "v1"
@@ -134,7 +140,7 @@ kubeconfig_reader = obj.Object {
                 name = vclusterSecretName
                 namespace = vclusterSecretNamespace
                 fieldPath = "data.certificate-authority"
-                toConnectionSecretKey = "ca.crt"
+                toConnectionSecretKey = "ca.crt" # pragma: allowlist secret
             }
         ]
         writeConnectionSecretToRef = {
@@ -150,6 +156,9 @@ vcluster_kube_provider_config = kube_pc.ProviderConfig {
     kind = "ProviderConfig"
     metadata = {
         name = name
+        annotations = {
+            "krm.kcl.dev/composition-resource-name": "vcluster-kubernetes-providerconfig"
+        }
     }
     spec = {
         credentials = {
@@ -169,6 +178,9 @@ vcluster_helm_provider_config = {
     kind = "ProviderConfig"
     metadata = {
         name = "{}-helm".format(name)
+        annotations = {
+            "krm.kcl.dev/composition-resource-name": "vcluster-helm-providerconfig"
+        }
     }
     spec = {
         credentials = {
