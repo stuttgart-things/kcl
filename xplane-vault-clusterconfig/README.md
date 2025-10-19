@@ -51,7 +51,51 @@ name = option("params")?.oxr?.spec?.name or "vault-cluster"
 ## Generated Resources
 
 1. **Kubernetes Secret**: Contains Terraform variables in JSON format
-2. **Terraform Workspace**: References the vault-base-setup module
+2. **Terraform Workspace (JSON)**: References vault-base-setup with JSON variables
+3. **Terraform Workspace (Inline)**: References vault-base-setup with inline vars
+
+## Two Variable Passing Approaches
+
+### Approach 1: JSON Variables via Secret
+
+```yaml
+apiVersion: tf.crossplane.io/v1alpha1
+kind: Workspace
+metadata:
+  name: vault-cluster
+spec:
+  forProvider:
+    source: Remote
+    module: https://github.com/stuttgart-things/vault-base-setup
+    varFiles:
+    - source: SecretKey
+      secretKeyRef:
+        namespace: vault-system
+        name: vault-cluster-terraform-vars
+        key: terraform.tfvars.json
+      format: JSON
+```
+
+### Approach 2: Inline Variables (Cleaner)
+
+```yaml
+apiVersion: tf.crossplane.io/v1alpha1
+kind: Workspace
+metadata:
+  name: vault-cluster-inline
+spec:
+  forProvider:
+    source: Remote
+    module: https://github.com/stuttgart-things/vault-base-setup
+    vars:
+    - key: vault_addr
+      value: https://vault.demo-infra.example.com
+    - key: cluster_name
+      value: kind-dev2
+    - key: skip_tls_verify
+      value: "true"
+    # ... more vars
+```
 
 ## Generated Terraform Variables
 
