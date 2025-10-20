@@ -67,29 +67,38 @@ Use the following KCL modules for Crossplane providers:
 
 **For Helm releases:**
 ```kcl
-import models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+
+# --- Get XR spec fields ---
+name = option("params")?.oxr?.spec?.name or "my-release"
+clusterName = option("params")?.oxr?.spec?.clusterName or "default"
+targetNamespace = option("params")?.oxr?.spec?.targetNamespace or "default"
 
 release = helm.Release {
-    apiVersion: "helm.crossplane.io/v1beta1"
-    kind: "Release"
-    metadata: {
-        name: "my-helm-release"
+    apiVersion = "helm.crossplane.io/v1beta1"
+    kind = "Release"
+    metadata = {
+        name = name
     }
-    spec: {
-        providerConfigRef: { name: "default" }
+    spec = {
+        providerConfigRef: {
+            name = clusterName
+        }
         forProvider: {
             chart: {
-                name: "nginx"
-                repository: "https://charts.bitnami.com/bitnami"
-                version: "15.0.0"
+                name = "nginx"
+                repository = "https://charts.bitnami.com/bitnami"
+                version = "15.0.0"
             }
-            namespace: "default"
+            namespace = targetNamespace
             values: {
-                replicaCount: 2
+                replicaCount = 2
             }
         }
     }
 }
+
+items = [release]
 ```
 
 **For Kubernetes objects:**
@@ -101,9 +110,12 @@ k8sObject = k8s.Object {
 }
 ```
 
-**Module versions:**
-- Helm provider: `oci://ghcr.io/stuttgart-things/crossplane-helm-provider:0.0.1`
-- Kubernetes provider: `crossplane-provider-kubernetes = "0.18.0"`
+**Module versions and kcl.mod configuration:**
+```xml
+[dependencies]
+crossplane-provider-helm = { oci = "oci://ghcr.io/stuttgart-things/crossplane-provider-helm", tag = "0.1.1" }
+crossplane-provider-kubernetes = "0.18.0"
+```
 
 **Rationale:**
 - Consistent provider versions across all KCL compositions
@@ -128,3 +140,414 @@ k8sObject = k8s.Object {
 - All KCL composition files must import and use these specific versions
 - Code reviews verify correct module usage and import patterns
 - Update this decision when upgrading provider versions
+
+---
+
+## Standardized Boolean Handling in KCL Modules
+
+**Date:** 2024-10-20
+**Status:** Accepted
+
+**Context:**
+Boolean values in KCL require explicit handling to correctly distinguish between `false` values and undefined/null values. Without proper handling, `false` values get treated as truthy due to KCL's `or` operator behavior.
+
+**Decision:**
+Always use explicit False checking pattern for boolean flags:
+
+**Pattern:**
+```kcl
+# Explicit False checking for boolean values
+_enabledValue = option("params")?.oxr?.spec?.enabled
+enabled = False if _enabledValue == False else True
+
+# Alternative short form for simple cases
+enabled = option("params")?.oxr?.spec?.enabled if option("params")?.oxr?.spec?.enabled != None else True
+```
+
+**Complete example with conditional object creation:**
+```kcl
+import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+
+# --- Get XR spec fields with proper boolean handling ---
+name = option("params")?.oxr?.spec?.name or "vault-config"
+clusterName = option("params")?.oxr?.spec?.clusterName or "default"
+
+# Boolean flags with explicit False checking
+_csiEnabledValue = option("params")?.oxr?.spec?.csiEnabled
+csiEnabled = False if _csiEnabledValue == False else True
+
+_vsoEnabledValue = option("params")?.oxr?.spec?.vsoEnabled
+vsoEnabled = False if _vsoEnabledValue == False else True
+
+# Create releases
+csiRelease = helm.Release {
+    apiVersion = "helm.crossplane.io/v1beta1"
+    kind = "Release"
+    metadata = {
+        name = "secrets-store-csi-driver-${name}"
+    }
+    spec = {
+        providerConfigRef: { name = clusterName }
+        forProvider: {
+            chart: {
+                name = "secrets-store-csi-driver"
+                repository = "https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts"
+                version = "1.4.0"
+            }
+            namespace = "secrets-store-csi"
+        }
+    }
+}
+
+vsoRelease = helm.Release {
+    # ... similar structure
+}
+
+# Conditional items array generation
+items = ([csiRelease] if csiEnabled else []) + ([vsoRelease] if vsoEnabled else [])
+```
+
+**Key principles:**
+1. **Explicit False checking**: Use `== False` comparison, not `or` operator for booleans
+2. **Intermediate variables**: Store the raw value first, then apply logic
+3. **Default to True**: When undefined, boolean flags should default to enabled/true
+4. **Conditional arrays**: Use array concatenation with conditionals for optional resources
+
+**Common patterns:**
+```kcl
+# Single boolean check
+_value = option("params")?.oxr?.spec?.enabled
+enabled = False if _value == False else True
+
+# Multiple boolean checks
+_debug = option("params")?.oxr?.spec?.debug
+_verbose = option("params")?.oxr?.spec?.verbose
+debug = False if _debug == False else True
+verbose = False if _verbose == False else True
+
+# Conditional object creation
+object = SomeObject { ... } if enabled else None
+
+# Conditional array inclusion
+items = [required_object] + ([optional_object] if enabled else [])
+```
+
+**Benefits:**
+- Correctly handles `false` vs `undefined` distinction
+- Predictable behavior across all KCL modules
+- Safe defaults when values are not provided
+- Clear intention in code
+
+**Alternatives considered:**
+- Using `or` operator (rejected - treats `false` as falsy, defaults to `True`)
+- No explicit handling (rejected - inconsistent behavior)
+- Always requiring boolean values (rejected - reduces flexibility)
+
+**Enforcement:**
+- All boolean parameters in KCL modules must use this pattern
+- Code reviews verify correct boolean handling
+- Documentation examples should demonstrate this pattern
+- Test cases should verify both `true` and `false` scenarios
+
+---
+
+## Mandatory Crossplane Composition Resource Name Annotations
+
+**Date:** 2024-10-20
+**Status:** Accepted
+
+**Context:**
+When creating KCL modules for Crossplane compositions, every resource needs proper identification for debugging, monitoring, and resource management. Crossplane uses `krm.kcl.dev/composition-resource-name` annotations to uniquely identify resources within compositions.
+
+**Decision:**
+**ALWAYS** add `krm.kcl.dev/composition-resource-name` annotation to every Crossplane resource in KCL modules.
+
+**Pattern:**
+```kcl
+import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+import crossplane_provider_kubernetes.v1alpha2.kubernetes_crossplane_io_v1alpha2_object as k8s
+
+# --- Get XR spec fields ---
+configName = option("params")?.oxr?.spec?.name or "default-config"
+
+# Helm Release with annotation
+release = helm.Release {
+    apiVersion = "helm.crossplane.io/v1beta1"
+    kind = "Release"
+    metadata = {
+        name = "my-release-{}".format(configName)
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "my-service-{}".format(configName)
+        }
+    }
+    spec = {
+        # ... release configuration
+    }
+}
+
+# Kubernetes Object with annotation
+namespace = k8s.Object {
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
+    metadata = {
+        name = "namespace-{}".format(namespaceName)
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "my-namespace-{}".format(namespaceName)
+        }
+    }
+    spec = {
+        # ... object configuration
+    }
+}
+```
+
+**Naming Convention Standards:**
+
+| Resource Type | Annotation Pattern | Example |
+|---------------|-------------------|---------|
+| **Helm Releases** | `{module}-{service}-{configName}` | `vault-csi-prod`, `vault-vso-prod` |
+| **Namespaces** | `{module}-namespace-{namespace-name}` | `vault-namespace-production` |
+| **ServiceAccounts** | `{module}-serviceaccount-{auth-name}` | `vault-serviceaccount-auth-prod` |
+| **Secrets** | `{module}-secret-{auth-name}` | `vault-secret-auth-prod` |
+| **ClusterRoleBindings** | `{module}-clusterrolebinding-{auth-name}` | `vault-clusterrolebinding-auth-prod` |
+| **Token Readers** | `{module}-token-reader-{auth-name}` | `vault-token-reader-auth-prod` |
+
+**Complete Example (vault-config module):**
+```kcl
+# CSI Driver Release
+csiRelease = helm.Release {
+    apiVersion = "helm.crossplane.io/v1beta1"
+    kind = "Release"
+    metadata = {
+        name = "secrets-store-csi-driver-{}".format(configName)
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-csi-{}".format(configName)
+        }
+    }
+    # ... rest of configuration
+}
+
+# ServiceAccount
+serviceAccount = k8s.Object {
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
+    metadata = {
+        name = "serviceaccount-{}".format(auth.name)
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-serviceaccount-{}".format(auth.name)
+        }
+    }
+    # ... rest of configuration
+}
+
+# Token Reader
+tokenReader = k8s.Object {
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
+    metadata = {
+        name = "token-reader-{}".format(auth.name)
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-token-reader-{}".format(auth.name)
+        }
+    }
+    # ... rest of configuration
+}
+```
+
+**Benefits:**
+- **Better debugging**: Easy identification of resources in Crossplane events and logs
+- **Resource tracking**: Clear mapping between composition intent and actual resources
+- **Monitoring**: Consistent resource naming for alerting and metrics
+- **Documentation**: Self-documenting resource purpose and ownership
+- **Troubleshooting**: Fast identification of failed/stuck resources
+
+**Variable handling:**
+- Use `configName` instead of `name` to avoid KCL namespace conflicts
+- Use `.format()` method for string interpolation in annotations
+- Keep annotation names short but descriptive
+- Include module prefix for uniqueness across compositions
+
+**Required patterns:**
+```kcl
+# Safe string formatting for annotations
+"krm.kcl.dev/composition-resource-name" = "prefix-type-{}".format(identifier)
+
+# Avoid KCL keyword conflicts
+configName = option("params")?.oxr?.spec?.name or "default-config"
+# NOT: name = option("params")?.oxr?.spec?.name (can conflict with metadata.name)
+```
+
+**Alternatives considered:**
+- Optional annotations (rejected - reduces debuggability)
+- Auto-generated names (rejected - less control over naming)
+- Different annotation keys (rejected - Crossplane standard is krm.kcl.dev/composition-resource-name)
+
+**Enforcement:**
+- **MANDATORY**: Every Crossplane resource MUST have this annotation
+- Code reviews MUST verify annotation presence and correct naming
+- All KCL modules MUST follow the established naming patterns
+- Update module documentation to include annotation examples
+- Consider linting rules to enforce this requirement
+
+---
+
+## Automated Git Commit and OCI Module Publishing
+
+**Date:** 2024-10-20
+**Status:** Accepted
+
+**Context:**
+After successfully rendering and completing KCL module development tasks, we need a consistent workflow for version management and module distribution. Manual commits and version increments are error-prone and slow down the development cycle.
+
+**Decision:**
+Automatically perform Git commits and OCI registry pushes after successful task completion, without user confirmation.
+
+**Workflow:**
+1. **Automatic Git Commit**: After successful module rendering/completion
+2. **Semantic Version Increment**: Update version in `kcl.mod` based on change type
+3. **OCI Registry Push**: Publish module to Stuttgart Things registry
+
+**Git Commit Pattern:**
+```bash
+# After successful task completion
+git add .
+git commit -m "feat(<module-name>): add new functionality
+
+- Add new resource types and configuration options
+- Implement authentication and token management features
+- Add krm.kcl.dev/composition-resource-name annotations to all resources
+- Support configurable chart versions and parameters
+- Fix boolean handling and variable naming patterns"
+
+# No user confirmation required
+```
+
+**Semantic Versioning Rules:**
+```bash
+# Feature additions (minor version bump)
+feat: New functionality, new resources, new configuration options
+# Examples: new Helm release support, new auth methods, new configuration parameters
+
+# Bug fixes (patch version bump)
+fix: Bug fixes, error corrections, small improvements
+# Examples: annotation fixes, boolean handling fixes, syntax errors
+
+# Breaking changes (major version bump)
+BREAKING CHANGE: API changes, removal of functionality, incompatible changes
+# Examples: changing variable names, removing parameters, changing defaults
+```
+
+**kcl.mod Version Management:**
+```toml
+[package]
+name = "<module-name>"
+edition = "v0.10.0"
+version = "0.3.0"  # Auto-increment based on change type
+
+[dependencies]
+# Module-specific dependencies as needed
+crossplane-provider-helm = { oci = "oci://ghcr.io/stuttgart-things/crossplane-provider-helm", tag = "0.1.1" }
+crossplane-provider-kubernetes = "0.18.0"
+```
+
+**OCI Registry Push:**
+```bash
+# After version increment in kcl.mod
+kcl mod push oci://ghcr.io/stuttgart-things/<MODULE-NAME>
+
+# Registry pattern: oci://ghcr.io/stuttgart-things/<MODULE-NAME>
+# Examples:
+# - oci://ghcr.io/stuttgart-things/xplane-vault-config
+# - oci://ghcr.io/stuttgart-things/xplane-vcluster
+# - oci://ghcr.io/stuttgart-things/xplane-argocd
+# - oci://ghcr.io/stuttgart-things/xplane-prometheus
+```**Complete Automation Sequence:**
+```bash
+# 1. Successful task completion detected
+# 2. Determine change type (feat/fix/BREAKING)
+# 3. Update kcl.mod version
+if [[ "$change_type" == "feat" ]]; then
+    # Minor version bump: 0.2.1 -> 0.3.0
+    new_version=$(increment_minor_version)
+elif [[ "$change_type" == "fix" ]]; then
+    # Patch version bump: 0.2.1 -> 0.2.2
+    new_version=$(increment_patch_version)
+elif [[ "$change_type" == "BREAKING" ]]; then
+    # Major version bump: 0.2.1 -> 1.0.0
+    new_version=$(increment_major_version)
+fi
+
+# 4. Update kcl.mod file
+sed -i "s/version = \".*\"/version = \"$new_version\"/" kcl.mod
+
+# 5. Git commit with descriptive message
+git add .
+git commit -m "$commit_type($module_name): $commit_message"
+
+# 6. Push to OCI registry
+kcl mod push oci://ghcr.io/stuttgart-things/$module_name
+
+# 7. Git push to working branch
+git push origin $current_branch
+```
+
+**Change Type Detection:**
+- **feat**: Adding new resources, configuration options, functionality (any module)
+- **fix**: Bug fixes, syntax corrections, annotation fixes (any module)
+- **BREAKING CHANGE**: API changes, parameter removals, incompatible updates (any module)
+
+**Module Name Extraction:**
+```bash
+# Extract module name from kcl.mod (generic for any module)
+module_name=$(grep '^name = ' kcl.mod | cut -d '"' -f 2)
+# Examples: "xplane-vault-config", "xplane-argocd", "xplane-prometheus"
+```
+
+**Registry Benefits:**
+- **Versioned modules**: Each change gets proper semantic version
+- **Immutable releases**: Published versions cannot be overwritten
+- **Dependency management**: Other compositions can pin specific versions
+- **Distribution**: Easy sharing across teams and environments
+- **Rollback capability**: Can revert to previous working versions
+
+**Commit Message Format:**
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Examples:**
+```bash
+# Feature addition
+feat(xplane-prometheus): add ServiceMonitor support for metrics collection
+
+# Bug fix
+fix(xplane-argocd): correct boolean handling for false values
+
+# Breaking change
+feat(xplane-vcluster): rename configName variable for consistency
+
+BREAKING CHANGE: Variable 'name' renamed to 'configName' to avoid KCL conflicts
+```**Benefits:**
+- **Consistency**: All modules follow same versioning and publishing workflow
+- **Automation**: No manual steps after successful development
+- **Traceability**: Clear commit history with semantic versioning
+- **Distribution**: Automatic module availability in registry
+- **Reliability**: Reduces human error in version management
+- **Speed**: Faster development cycles without manual publishing steps
+
+**Alternatives considered:**
+- Manual commit and push (rejected - error-prone, slow)
+- User confirmation for each step (rejected - interrupts workflow)
+- Different registry providers (rejected - Stuttgart Things standardized on GitHub)
+- Different versioning schemes (rejected - semantic versioning is industry standard)
+
+**Enforcement:**
+- All KCL module tasks MUST use this automated workflow
+- No manual version increments in kcl.mod files
+- Commit messages MUST follow conventional commit format
+- Registry pushes MUST use stuttgart-things organization namespace
+- Working branch pushes happen after successful OCI publication

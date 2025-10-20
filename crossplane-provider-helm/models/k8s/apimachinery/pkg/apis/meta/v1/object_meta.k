@@ -93,3 +93,5 @@ schema ObjectMeta:
     selfLink?: str
 
     uid?: str
+
+

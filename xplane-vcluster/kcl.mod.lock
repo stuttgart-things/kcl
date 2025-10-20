@@ -1,4 +1,12 @@
 [dependencies]
+  [dependencies.crossplane-provider-helm]
+    name = "crossplane-provider-helm"
+    full_name = "crossplane-helm-models_0.1.1"
+    version = "0.1.1"
+    sum = "ZtM1OJzO9p7S8GYqjPaH1PjYIE967T2/ENAoCy9c9qE="
+    reg = "ghcr.io"
+    repo = "stuttgart-things/crossplane-provider-helm"
+    oci_tag = "0.1.1"
   [dependencies.crossplane-provider-kubernetes]
     name = "crossplane-provider-kubernetes"
     full_name = "crossplane-provider-kubernetes_0.18.0"

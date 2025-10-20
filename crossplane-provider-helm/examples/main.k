@@ -4,7 +4,7 @@ release = helm.Release {
     apiVersion: "helm.crossplane.io/v1beta1"
     kind: "Release"
     metadata: {
-        name: "my-helm-release"
+        name: "example-release"
     }
     spec: {
         providerConfigRef: { name: "default" }
@@ -15,9 +15,6 @@ release = helm.Release {
                 version: "15.0.0"
             }
             namespace: "default"
-            values: {
-                replicaCount: 2
-            }
         }
     }
 }
