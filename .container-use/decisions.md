@@ -51,3 +51,80 @@ env = option("params")?.oxr?.spec?.environment or "development"
 - Code reviews check for this pattern
 - All new functions must follow this structure
 - Document in function comments when deviating
+
+---
+
+## Use Standardized Crossplane Provider Modules for KCL
+
+**Date:** 2024-10-20
+**Status:** Accepted
+
+**Context:**
+When writing KCL composition functions for Crossplane, we need to use provider modules to create Helm releases and Kubernetes objects. These modules must be sourced consistently across all KCL compositions used with crossplane-function-kcl.
+
+**Decision:**
+Use the following KCL modules for Crossplane providers:
+
+**For Helm releases:**
+```kcl
+import models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+
+release = helm.Release {
+    apiVersion: "helm.crossplane.io/v1beta1"
+    kind: "Release"
+    metadata: {
+        name: "my-helm-release"
+    }
+    spec: {
+        providerConfigRef: { name: "default" }
+        forProvider: {
+            chart: {
+                name: "nginx"
+                repository: "https://charts.bitnami.com/bitnami"
+                version: "15.0.0"
+            }
+            namespace: "default"
+            values: {
+                replicaCount: 2
+            }
+        }
+    }
+}
+```
+
+**For Kubernetes objects:**
+```kcl
+import crossplane_provider_kubernetes as k8s
+
+k8sObject = k8s.Object {
+    # Use provider version 0.18.0
+}
+```
+
+**Module versions:**
+- Helm provider: `oci://ghcr.io/stuttgart-things/crossplane-helm-provider:0.0.1`
+- Kubernetes provider: `crossplane-provider-kubernetes = "0.18.0"`
+
+**Rationale:**
+- Consistent provider versions across all KCL compositions
+- Stuttgart Things Helm provider provides required custom functionality
+- Kubernetes provider 0.18.0 is stable and tested
+- Works seamlessly with crossplane-function-kcl container runtime
+- Standard import pattern ensures compatibility
+
+**Benefits:**
+- All KCL compositions use same provider versions
+- Predictable behavior in crossplane-function-kcl
+- Simplified debugging and troubleshooting
+- Clear dependency management
+- Type-safe Helm release definitions
+
+**Alternatives considered:**
+- Using latest tags (rejected - breaks composition reproducibility)
+- Different providers per composition (rejected - maintenance nightmare)
+- Direct YAML generation (rejected - loses KCL type safety)
+
+**Enforcement:**
+- All KCL composition files must import and use these specific versions
+- Code reviews verify correct module usage and import patterns
+- Update this decision when upgrading provider versions
