@@ -1,211 +1,790 @@
-# xplane-vault-auth# Vault Authentication KCL Module
+# xplane-vault-auth# xplane-vault-auth# xplane-vault-auth# xplane-vault-auth# Vault Authentication KCL Module
 
 
 
-A KCL module for creating HashiCorp Vault Kubernetes authentication backends using Crossplane and the Terraform provider.This KCL module provides simplified creation of Kubernetes ServiceAccounts for Vault authentication using Terraform inline code via the Crossplane Terraform Provider.
+A KCL module for creating HashiCorp Vault Kubernetes authentication backends using Crossplane and the Terraform provider.
 
 
 
-## Overview## 🎯 Features
+## OverviewA KCL module for creating HashiCorp Vault Kubernetes authentication backends using Crossplane and the Terraform provider.
 
 
 
-This module enables you to create Vault Kubernetes authentication backends that allow Kubernetes pods to authenticate with Vault using service account tokens. Unlike traditional approaches that create Kubernetes ServiceAccounts, this module creates the actual Vault authentication backends using the `vault_auth_backend` Terraform resource.- **Terraform Inline Code**: Generates HCL for Kubernetes ServiceAccount creation
+This module enables you to create Vault Kubernetes authentication backends that allow Kubernetes pods to authenticate with Vault using service account tokens. Unlike traditional approaches that create Kubernetes ServiceAccounts, this module creates the actual Vault authentication backends using the `vault_auth_backend` Terraform resource.
 
-- **Multiple ServiceAccounts**: Support for multiple authentication configurations
 
-## Features- **Crossplane Integration**: Uses crossplane-provider-terraform for execution
 
-- **Connection Secrets**: Optional output management through Kubernetes secrets
+The implementation uses Terraform's `count` meta-argument for creating multiple auth backends from a simple list, avoiding the complexity of `for_each` with object dictionaries.## OverviewA KCL module for creating HashiCorp Vault Kubernetes authentication backends using Crossplane and the Terraform provider.
 
-- ✅ **Vault Auth Backend Creation**: Creates actual Vault Kubernetes authentication backends- **Flexible Configuration**: Simple helpers and advanced configuration options
 
-- ✅ **Multi-Backend Support**: Configure multiple auth backends in a single workspace- **Type Safety**: Full KCL type checking and validation
+
+## Features
+
+
+
+- ✅ **Vault Auth Backend Creation**: Creates actual Vault Kubernetes authentication backendsThis module enables you to create Vault Kubernetes authentication backends that allow Kubernetes pods to authenticate with Vault using service account tokens. Unlike traditional approaches that create Kubernetes ServiceAccounts, this module creates the actual Vault authentication backends using the `vault_auth_backend` Terraform resource.
+
+- ✅ **Multi-Backend Support**: Configure multiple auth backends in a single workspace
+
+- ✅ **Simple List-Based Configuration**: Uses `count` instead of complex `for_each` dictionaries
 
 - ✅ **Flexible Configuration**: Support for custom Vault addresses, TLS settings, and token secrets
 
-- ✅ **Crossplane Integration**: Uses crossplane-provider-terraform for resource management## 📦 Installation
+- ✅ **Crossplane Integration**: Uses crossplane-provider-terraform for resource management## Features## OverviewA KCL module for creating HashiCorp Vault Kubernetes authentication backends using Crossplane and the Terraform provider.This KCL module provides simplified creation of Kubernetes ServiceAccounts for Vault authentication using Terraform inline code via the Crossplane Terraform Provider.
 
 - ✅ **OCI Package**: Available as an OCI artifact for easy consumption
 
-### As OCI Registry Package
+
 
 ## Installation
 
-```bash
-
-```bash# Add to kcl.mod dependencies
-
-# Add the module as a dependencykcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0
-
-kcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0```
-
-```
-
-### From Source
-
-## Usage
+- ✅ **Vault Auth Backend Creation**: Creates actual Vault Kubernetes authentication backends
 
 ```bash
 
-### Simple Authentication Backend# Clone the KCL repository
+# Add the module as a dependency- ✅ **Multi-Backend Support**: Configure multiple auth backends in a single workspace
 
-git clone https://github.com/stuttgart-things/kcl.git
+kcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0
 
-```kclcd kcl/xplane-vault-auth
-
-import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0 as vault_auth```
+```- ✅ **Flexible Configuration**: Support for custom Vault addresses, TLS settings, and token secretsThis module enables you to create Vault Kubernetes authentication backends that allow Kubernetes pods to authenticate with Vault using service account tokens. Unlike traditional approaches that create Kubernetes ServiceAccounts, this module creates the actual Vault authentication backends using the `vault_auth_backend` Terraform resource.
 
 
 
-# Create a simple Vault K8s auth backend## 🚀 Usage
+## Usage- ✅ **Crossplane Integration**: Uses crossplane-provider-terraform for resource management
 
-authBackend = vault_auth.simpleVaultK8sAuth(
 
-    "my-app",                        # backend name### Quick Start Examples
 
-    "prod-cluster",                  # cluster name
+### Simple Authentication Backend- ✅ **OCI Package**: Available as an OCI artifact for easy consumption
 
-    "https://vault.example.com"      # vault address#### 1. Simple ServiceAccount Creation
 
-)
-
-``````kcl
-
-import xplane_vault_auth as vault_auth
-
-### Multiple Authentication Backends
-
-# Define authentication configurations
-
-```kclauths = [
-
-import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0 as vault_auth    vault_auth.K8sAuth {
-
-        name = "vault-auth-app"
-
-# Configure multiple auth backends        namespace = "production"
-
-multiAuth = vault_auth.multiVaultK8sAuth([    }
-
-    vault_auth.K8sAuth {    vault_auth.K8sAuth {
-
-        name = "web-service"        name = "vault-auth-worker"
-
-        clusterName = "prod"        namespace = "workers"
-
-        vaultAddr = "https://vault.prod.com"        automountServiceAccountToken = False
-
-    }    }
-
-    vault_auth.K8sAuth {]
-
-        name = "api-service"
-
-        clusterName = "prod" # Create simple Terraform workspace
-
-        vaultAddr = "https://vault.prod.com"workspace = vault_auth.simpleVaultAuth(
-
-    }    "vault-authentication",
-
-], "prod", "https://vault.prod.com")    auths
-
-```)
-
-```
-
-### Full Configuration
-
-#### 2. Advanced Configuration with Connection Secrets
 
 ```kcl
 
-import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0 as vault_auth```kcl
+import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth
 
-# Advanced setup with connection secrets
+## Installation## Features## Overview## 🎯 Features
 
-config = vault_auth.VaultConfig {workspace = vault_auth.advancedVaultAuth(
+# Create a simple Vault K8s auth backend
 
-    k8sAuths = [    "vault-auth-advanced",
+authBackend = vault_auth.simpleVaultK8sAuth(
 
-        vault_auth.K8sAuth {    "vault-system",
+    "my-app",                        # backend name
 
-            name = "application"    auths,
+    "prod-cluster",                  # cluster name```bash
 
-            clusterName = "prod"    "vault-service-account-outputs"
+    "https://vault.example.com"      # vault address
 
-            vaultAddr = "https://vault.prod.com")
+)# Add the module as a dependency
 
-            skipTlsVerify = false```
+```
+
+kcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0- ✅ **Vault Auth Backend Creation**: Creates actual Vault Kubernetes authentication backends
+
+### Multiple Authentication Backends
+
+```
+
+```kcl
+
+import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth- ✅ **Multi-Backend Support**: Configure multiple auth backends in a single workspace
+
+
+
+# Configure multiple auth backends## Usage
+
+multiAuth = vault_auth.multiVaultK8sAuth([
+
+    vault_auth.K8sAuth {- ✅ **Flexible Configuration**: Support for custom Vault addresses, TLS settings, and token secretsThis module enables you to create Vault Kubernetes authentication backends that allow Kubernetes pods to authenticate with Vault using service account tokens. Unlike traditional approaches that create Kubernetes ServiceAccounts, this module creates the actual Vault authentication backends using the `vault_auth_backend` Terraform resource.- **Terraform Inline Code**: Generates HCL for Kubernetes ServiceAccount creation
+
+        name = "web-service"
+
+        clusterName = "prod"### Simple Authentication Backend
+
+        vaultAddr = "https://vault.prod.com"
+
+    }- ✅ **Crossplane Integration**: Uses crossplane-provider-terraform for resource management
+
+    vault_auth.K8sAuth {
+
+        name = "api-service"```kcl
+
+        clusterName = "prod" 
+
+        vaultAddr = "https://vault.prod.com"import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth- ✅ **OCI Package**: Available as an OCI artifact for easy consumption- **Multiple ServiceAccounts**: Support for multiple authentication configurations
+
+    }
+
+], "prod", "https://vault.prod.com")
+
+```
+
+# Create a simple Vault K8s auth backend
+
+### Full Configuration
+
+authBackend = vault_auth.simpleVaultK8sAuth(
+
+```kcl
+
+import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth    "my-app",                        # backend name## Installation## Features- **Crossplane Integration**: Uses crossplane-provider-terraform for execution
+
+
+
+config = vault_auth.VaultConfig {    "prod-cluster",                  # cluster name
+
+    k8sAuths = [
+
+        vault_auth.K8sAuth {    "https://vault.example.com"      # vault address
+
+            name = "application"
+
+            clusterName = "prod")
+
+            vaultAddr = "https://vault.prod.com"
+
+            skipTlsVerify = False``````bash- **Connection Secrets**: Optional output management through Kubernetes secrets
 
             vaultTokenSecret = "vault-root-token"
 
-            vaultTokenSecretNamespace = "vault-system"#### 3. Full Configuration Control
+            vaultTokenSecretNamespace = "vault-system"
 
         }
 
-    ]```kcl
+    ]### Multiple Authentication Backends# Add the module as a dependency
 
-    clusterName = "prod"config = vault_auth.VaultAuthConfig {
+    clusterName = "prod"
 
-    vaultAddr = "https://vault.prod.com"    workspaceName = "vault-auth-complete"
+    vaultAddr = "https://vault.prod.com"
 
-    skipTlsVerify = false    workspaceNamespace = "infrastructure"
+    skipTlsVerify = False
 
-    vaultTokenSecret = "vault-root-token"
+    vaultTokenSecret = "vault-root-token"```kclkcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0- ✅ **Vault Auth Backend Creation**: Creates actual Vault Kubernetes authentication backends- **Flexible Configuration**: Simple helpers and advanced configuration options
 
-    vaultTokenSecretNamespace = "vault-system"    k8sAuths = [
+    vaultTokenSecretNamespace = "vault-system"
 
-}        vault_auth.K8sAuth {
+}import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth
 
-            name = "vault-auth-frontend"
 
-authBackends = vault_auth.vaultK8sAuth(config)            namespace = "frontend-prod"
 
-```        }
+authBackends = vault_auth.vaultK8sAuth(config)```
 
-        vault_auth.K8sAuth {
+```
 
-## Schema Reference            name = "vault-auth-backend"
+# Configure multiple auth backends
 
-            namespace = "backend-prod"
+## Example Terraform Output
 
-### VaultConfig            automountServiceAccountToken = True
+multiAuth = vault_auth.multiVaultK8sAuth([- ✅ **Multi-Backend Support**: Configure multiple auth backends in a single workspace- **Type Safety**: Full KCL type checking and validation
 
-        }
+The module generates Terraform configurations using `count` for simplicity:
 
-| Field | Type | Description | Default |    ]
+    vault_auth.K8sAuth {
 
-|-------|------|-------------|---------|
+```hcl
 
-| `k8sAuths` | `[K8sAuth]` | List of Kubernetes auth configurations | Required |    providerConfigRef = "terraform-k8s-provider"
+provider "vault" {        name = "web-service"## Usage
 
-| `clusterName` | `str` | Kubernetes cluster name | Required |    connectionSecret = vault_auth.terraform.TerraformConnectionSecret {
+  address         = var.vault_addr
 
-| `vaultAddr` | `str` | Vault server address | Required |        name = "vault-auth-results"
+  skip_tls_verify = var.skip_tls_verify        clusterName = "prod"
 
-| `skipTlsVerify` | `bool` | Skip TLS verification | `false` |        namespace = "infrastructure"
+  token           = var.vault_token
 
-| `vaultTokenSecret` | `str` | Secret containing Vault token | `"vault-token"` |    }
+}        vaultAddr = "https://vault.prod.com"- ✅ **Flexible Configuration**: Support for custom Vault addresses, TLS settings, and token secrets
 
-| `vaultTokenSecretNamespace` | `str` | Namespace of token secret | `"vault-system"` |
 
-    managementPolicies = ["Create", "Update", "Delete"]
 
-### K8sAuth    deletionPolicy = "Delete"
+# Using count for multiple auth backends (simpler than for_each)    }
+
+resource "vault_auth_backend" "kubernetes" {
+
+  count = length(var.k8s_auths)    vault_auth.K8sAuth {### Simple Authentication Backend
+
+
+
+  type = "kubernetes"        name = "api-service"
+
+  path = "${var.cluster_name}-${var.k8s_auths[count.index].name}"
+
+}        clusterName = "prod" - ✅ **Crossplane Integration**: Uses crossplane-provider-terraform for resource management## 📦 Installation
+
+
+
+# Simple list-based variable definition        vaultAddr = "https://vault.prod.com"
+
+variable "k8s_auths" {
+
+  description = "List of Kubernetes auth configurations"    }```kcl
+
+  type = list(object({
+
+    name          = string], "prod", "https://vault.prod.com")
+
+    cluster_name  = string
+
+    vault_addr    = string```import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth- ✅ **OCI Package**: Available as an OCI artifact for easy consumption
+
+    skip_tls_verify = bool
+
+  }))
 
 }
 
-| Field | Type | Description | Default |
+### Full Configuration
 
-|-------|------|-------------|---------|workspace = vault_auth.generateVaultAuthWorkspace(config)
+# Array-based output structure
 
-| `name` | `str` | Authentication backend name | Required |```
+output "auth_backends" {
+
+  description = "Created Vault auth backends"
+
+  value = [```kcl# Create a simple Vault K8s auth backend### As OCI Registry Package
+
+    for i in range(length(var.k8s_auths)) :
+
+    {import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth
+
+      path = vault_auth_backend.kubernetes[i].path
+
+      type = vault_auth_backend.kubernetes[i].typeauthBackend = vault_auth.simpleVaultK8sAuth(
+
+      name = var.k8s_auths[i].name
+
+    }config = vault_auth.VaultConfig {
+
+  ]
+
+}    k8sAuths = [    "my-app",                        # backend name## Installation
+
+```
+
+        vault_auth.K8sAuth {
+
+## Advantages of Count-Based Approach
+
+            name = "application"    "prod-cluster",                  # cluster name
+
+### ✅ **Simplicity**
+
+- No complex dictionary transformations required            clusterName = "prod"
+
+- Direct list iteration with `count.index`
+
+- Straightforward variable definitions            vaultAddr = "https://vault.prod.com"    "https://vault.example.com"      # vault address```bash
+
+
+
+### ✅ **Performance**            skipTlsVerify = False
+
+- Faster plan/apply cycles for large numbers of backends
+
+- Less memory usage during Terraform execution            vaultTokenSecret = "vault-root-token")
+
+- Simpler state management
+
+            vaultTokenSecretNamespace = "vault-system"
+
+### ✅ **Maintainability**
+
+- Easier to understand for team members        }``````bash# Add to kcl.mod dependencies
+
+- Less prone to iteration errors
+
+- Simpler debugging and troubleshooting    ]
+
+
+
+## Development    clusterName = "prod"
+
+
+
+### Running Tests    vaultAddr = "https://vault.prod.com"
+
+
+
+```bash    skipTlsVerify = False### Multiple Authentication Backends# Add the module as a dependencykcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0
+
+cd xplane-vault-auth
+
+kcl run tests/test_main.k    vaultTokenSecret = "vault-root-token"
+
+```
+
+    vaultTokenSecretNamespace = "vault-system"
+
+### Running Examples
+
+}
+
+```bash
+
+kcl run examples/vault-k8s-auth-corrected.k```kclkcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0```
+
+```
+
+authBackends = vault_auth.vaultK8sAuth(config)
+
+## License
+
+```import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth
+
+Apache License 2.0 - see LICENSE file for details.
+
+
+## Schema Reference```
+
+
+
+### VaultConfig# Configure multiple auth backends
+
+
+
+| Field | Type | Description | Default |multiAuth = vault_auth.multiVaultK8sAuth([### From Source
+
+|-------|------|-------------|---------|
+
+| `k8sAuths` | `[K8sAuth]` | List of Kubernetes auth configurations | Required |    vault_auth.K8sAuth {
 
 | `clusterName` | `str` | Kubernetes cluster name | Required |
 
+| `vaultAddr` | `str` | Vault server address | Required |        name = "web-service"## Usage
+
+| `skipTlsVerify` | `bool` | Skip TLS verification | `False` |
+
+| `vaultTokenSecret` | `str` | Secret containing Vault token | `"vault-token"` |        clusterName = "prod"
+
+| `vaultTokenSecretNamespace` | `str` | Namespace of token secret | `"vault-system"` |
+
+        vaultAddr = "https://vault.prod.com"```bash
+
+### K8sAuth
+
+    }
+
+| Field | Type | Description | Default |
+
+|-------|------|-------------|---------|    vault_auth.K8sAuth {### Simple Authentication Backend# Clone the KCL repository
+
+| `name` | `str` | Authentication backend name | Required |
+
+| `clusterName` | `str` | Kubernetes cluster name | Required |        name = "api-service"
+
+| `vaultAddr` | `str` | Vault server address | Required |
+
+| `skipTlsVerify` | `bool` | Skip TLS verification | `False` |        clusterName = "prod" git clone https://github.com/stuttgart-things/kcl.git
+
+| `vaultTokenSecret` | `str` | Secret containing Vault token | `"vault-token"` |
+
+| `vaultTokenSecretNamespace` | `str` | Namespace of token secret | `"vault-system"` |        vaultAddr = "https://vault.prod.com"
+
+
+
+## Functions    }```kclcd kcl/xplane-vault-auth
+
+
+
+### `vaultK8sAuth(config: VaultConfig) -> [Workspace]`], "prod", "https://vault.prod.com")
+
+
+
+Creates Vault Kubernetes authentication backends based on the provided configuration.```import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0 as vault_auth```
+
+
+
+### `simpleVaultK8sAuth(name: str, clusterName: str, vaultAddr: str) -> [Workspace]`
+
+
+
+Convenience function to create a single authentication backend with minimal configuration.### Full Configuration
+
+
+
+### `multiVaultK8sAuth(auths: [K8sAuth], clusterName: str, vaultAddr: str) -> [Workspace]`
+
+
+
+Creates multiple authentication backends with shared cluster and Vault settings.```kcl# Create a simple Vault K8s auth backend## 🚀 Usage
+
+
+
+## Generated Resourcesimport oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth
+
+
+
+This module creates Crossplane `Workspace` resources that contain Terraform configurations for:authBackend = vault_auth.simpleVaultK8sAuth(
+
+
+
+- **Vault Provider**: Configured with authentication token from Kubernetes secretconfig = vault_auth.VaultConfig {
+
+- **Vault Auth Backends**: Kubernetes authentication backends with unique paths
+
+- **Variables**: Parameterized configuration for flexibility    k8sAuths = [    "my-app",                        # backend name### Quick Start Examples
+
+- **Outputs**: Information about created auth backends
+
+        vault_auth.K8sAuth {
+
+## Prerequisites
+
+            name = "application"    "prod-cluster",                  # cluster name
+
+- Crossplane installed in your cluster
+
+- crossplane-provider-terraform configured            clusterName = "prod"
+
+- Vault server accessible from the cluster
+
+- Vault authentication token stored in a Kubernetes secret            vaultAddr = "https://vault.prod.com"    "https://vault.example.com"      # vault address#### 1. Simple ServiceAccount Creation
+
+
+
+## Example Terraform Output            skipTlsVerify = False
+
+
+
+The module generates Terraform configurations like:            vaultTokenSecret = "vault-root-token")
+
+
+
+```hcl            vaultTokenSecretNamespace = "vault-system"
+
+provider "vault" {
+
+  address         = var.vault_addr        }``````kcl
+
+  skip_tls_verify = var.skip_tls_verify
+
+  token           = var.vault_token    ]
+
+}
+
+    clusterName = "prod"import xplane_vault_auth as vault_auth
+
+resource "vault_auth_backend" "kubernetes" {
+
+  for_each = {    vaultAddr = "https://vault.prod.com"
+
+    for auth in var.k8s_auths :
+
+    auth.name => auth    skipTlsVerify = False### Multiple Authentication Backends
+
+  }
+
+    vaultTokenSecret = "vault-root-token"
+
+  type = "kubernetes"
+
+  path = "${var.cluster_name}-${each.value["name"]}"    vaultTokenSecretNamespace = "vault-system"# Define authentication configurations
+
+}
+
+```}
+
+
+
+## Development```kclauths = [
+
+
+
+### Running TestsauthBackends = vault_auth.vaultK8sAuth(config)
+
+
+
+```bash```import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0 as vault_auth    vault_auth.K8sAuth {
+
+cd xplane-vault-auth
+
+kcl run tests/test_main.k
+
+```
+
+## Schema Reference        name = "vault-auth-app"
+
+### Running Examples
+
+
+
+```bash
+
+kcl run examples/vault-k8s-auth-corrected.k### VaultConfig# Configure multiple auth backends        namespace = "production"
+
+```
+
+
+
+### Validating Generated Resources
+
+| Field | Type | Description | Default |multiAuth = vault_auth.multiVaultK8sAuth([    }
+
+```bash
+
+# Test resource generation and validation|-------|------|-------------|---------|
+
+kcl run examples/vault-k8s-auth-corrected.k | kubectl apply --dry-run=client -f -
+
+```| `k8sAuths` | `[K8sAuth]` | List of Kubernetes auth configurations | Required |    vault_auth.K8sAuth {    vault_auth.K8sAuth {
+
+
+
+## Repository Structure| `clusterName` | `str` | Kubernetes cluster name | Required |
+
+
+
+```| `vaultAddr` | `str` | Vault server address | Required |        name = "web-service"        name = "vault-auth-worker"
+
+.
+
+├── README.md| `skipTlsVerify` | `bool` | Skip TLS verification | `False` |
+
+├── kcl.mod
+
+├── main.k                           # Core module logic| `vaultTokenSecret` | `str` | Secret containing Vault token | `"vault-token"` |        clusterName = "prod"        namespace = "workers"
+
+├── examples/
+
+│   ├── vault-k8s-auth.k            # Basic usage examples| `vaultTokenSecretNamespace` | `str` | Namespace of token secret | `"vault-system"` |
+
+│   └── vault-k8s-auth-corrected.k  # Working examples
+
+└── tests/        vaultAddr = "https://vault.prod.com"        automountServiceAccountToken = False
+
+    └── test_main.k                  # Test suite
+
+```### K8sAuth
+
+
+
+## Contributing    }    }
+
+
+
+This module follows Stuttgart-Things standards:| Field | Type | Description | Default |
+
+
+
+1. Use semantic versioning for releases|-------|------|-------------|---------|    vault_auth.K8sAuth {]
+
+2. Add tests for new functionality
+
+3. Update documentation for API changes| `name` | `str` | Authentication backend name | Required |
+
+4. Follow KCL best practices
+
+| `clusterName` | `str` | Kubernetes cluster name | Required |        name = "api-service"
+
+## License
+
+| `vaultAddr` | `str` | Vault server address | Required |
+
+Apache License 2.0 - see LICENSE file for details.
+| `skipTlsVerify` | `bool` | Skip TLS verification | `False` |        clusterName = "prod" # Create simple Terraform workspace
+
+| `vaultTokenSecret` | `str` | Secret containing Vault token | `"vault-token"` |
+
+| `vaultTokenSecretNamespace` | `str` | Namespace of token secret | `"vault-system"` |        vaultAddr = "https://vault.prod.com"workspace = vault_auth.simpleVaultAuth(
+
+
+
+## Functions    }    "vault-authentication",
+
+
+
+### `vaultK8sAuth(config: VaultConfig) -> [Workspace]`], "prod", "https://vault.prod.com")    auths
+
+
+
+Creates Vault Kubernetes authentication backends based on the provided configuration.```)
+
+
+
+### `simpleVaultK8sAuth(name: str, clusterName: str, vaultAddr: str) -> [Workspace]````
+
+
+
+Convenience function to create a single authentication backend with minimal configuration.### Full Configuration
+
+
+
+### `multiVaultK8sAuth(auths: [K8sAuth], clusterName: str, vaultAddr: str) -> [Workspace]`#### 2. Advanced Configuration with Connection Secrets
+
+
+
+Creates multiple authentication backends with shared cluster and Vault settings.```kcl
+
+
+
+## Generated Resourcesimport oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.1.0 as vault_auth```kcl
+
+
+
+This module creates Crossplane `Workspace` resources that contain Terraform configurations for:# Advanced setup with connection secrets
+
+
+
+- **Vault Provider**: Configured with authentication token from Kubernetes secretconfig = vault_auth.VaultConfig {workspace = vault_auth.advancedVaultAuth(
+
+- **Vault Auth Backends**: Kubernetes authentication backends with unique paths
+
+- **Variables**: Parameterized configuration for flexibility    k8sAuths = [    "vault-auth-advanced",
+
+- **Outputs**: Information about created auth backends
+
+        vault_auth.K8sAuth {    "vault-system",
+
+## Prerequisites
+
+            name = "application"    auths,
+
+- Crossplane installed in your cluster
+
+- crossplane-provider-terraform configured            clusterName = "prod"    "vault-service-account-outputs"
+
+- Vault server accessible from the cluster
+
+- Vault authentication token stored in a Kubernetes secret            vaultAddr = "https://vault.prod.com")
+
+
+
+## Example Terraform Output            skipTlsVerify = false```
+
+
+
+The module generates Terraform configurations like:            vaultTokenSecret = "vault-root-token"
+
+
+
+```hcl            vaultTokenSecretNamespace = "vault-system"#### 3. Full Configuration Control
+
+provider "vault" {
+
+  address         = var.vault_addr        }
+
+  skip_tls_verify = var.skip_tls_verify
+
+  token           = var.vault_token    ]```kcl
+
+}
+
+    clusterName = "prod"config = vault_auth.VaultAuthConfig {
+
+resource "vault_auth_backend" "kubernetes" {
+
+  for_each = {    vaultAddr = "https://vault.prod.com"    workspaceName = "vault-auth-complete"
+
+    for auth in var.k8s_auths :
+
+    auth.name => auth    skipTlsVerify = false    workspaceNamespace = "infrastructure"
+
+  }
+
+    vaultTokenSecret = "vault-root-token"
+
+  type = "kubernetes"
+
+  path = "${var.cluster_name}-${each.value["name"]}"    vaultTokenSecretNamespace = "vault-system"    k8sAuths = [
+
+}
+
+```}        vault_auth.K8sAuth {
+
+
+
+## Development            name = "vault-auth-frontend"
+
+
+
+### Running TestsauthBackends = vault_auth.vaultK8sAuth(config)            namespace = "frontend-prod"
+
+
+
+```bash```        }
+
+cd xplane-vault-auth
+
+kcl run tests/test_main.k        vault_auth.K8sAuth {
+
+```
+
+## Schema Reference            name = "vault-auth-backend"
+
+### Running Examples
+
+            namespace = "backend-prod"
+
+```bash
+
+kcl run examples/vault-k8s-auth-corrected.k### VaultConfig            automountServiceAccountToken = True
+
+```
+
+        }
+
+### Validating Generated Resources
+
+| Field | Type | Description | Default |    ]
+
+```bash
+
+# Test resource generation and validation|-------|------|-------------|---------|
+
+kcl run examples/vault-k8s-auth-corrected.k | kubectl apply --dry-run=client -f -
+
+```| `k8sAuths` | `[K8sAuth]` | List of Kubernetes auth configurations | Required |    providerConfigRef = "terraform-k8s-provider"
+
+
+
+## Repository Structure| `clusterName` | `str` | Kubernetes cluster name | Required |    connectionSecret = vault_auth.terraform.TerraformConnectionSecret {
+
+
+
+```| `vaultAddr` | `str` | Vault server address | Required |        name = "vault-auth-results"
+
+.
+
+├── README.md| `skipTlsVerify` | `bool` | Skip TLS verification | `false` |        namespace = "infrastructure"
+
+├── kcl.mod
+
+├── main.k                           # Core module logic| `vaultTokenSecret` | `str` | Secret containing Vault token | `"vault-token"` |    }
+
+├── examples/
+
+│   ├── vault-k8s-auth.k            # Basic usage examples| `vaultTokenSecretNamespace` | `str` | Namespace of token secret | `"vault-system"` |
+
+│   └── vault-k8s-auth-corrected.k  # Working examples
+
+└── tests/    managementPolicies = ["Create", "Update", "Delete"]
+
+    └── test_main.k                  # Test suite
+
+```### K8sAuth    deletionPolicy = "Delete"
+
+
+
+## Contributing}
+
+
+
+This module follows Stuttgart-Things standards:| Field | Type | Description | Default |
+
+
+
+1. Use semantic versioning for releases|-------|------|-------------|---------|workspace = vault_auth.generateVaultAuthWorkspace(config)
+
+2. Add tests for new functionality
+
+3. Update documentation for API changes| `name` | `str` | Authentication backend name | Required |```
+
+4. Follow KCL best practices
+
+| `clusterName` | `str` | Kubernetes cluster name | Required |
+
+## License
+
 | `vaultAddr` | `str` | Vault server address | Required |## 📚 Generated Terraform Code
 
+Apache License 2.0 - see LICENSE file for details.
 | `skipTlsVerify` | `bool` | Skip TLS verification | `false` |
 
 | `vaultTokenSecret` | `str` | Secret containing Vault token | `"vault-token"` |The module generates the following Terraform HCL code:

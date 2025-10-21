@@ -14,7 +14,7 @@ testConfig = vault_auth.VaultConfig {
 # Generate Terraform workspace
 workspace = vault_auth.vaultK8sAuth(testConfig)[0]
 
-# Test assertions  
+# Test assertions
 assert workspace.apiVersion == "tf.upbound.io/v1beta1"
 assert workspace.kind == "Workspace"
 assert workspace.metadata.name == "test-cluster-vault-k8s-auth"
@@ -24,7 +24,7 @@ assert workspace.spec.forProvider.source == "Inline"
 terraformCode = vault_auth.generateVaultAuthTerraform(testConfig)
 assert "vault_auth_backend" in terraformCode
 assert "provider \"vault\"" in terraformCode
-assert "for_each" in terraformCode
+assert "count = length(var.k8s_auths)" in terraformCode
 
 # Test simple authentication function
 simpleWorkspace = vault_auth.simpleVaultK8sAuth("simple-test", "cluster", "https://vault.com")[0]

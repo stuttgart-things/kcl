@@ -30,15 +30,12 @@ provider "vault" {
   token           = var.vault_token
 }
 
-# Kubernetes auth backends for each auth configuration
+# Kubernetes auth backends for each auth configuration using count
 resource "vault_auth_backend" "kubernetes" {
-  for_each = {
-    for auth in var.k8s_auths :
-    auth.name => auth
-  }
+  count = length(var.k8s_auths)
 
   type = "kubernetes"
-  path = "${var.cluster_name}-${each.value["name"]}"
+  path = "${var.cluster_name}-${var.k8s_auths[count.index].name}"
 }
 
 # Variables
@@ -77,13 +74,19 @@ variable "vault_token" {
 # Outputs
 output "auth_backends" {
   description = "Created Vault auth backends"
-  value = {
-    for k, v in vault_auth_backend.kubernetes :
-    k => {
-      path = v.path
-      type = v.type
+  value = [
+    for i in range(length(var.k8s_auths)) :
+    {
+      path = vault_auth_backend.kubernetes[i].path
+      type = vault_auth_backend.kubernetes[i].type
+      name = var.k8s_auths[i].name
     }
-  }
+  ]
+}
+
+output "auth_backend_names" {
+  description = "List of created auth backend names"
+  value = [for auth in var.k8s_auths : auth.name]
 }"""
 }
 
