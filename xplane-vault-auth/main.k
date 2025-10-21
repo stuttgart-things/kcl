@@ -1,285 +1,120 @@
-# Vault Authentication KCL Module
-# Creates Kubernetes ServiceAccounts for Vault authentication using Terraform
+# Vault Auth Module for Kubernetes Service Account Authentication
+# This module provides Terraform-based authentication setup for Vault
+import crossplane_provider_terraform as terraform
 
-# TODO: Import crossplane-provider-terraform when published to OCI
-# import crossplane_provider_terraform as terraform
-
-# Temporary inline terraform workspace implementation
-# Will be replaced with crossplane_provider_terraform import
-
-schema TerraformConnectionSecret:
-    """Connection secret configuration for Terraform outputs."""
-    name: str
-    namespace?: str
-
-schema TerraformWorkspace:
-    """Simplified Terraform workspace configuration."""
-    apiVersion: "tf.upbound.io/v1beta1" = "tf.upbound.io/v1beta1"
-    kind: "Workspace" = "Workspace"
-    metadata: {
-        name: str
-        namespace?: str = "default"
-        labels?: {str: str} = {}
-        annotations?: {str: str} = {}
-    }
-    spec: {
-        deletionPolicy?: "Delete" | "Orphan" = "Delete"
-        managementPolicies?: [str] = ["*"]
-        providerConfigRef?: {
-            name: str
-        }
-        writeConnectionSecretToRef?: {
-            name: str
-            namespace: str
-        }
-        forProvider: {
-            source: "Remote" | "Inline" | "Flux"
-            module: str
-            inlineFormat?: "HCL" | "JSON"
-            vars?: [{
-                key: str
-                value: str
-            }]
-        }
-    }
-
-# Helper function to create inline Terraform workspace (temporary)
-inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, variables: {str: str} -> [TerraformWorkspace] {
-    vars = [{key = k, value = v} for k, v in variables]
-    
-    [
-        TerraformWorkspace {
-            metadata = {
-                name = name
-            }
-            spec = {
-                forProvider = {
-                    source = "Inline"
-                    module = terraformCode
-                    inlineFormat = format
-                    vars = vars if vars else Undefined
-                }
-            }
-        }
-    ]
-}
-
-# Schema for Kubernetes authentication configuration
+# Schema for Kubernetes Service Account Auth configuration
 schema K8sAuth:
-    """
-    Kubernetes authentication configuration for Vault.
-    
-    Defines ServiceAccount and authentication setup parameters.
-    """
     name: str
-    namespace: str
-    automountServiceAccountToken?: bool = True
+    namespace?: str = "default"
+    clusterName: str
+    clusterRole?: str = "system:auth-delegator"
+    vaultAddr: str
+    vaultNamespace?: str = "default"
+    authPath?: str = "kubernetes"
+    tokenReviewerJwt?: str
+    kubernetesCaCert?: str
+    labels?: {str:str}
+    annotations?: {str:str}
 
-# Schema for Vault authentication workspace configuration
-schema VaultAuthConfig:
-    """
-    Complete Vault authentication configuration.
-    
-    Combines workspace settings with Kubernetes authentication details.
-    """
-    # Workspace configuration
-    workspaceName: str
-    workspaceNamespace?: str = "vault-system"
-    
-    # Kubernetes authentications to create
-    k8sAuths: [K8sAuth]
-    
-    # Terraform workspace configuration
-    providerConfigRef?: str = "default"
-    connectionSecret?: TerraformConnectionSecret
-    
-    # Management policies
-    managementPolicies?: [str] = ["*"]
-    deletionPolicy?: "Delete" | "Orphan" = "Delete"
+# Use the inlineTerraformWorkspace function from the terraform module
 
-# Function to generate Terraform inline code for ServiceAccounts
-generateTerraformCode = lambda auths: [K8sAuth] -> str {
+# Function to generate Terraform HCL for Kubernetes ServiceAccount
+generateServiceAccountTerraform = lambda auth: K8sAuth -> str {
     """
-    Generate Terraform HCL code for creating Kubernetes ServiceAccounts.
-    
-    Args:
-        auths: List of K8sAuth configurations
-        
-    Returns:
-        Terraform HCL code as string
-    """
-    
-    # Variable definition for k8s_auths
-    variables = """
-variable "k8s_auths" {
-  description = "List of Kubernetes authentications to create"
-  type = list(object({
-    name      = string
-    namespace = string
-    automountServiceAccountToken = optional(bool, true)
-  }))
-  default = []
-}
-"""
-    
-    # Resource definition for ServiceAccounts
-    resources = """
-resource "kubernetes_manifest" "service_account" {
-  for_each = {
-    for auth in var.k8s_auths :
-    auth.name => auth
-  }
-
-  manifest = {
-    "apiVersion" = "v1"
-    "kind"       = "ServiceAccount"
-    "metadata" = {
-      "name"      = each.value["name"]
-      "namespace" = each.value["namespace"]
-    }
-    "automountServiceAccountToken" = each.value["automountServiceAccountToken"]
-  }
-}
-"""
-    
-    # Output definition for created ServiceAccounts
-    outputs = """
-output "service_accounts" {
-  description = "Created ServiceAccounts"
-  value = {
-    for k, v in kubernetes_manifest.service_account : k => {
-      name      = v.manifest.metadata.name
-      namespace = v.manifest.metadata.namespace
-    }
+# Kubernetes Service Account for Vault Authentication
+resource "kubernetes_service_account" "vault_auth" {
+  metadata {
+    name      = "${auth.name}-vault-auth"
+    namespace = "${auth.namespace}"
   }
 }
 
-output "service_account_names" {
-  description = "List of created ServiceAccount names"
-  value = [for sa in kubernetes_manifest.service_account : sa.manifest.metadata.name]
+# Cluster Role Binding for Service Account
+resource "kubernetes_cluster_role_binding" "vault_auth" {
+  metadata {
+    name = "${auth.name}-vault-auth-delegator"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "${auth.clusterRole}"
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account.vault_auth.metadata[0].name
+    namespace = "${auth.namespace}"
+  }
+}
+
+# Secret for Service Account Token
+resource "kubernetes_secret" "vault_auth_token" {
+  metadata {
+    name      = "${auth.name}-vault-auth-token"
+    namespace = "${auth.namespace}"
+    annotations = {
+      "kubernetes.io/service-account.name" = kubernetes_service_account.vault_auth.metadata[0].name
+    }
+  }
+  type = "kubernetes.io/service-account-token"
+}
+
+# Output the JWT token for Vault configuration
+output "service_account_jwt" {
+  value       = kubernetes_secret.vault_auth_token.data["token"]
+  description = "JWT token for Vault Kubernetes authentication"
+  sensitive   = true
+}
+
+output "kubernetes_ca_cert" {
+  value       = kubernetes_secret.vault_auth_token.data["ca.crt"]
+  description = "Kubernetes CA certificate for Vault authentication"
+}
+
+output "service_account_name" {
+  value       = kubernetes_service_account.vault_auth.metadata[0].name
+  description = "Name of the created service account"
+}
+
+output "service_account_namespace" {
+  value       = "${auth.namespace}"
+  description = "Namespace of the service account"
 }
 """
-    
-    variables + resources + outputs
 }
 
-# Function to convert K8sAuth objects to Terraform variables format
-authsToTerraformVars = lambda auths: [K8sAuth] -> {str: str} {
-    """
-    Convert K8sAuth configurations to Terraform variable format.
-    
-    Args:
-        auths: List of K8sAuth configurations
-        
-    Returns:
-        Terraform variables as key-value pairs
-    """
-    
-    # Convert to JSON format for Terraform list(object()) variable
-    authsJson = [
-        {
-            "name" = auth.name
-            "namespace" = auth.namespace  
-            "automountServiceAccountToken" = auth.automountServiceAccountToken
-        } for auth in auths
-    ]
-    
-    {
-        "k8s_auths" = str(authsJson)
+# Main function to create Vault Kubernetes authentication setup
+vaultK8sAuth = lambda auth: K8sAuth {
+    terraformCode = generateServiceAccountTerraform(auth)
+    variables = {
+        "cluster_name" = auth.clusterName
+        "vault_addr" = auth.vaultAddr
+        "vault_namespace" = auth.vaultNamespace or "default"
+        "auth_path" = auth.authPath or "kubernetes"
     }
+
+    terraform.inlineTerraformWorkspace(name="{}-vault-k8s-auth".format(auth.name), terraformCode=terraformCode, format="HCL", variables=variables)
 }
 
-# Main function to generate Vault authentication workspace
-generateVaultAuthWorkspace = lambda config: VaultAuthConfig -> [any] {
-    """
-    Generate Terraform workspace for Vault authentication setup.
-    
-    Args:
-        config: VaultAuthConfig with workspace and auth settings
-        
-    Returns:
-        List containing the Terraform workspace resource
-    """
-    
-    # Generate Terraform code
-    terraformCode = generateTerraformCode(config.k8sAuths)
-    
-    # Generate variables
-    terraformVars = authsToTerraformVars(config.k8sAuths)
-    
-    # Create Terraform workspace using inline provider
-    workspace = inlineTerraformWorkspace(
-        config.workspaceName,
-        terraformCode,
-        "HCL",
-        terraformVars
-    )[0]
-    
-    # Add additional configuration
-    workspace_with_config = TerraformWorkspace {
-        **workspace
-        metadata = {
-            **workspace.metadata
-            namespace = config.workspaceNamespace
-        }
-        spec = {
-            **workspace.spec
-            deletionPolicy = config.deletionPolicy
-            managementPolicies = config.managementPolicies
-            providerConfigRef = {
-                name = config.providerConfigRef
-            } if config.providerConfigRef else Undefined
-            writeConnectionSecretToRef = {
-                name = config.connectionSecret.name
-                namespace = config.connectionSecret.namespace or config.workspaceNamespace
-            } if config.connectionSecret else Undefined
-        }
+# Helper function for simple authentication setup
+simpleVaultK8sAuth = lambda name: str, clusterName: str, vaultAddr: str {
+    auth = K8sAuth {
+        name = name
+        clusterName = clusterName
+        vaultAddr = vaultAddr
     }
-    
-    [workspace_with_config]
+    vaultK8sAuth(auth)
 }
 
-# Helper function for simple ServiceAccount creation
-simpleVaultAuth = lambda workspaceName: str, auths: [K8sAuth] -> [any] {
-    """
-    Simple helper for creating Vault authentication ServiceAccounts.
-    
-    Args:
-        workspaceName: Name of the Terraform workspace
-        auths: List of ServiceAccount configurations
-        
-    Returns:
-        List containing the Terraform workspace resource
-    """
-    
-    generateVaultAuthWorkspace(VaultAuthConfig {
-        workspaceName = workspaceName
-        k8sAuths = auths
-    })
-}
+# Advanced authentication setup with custom configuration
+advancedVaultK8sAuth = lambda auth: K8sAuth, customTerraformCode: str {
+    terraformCode = customTerraformCode or generateServiceAccountTerraform(auth)
+    variables = {
+        "cluster_name" = auth.clusterName
+        "vault_addr" = auth.vaultAddr
+        "vault_namespace" = auth.vaultNamespace or "default"
+        "auth_path" = auth.authPath or "kubernetes"
+        "cluster_role" = auth.clusterRole or "system:auth-delegator"
+    }
 
-# Advanced helper with full configuration
-advancedVaultAuth = lambda workspaceName: str, namespace: str, auths: [K8sAuth], secretName: str -> [any] {
-    """
-    Advanced helper with connection secrets and custom namespace.
-    
-    Args:
-        workspaceName: Name of the Terraform workspace
-        namespace: Kubernetes namespace for workspace
-        auths: List of ServiceAccount configurations
-        secretName: Name for connection secret
-        
-    Returns:
-        List containing the Terraform workspace resource
-    """
-    
-    generateVaultAuthWorkspace(VaultAuthConfig {
-        workspaceName = workspaceName
-        workspaceNamespace = namespace
-        k8sAuths = auths
-        connectionSecret = TerraformConnectionSecret {
-            name = secretName
-            namespace = namespace
-        }
-    })
+    terraform.inlineTerraformWorkspace(name="{}-vault-k8s-auth-advanced".format(auth.name), terraformCode=terraformCode, format="HCL", variables=variables)
 }
