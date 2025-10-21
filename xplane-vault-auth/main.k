@@ -1,120 +1,141 @@
-# Vault Auth Module for Kubernetes Service Account Authentication
-# This module provides Terraform-based authentication setup for Vault
+# Vault Auth Module for Kubernetes Authentication Backend
+# This module creates Vault Kubernetes auth backends using Terraform
+
 import crossplane_provider_terraform as terraform
 
-# Schema for Kubernetes Service Account Auth configuration
+# Schema for Kubernetes Auth Backend configuration
 schema K8sAuth:
     name: str
-    namespace?: str = "default"
     clusterName: str
-    clusterRole?: str = "system:auth-delegator"
     vaultAddr: str
-    vaultNamespace?: str = "default"
-    authPath?: str = "kubernetes"
-    tokenReviewerJwt?: str
-    kubernetesCaCert?: str
-    labels?: {str:str}
-    annotations?: {str:str}
+    skipTlsVerify?: bool = False
+    labels?: {str: str}
+    annotations?: {str: str}
 
-# Use the inlineTerraformWorkspace function from the terraform module
+# Schema for Vault provider configuration
+schema VaultConfig:
+    k8sAuths: [K8sAuth]
+    clusterName: str
+    vaultAddr: str
+    skipTlsVerify?: bool = False
+    vaultTokenSecret?: str = "vault-token"
+    vaultTokenSecretNamespace?: str = "vault-system"
 
-# Function to generate Terraform HCL for Kubernetes ServiceAccount
-generateServiceAccountTerraform = lambda auth: K8sAuth -> str {
-    """
-# Kubernetes Service Account for Vault Authentication
-resource "kubernetes_service_account" "vault_auth" {
-  metadata {
-    name      = "${auth.name}-vault-auth"
-    namespace = "${auth.namespace}"
-  }
+# Function to generate Terraform HCL for Vault Kubernetes Auth Backend
+generateVaultAuthTerraform = lambda config: VaultConfig -> str {
+    r"""# Vault provider configuration with token from secret
+provider "vault" {
+  address         = var.vault_addr
+  skip_tls_verify = var.skip_tls_verify
+  token           = var.vault_token
 }
 
-# Cluster Role Binding for Service Account
-resource "kubernetes_cluster_role_binding" "vault_auth" {
-  metadata {
-    name = "${auth.name}-vault-auth-delegator"
+# Kubernetes auth backends for each auth configuration
+resource "vault_auth_backend" "kubernetes" {
+  for_each = {
+    for auth in var.k8s_auths :
+    auth.name => auth
   }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = "${auth.clusterRole}"
-  }
-  subject {
-    kind      = "ServiceAccount"
-    name      = kubernetes_service_account.vault_auth.metadata[0].name
-    namespace = "${auth.namespace}"
-  }
+
+  type = "kubernetes"
+  path = "${var.cluster_name}-${each.value["name"]}"
 }
 
-# Secret for Service Account Token
-resource "kubernetes_secret" "vault_auth_token" {
-  metadata {
-    name      = "${auth.name}-vault-auth-token"
-    namespace = "${auth.namespace}"
-    annotations = {
-      "kubernetes.io/service-account.name" = kubernetes_service_account.vault_auth.metadata[0].name
-    }
-  }
-  type = "kubernetes.io/service-account-token"
+# Variables
+variable "k8s_auths" {
+  description = "List of Kubernetes auth configurations"
+  type = list(object({
+    name          = string
+    cluster_name  = string
+    vault_addr    = string
+    skip_tls_verify = bool
+  }))
 }
 
-# Output the JWT token for Vault configuration
-output "service_account_jwt" {
-  value       = kubernetes_secret.vault_auth_token.data["token"]
-  description = "JWT token for Vault Kubernetes authentication"
+variable "cluster_name" {
+  description = "Kubernetes cluster name"
+  type        = string
+}
+
+variable "vault_addr" {
+  description = "Vault server address"
+  type        = string
+}
+
+variable "skip_tls_verify" {
+  description = "Skip TLS verification for Vault"
+  type        = bool
+  default     = false
+}
+
+variable "vault_token" {
+  description = "Vault authentication token"
+  type        = string
   sensitive   = true
 }
 
-output "kubernetes_ca_cert" {
-  value       = kubernetes_secret.vault_auth_token.data["ca.crt"]
-  description = "Kubernetes CA certificate for Vault authentication"
+# Outputs
+output "auth_backends" {
+  description = "Created Vault auth backends"
+  value = {
+    for k, v in vault_auth_backend.kubernetes :
+    k => {
+      path = v.path
+      type = v.type
+    }
+  }
+}"""
 }
 
-output "service_account_name" {
-  value       = kubernetes_service_account.vault_auth.metadata[0].name
-  description = "Name of the created service account"
-}
+# Main function to create Vault Kubernetes authentication backends
+vaultK8sAuth = lambda config: VaultConfig {
+    terraformCode = generateVaultAuthTerraform(config)
 
-output "service_account_namespace" {
-  value       = "${auth.namespace}"
-  description = "Namespace of the service account"
-}
-"""
-}
+    # Convert K8sAuth objects to variables format
+    k8sAuthsVars = [
+        {
+            "name" = auth.name
+            "cluster_name" = auth.clusterName
+            "vault_addr" = auth.vaultAddr
+            "skip_tls_verify" = str(auth.skipTlsVerify or False)
+        } for auth in config.k8sAuths
+    ]
 
-# Main function to create Vault Kubernetes authentication setup
-vaultK8sAuth = lambda auth: K8sAuth {
-    terraformCode = generateServiceAccountTerraform(auth)
     variables = {
-        "cluster_name" = auth.clusterName
-        "vault_addr" = auth.vaultAddr
-        "vault_namespace" = auth.vaultNamespace or "default"
-        "auth_path" = auth.authPath or "kubernetes"
+        "k8s_auths" = str(k8sAuthsVars)
+        "cluster_name" = config.clusterName
+        "vault_addr" = config.vaultAddr
+        "skip_tls_verify" = str(config.skipTlsVerify or False)
     }
 
-    terraform.inlineTerraformWorkspace(name="{}-vault-k8s-auth".format(auth.name), terraformCode=terraformCode, format="HCL", variables=variables)
+    terraform.inlineTerraformWorkspace(
+        name = "{}-vault-k8s-auth".format(config.clusterName)
+        terraformCode = terraformCode
+        format = "HCL"
+        variables = variables
+    )
 }
 
 # Helper function for simple authentication setup
 simpleVaultK8sAuth = lambda name: str, clusterName: str, vaultAddr: str {
-    auth = K8sAuth {
-        name = name
+    config = VaultConfig {
+        k8sAuths = [K8sAuth {
+            name = name
+            clusterName = clusterName
+            vaultAddr = vaultAddr
+        }]
         clusterName = clusterName
         vaultAddr = vaultAddr
     }
-    vaultK8sAuth(auth)
+    vaultK8sAuth(config)
 }
 
-# Advanced authentication setup with custom configuration
-advancedVaultK8sAuth = lambda auth: K8sAuth, customTerraformCode: str {
-    terraformCode = customTerraformCode or generateServiceAccountTerraform(auth)
-    variables = {
-        "cluster_name" = auth.clusterName
-        "vault_addr" = auth.vaultAddr
-        "vault_namespace" = auth.vaultNamespace or "default"
-        "auth_path" = auth.authPath or "kubernetes"
-        "cluster_role" = auth.clusterRole or "system:auth-delegator"
+# Advanced authentication setup with multiple auth backends
+multiVaultK8sAuth = lambda auths: [K8sAuth], clusterName: str, vaultAddr: str {
+    config = VaultConfig {
+        k8sAuths = auths
+        clusterName = clusterName
+        vaultAddr = vaultAddr
     }
-
-    terraform.inlineTerraformWorkspace(name="{}-vault-k8s-auth-advanced".format(auth.name), terraformCode=terraformCode, format="HCL", variables=variables)
+    vaultK8sAuth(config)
 }
