@@ -1,0 +1,74 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xvaultauths.vault.stuttgart-things.com
+spec:
+  group: vault.stuttgart-things.com
+  names:
+    kind: XVaultAuth
+    plural: xvaultauths
+  claimNames:
+    kind: VaultAuth
+    plural: vaultauths
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              name:
+                type: string
+                description: Name prefix for created resources
+              namespace:
+                type: string
+                default: "default"
+                description: Kubernetes namespace
+              clusterName:
+                type: string
+                description: Target cluster name
+              clusterRole:
+                type: string
+                default: "system:auth-delegator"
+                description: Cluster role for service account
+              vaultAddr:
+                type: string
+                description: Vault server address
+              vaultNamespace:
+                type: string
+                default: "default"
+                description: Vault namespace
+              authPath:
+                type: string
+                default: "kubernetes"
+                description: Vault auth path
+              labels:
+                type: object
+                additionalProperties:
+                  type: string
+                description: Labels for created resources
+              annotations:
+                type: object
+                additionalProperties:
+                  type: string
+                description: Annotations for created resources
+            required:
+            - name
+            - clusterName
+            - vaultAddr
+          status:
+            type: object
+            properties:
+              serviceAccountName:
+                description: Name of the created service account
+                type: string
+              workspaceName:
+                description: Name of the Terraform workspace
+                type: string
+              ready:
+                type: boolean
+                description: Whether the auth setup is ready

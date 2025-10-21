@@ -1,0 +1,17 @@
+apiVersion: vault.stuttgart-things.com/v1alpha1
+kind: VaultAuth
+metadata:
+  name: production-vault-auth
+  namespace: vault-system
+spec:
+  name: "production-app"
+  namespace: "production"
+  clusterName: "prod-cluster"
+  vaultAddr: "https://vault.company.com"
+  vaultNamespace: "production"
+  authPath: "kubernetes-prod"
+  labels:
+    app: "production-app"
+    environment: "production"
+  annotations:
+    vault.security.banzaicloud.io/vault-addr: "https://vault.company.com"
