@@ -105,7 +105,7 @@ test_full_vault_auth_config = lambda {
             }
         ]
         providerConfigRef = "custom-provider"
-        connectionSecret = vault_auth.terraform.TerraformConnectionSecret {
+        connectionSecret = vault_auth.TerraformConnectionSecret {
             name = "full-secret"
             namespace = "custom-ns"
         }
