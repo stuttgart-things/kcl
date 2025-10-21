@@ -178,16 +178,16 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
 
 # Utility functions for common Terraform workspace patterns
 
-# Simple Git-based Terraform workspace
-gitTerraformWorkspace = lambda name: str, gitUrl: str, path?: str, variables?: {str: str} -> [workspace.Workspace] {
+# Simple Git-based Terraform workspace  
+gitTerraformWorkspace = lambda name: str, gitUrl: str, path: str, variables: {str: str} -> [workspace.Workspace] {
     """
     Create a simple Terraform workspace from a Git repository.
     
     Args:
         name: Workspace name
         gitUrl: Git repository URL
-        path: Optional path within repository
-        variables: Optional Terraform variables
+        path: Path within repository (use "" for root)
+        variables: Terraform variables
         
     Returns:
         List containing the generated Workspace resource
@@ -199,12 +199,12 @@ gitTerraformWorkspace = lambda name: str, gitUrl: str, path?: str, variables?: {
         name = name
         source = "Remote"
         module = module
-        variables = variables or {}
+        variables = variables
     })
 }
 
 # Inline Terraform workspace
-inlineTerraformWorkspace = lambda name: str, terraformCode: str, format?: str, variables?: {str: str} -> [workspace.Workspace] {
+inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, variables: {str: str} -> [workspace.Workspace] {
     """
     Create a Terraform workspace with inline Terraform code.
     
@@ -212,7 +212,7 @@ inlineTerraformWorkspace = lambda name: str, terraformCode: str, format?: str, v
         name: Workspace name
         terraformCode: Inline Terraform code
         format: Code format (HCL or JSON)
-        variables: Optional Terraform variables
+        variables: Terraform variables
         
     Returns:
         List containing the generated Workspace resource
@@ -222,13 +222,13 @@ inlineTerraformWorkspace = lambda name: str, terraformCode: str, format?: str, v
         name = name
         source = "Inline"
         module = terraformCode
-        inlineFormat = format or "HCL"
-        variables = variables or {}
+        inlineFormat = format
+        variables = variables
     })
 }
 
 # Terraform workspace with secrets
-secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secretNamespace?: str, variables?: {str: str} -> [workspace.Workspace] {
+secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secretNamespace: str, variables: {str: str} -> [workspace.Workspace] {
     """
     Create a Terraform workspace with connection secrets for outputs.
     
@@ -237,7 +237,7 @@ secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secre
         gitUrl: Git repository URL
         secretName: Name for connection secret
         secretNamespace: Namespace for connection secret
-        variables: Optional Terraform variables
+        variables: Terraform variables
         
     Returns:
         List containing the generated Workspace resource
@@ -247,10 +247,10 @@ secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secre
         name = name
         source = "Remote"
         module = gitUrl
-        variables = variables or {}
+        variables = variables
         connectionSecret = TerraformConnectionSecret {
             name = secretName
-            namespace = secretNamespace or "default"
+            namespace = secretNamespace
         }
     })
 }
