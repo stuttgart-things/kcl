@@ -68,7 +68,7 @@ full_config = vault_auth.VaultAuthConfig {
     ]
     
     providerConfigRef = "terraform-kubernetes-provider"
-    connectionSecret = vault_auth.terraform.TerraformConnectionSecret {
+    connectionSecret = vault_auth.TerraformConnectionSecret {
         name = "vault-service-accounts"
         namespace = "infrastructure"
     }
