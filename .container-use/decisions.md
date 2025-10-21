@@ -551,3 +551,255 @@ BREAKING CHANGE: Variable 'name' renamed to 'configName' to avoid KCL conflicts
 - Commit messages MUST follow conventional commit format
 - Registry pushes MUST use stuttgart-things organization namespace
 - Working branch pushes happen after successful OCI publication
+
+---
+
+## CRD to KCL Schema Conversion Standards
+
+**Date:** 2024-10-21
+**Status:** Accepted
+
+**Context:**
+When creating KCL modules for Crossplane providers that use Custom Resource Definitions (CRDs), we need a standardized approach for converting CRDs into type-safe KCL schemas while providing developer-friendly abstractions.
+
+**Decision:**
+Use automatic CRD import with `kcl import` command followed by simplified wrapper schemas for complex CRD structures.
+
+**CRD Import Workflow:**
+```bash
+# 1. Download target CRD from upstream repository
+wget -O tf_workspaces.yaml https://raw.githubusercontent.com/crossplane-contrib/provider-terraform/main/package/crds/tf.upbound.io_workspaces.yaml
+
+# 2. Import CRD and generate KCL models
+kcl import -m crd tf_workspaces.yaml
+
+# 3. Verify generated models structure
+ls -la models/v1beta1/
+# Expected: tf_upbound_io_v1beta1_workspace.k
+
+# 4. Test schema compilation
+kcl run models/v1beta1/tf_upbound_io_v1beta1_workspace.k
+```
+
+**Generated Schema Structure:**
+```kcl
+# Auto-generated in models/v1beta1/tf_upbound_io_v1beta1_workspace.k
+schema Workspace:
+    r"""
+    A Workspace of Terraform Configuration.
+    """
+    apiVersion: "tf.upbound.io/v1beta1" = "tf.upbound.io/v1beta1"
+    kind: "Workspace" = "Workspace"
+    metadata?: v1.ObjectMeta
+    spec: TfUpboundIoV1beta1WorkspaceSpec
+    status?: TfUpboundIoV1beta1WorkspaceStatus
+
+# Full CRD spec with all fields imported automatically
+schema TfUpboundIoV1beta1WorkspaceSpec:
+    deletionPolicy?: "Orphan" | "Delete" = "Delete"
+    forProvider: TfUpboundIoV1beta1WorkspaceSpecForProvider
+    managementPolicies?: [str] = ["*"]
+    # ... complete CRD structure
+```
+
+**Wrapper Schema Pattern:**
+```kcl
+# main.k - Create simplified schemas for easier usage
+import models.v1beta1.tf_upbound_io_v1beta1_workspace as workspace
+
+# Simplified wrapper schema
+schema TerraformWorkspace:
+    """
+    Simplified Terraform workspace configuration with common defaults.
+    """
+    name: str
+    namespace?: str = "default"
+    labels?: {str: str}
+    annotations?: {str: str}
+
+    # Terraform configuration
+    source: "Remote" | "Inline" | "Flux" = "Remote"
+    module: str
+    entrypoint?: str = ""
+    inlineFormat?: "HCL" | "JSON" = "HCL"
+
+    # Variables
+    variables?: {str: str}
+    variableFiles?: [TerraformVarFile]
+    environmentVariables?: [TerraformEnvVar]
+
+    # Provider configuration
+    providerConfigRef?: str = "default"
+    connectionSecret?: TerraformConnectionSecret
+    managementPolicies?: [str] = ["*"]
+    deletionPolicy?: "Delete" | "Orphan" = "Delete"
+
+# Helper function to convert simplified config to full CRD
+generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Workspace] {
+    [
+        workspace.Workspace {
+            metadata = {
+                name = config.name
+                namespace = config.namespace or "default"
+                labels = config.labels or {}
+                annotations = config.annotations or {}
+            }
+            spec = {
+                deletionPolicy = config.deletionPolicy
+                managementPolicies = config.managementPolicies
+                providerConfigRef = {
+                    name = config.providerConfigRef
+                } if config.providerConfigRef else Undefined
+                forProvider = {
+                    source = config.source
+                    module = config.module
+                    entrypoint = config.entrypoint
+                    vars = [{key = k, value = v} for k, v in config.variables] if config.variables else Undefined
+                    # ... map other fields
+                }
+            }
+        }
+    ]
+}
+```
+
+**Helper Function Patterns:**
+```kcl
+# Pattern 1: Simple Git-based workspace
+gitTerraformWorkspace = lambda name: str, gitUrl: str, path: str, variables: {str: str} -> [workspace.Workspace] {
+    generateTerraformWorkspace(TerraformWorkspace {
+        name = name
+        source = "Remote"
+        module = gitUrl + ("/" + path if path else "")
+        variables = variables
+    })
+}
+
+# Pattern 2: Inline Terraform code
+inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, variables: {str: str} -> [workspace.Workspace] {
+    generateTerraformWorkspace(TerraformWorkspace {
+        name = name
+        source = "Inline"
+        module = terraformCode
+        inlineFormat = format
+        variables = variables
+    })
+}
+
+# Pattern 3: Workspace with connection secrets
+secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secretNamespace: str, variables: {str: str} -> [workspace.Workspace] {
+    generateTerraformWorkspace(TerraformWorkspace {
+        name = name
+        source = "Remote"
+        module = gitUrl
+        variables = variables
+        connectionSecret = TerraformConnectionSecret {
+            name = secretName
+            namespace = secretNamespace
+        }
+    })
+}
+```
+
+**Testing Standards:**
+```kcl
+# tests/test_main.k
+import ..main as terraform
+
+test_git_workspace = lambda {
+    workspaces = terraform.gitTerraformWorkspace(
+        "test-workspace",
+        "https://github.com/example/terraform.git",
+        "modules/vpc",
+        {"region": "us-west-2"}
+    )
+
+    assert len(workspaces) == 1
+    assert workspaces[0].metadata.name == "test-workspace"
+    assert workspaces[0].spec.forProvider.source == "Remote"
+    assert workspaces[0].spec.forProvider.module == "https://github.com/example/terraform.git/modules/vpc"
+}
+
+# Run tests
+test_git_workspace()
+print("✅ All tests passed!")
+```
+
+**File Structure Standards:**
+```
+crossplane-provider-<provider>/
+├── README.md                    # Comprehensive documentation
+├── kcl.mod                      # Module definition
+├── main.k                       # Wrapper schemas and helper functions
+├── models/v1beta1/              # Auto-generated CRD schemas
+│   └── <provider>_<version>_<resource>.k
+├── examples/                    # Usage examples
+│   └── simple-workspace.k       # Practical examples
+├── tests/                       # Test suite
+│   └── test_main.k              # Comprehensive tests
+└── <crd-source>.yaml           # Original CRD for reference
+```
+
+**Module Naming Convention:**
+- **Module name**: `crossplane-provider-<provider-name>`
+- **Examples**: `crossplane-provider-terraform`, `crossplane-provider-aws`, `crossplane-provider-gcp`
+- **OCI registry**: `oci://ghcr.io/stuttgart-things/crossplane-provider-<provider-name>`
+
+**Documentation Requirements:**
+```markdown
+# Module README.md structure
+## Features
+- List of supported CRD resources
+- Helper functions provided
+- Integration capabilities
+
+## Installation
+- OCI registry import instructions
+- Dependency requirements
+
+## Usage
+- Quick start examples for each helper function
+- Advanced configuration examples
+- API reference with all fields documented
+
+## Generated CRD Models
+- List of imported CRDs and their purposes
+- Link to upstream CRD documentation
+
+## Development
+- Testing instructions
+- Contributing guidelines
+```
+
+**Benefits:**
+- **Type Safety**: Full CRD schema validation at compile time
+- **Developer Experience**: Simplified schemas reduce complexity
+- **Maintainability**: Auto-generated schemas stay in sync with upstream CRDs
+- **Flexibility**: Direct access to full CRD API when needed
+- **Testing**: Comprehensive validation of generated resources
+- **Documentation**: Clear examples and API reference
+
+**CRD Source Management:**
+```bash
+# Track CRD sources and versions
+echo "# CRD Sources" > crd-sources.md
+echo "- Terraform Provider Workspace: https://github.com/crossplane-contrib/provider-terraform/blob/main/package/crds/tf.upbound.io_workspaces.yaml" >> crd-sources.md
+echo "- Version: v0.15.0" >> crd-sources.md
+echo "- Import Date: $(date)" >> crd-sources.md
+```
+
+**Alternatives considered:**
+- Manual schema creation (rejected - error-prone, out of sync with upstream)
+- Direct CRD usage without wrappers (rejected - too complex for users)
+- Different import tools (rejected - `kcl import` is official and reliable)
+- Flat schema structure (rejected - loses CRD structure benefits)
+
+**Enforcement:**
+- All CRD-based modules MUST use `kcl import -m crd` for schema generation
+- Generated schemas MUST NOT be manually edited (marked with "DO NOT EDIT" header)
+- Wrapper schemas MUST provide simplified developer interfaces
+- Helper functions MUST cover common usage patterns
+- Tests MUST validate both wrapper functions and direct CRD usage
+- Documentation MUST include both simple and advanced examples
+
+````
