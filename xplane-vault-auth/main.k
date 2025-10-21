@@ -1,7 +1,68 @@
 # Vault Authentication KCL Module
 # Creates Kubernetes ServiceAccounts for Vault authentication using Terraform
 
-import crossplane_provider_terraform as terraform
+# TODO: Import crossplane-provider-terraform when published to OCI
+# import crossplane_provider_terraform as terraform
+
+# Temporary inline terraform workspace implementation
+# Will be replaced with crossplane_provider_terraform import
+
+schema TerraformConnectionSecret:
+    """Connection secret configuration for Terraform outputs."""
+    name: str
+    namespace?: str
+
+schema TerraformWorkspace:
+    """Simplified Terraform workspace configuration."""
+    apiVersion: "tf.upbound.io/v1beta1" = "tf.upbound.io/v1beta1"
+    kind: "Workspace" = "Workspace"
+    metadata: {
+        name: str
+        namespace?: str = "default"
+        labels?: {str: str} = {}
+        annotations?: {str: str} = {}
+    }
+    spec: {
+        deletionPolicy?: "Delete" | "Orphan" = "Delete"
+        managementPolicies?: [str] = ["*"]
+        providerConfigRef?: {
+            name: str
+        }
+        writeConnectionSecretToRef?: {
+            name: str
+            namespace: str
+        }
+        forProvider: {
+            source: "Remote" | "Inline" | "Flux"
+            module: str
+            inlineFormat?: "HCL" | "JSON"
+            vars?: [{
+                key: str
+                value: str
+            }]
+        }
+    }
+
+# Helper function to create inline Terraform workspace (temporary)
+inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, variables: {str: str} -> [TerraformWorkspace] {
+    vars = [{key = k, value = v} for k, v in variables]
+    
+    [
+        TerraformWorkspace {
+            metadata = {
+                name = name
+            }
+            spec = {
+                forProvider = {
+                    source = "Inline"
+                    module = terraformCode
+                    inlineFormat = format
+                    vars = vars if vars else Undefined
+                }
+            }
+        }
+    ]
+}
 
 # Schema for Kubernetes authentication configuration
 schema K8sAuth:
@@ -30,7 +91,7 @@ schema VaultAuthConfig:
     
     # Terraform workspace configuration
     providerConfigRef?: str = "default"
-    connectionSecret?: terraform.TerraformConnectionSecret
+    connectionSecret?: TerraformConnectionSecret
     
     # Management policies
     managementPolicies?: [str] = ["*"]
@@ -147,12 +208,35 @@ generateVaultAuthWorkspace = lambda config: VaultAuthConfig -> [any] {
     terraformVars = authsToTerraformVars(config.k8sAuths)
     
     # Create Terraform workspace using inline provider
-    terraform.inlineTerraformWorkspace(
+    workspace = inlineTerraformWorkspace(
         config.workspaceName,
         terraformCode,
         "HCL",
         terraformVars
-    )
+    )[0]
+    
+    # Add additional configuration
+    workspace_with_config = TerraformWorkspace {
+        **workspace
+        metadata = {
+            **workspace.metadata
+            namespace = config.workspaceNamespace
+        }
+        spec = {
+            **workspace.spec
+            deletionPolicy = config.deletionPolicy
+            managementPolicies = config.managementPolicies
+            providerConfigRef = {
+                name = config.providerConfigRef
+            } if config.providerConfigRef else Undefined
+            writeConnectionSecretToRef = {
+                name = config.connectionSecret.name
+                namespace = config.connectionSecret.namespace or config.workspaceNamespace
+            } if config.connectionSecret else Undefined
+        }
+    }
+    
+    [workspace_with_config]
 }
 
 # Helper function for simple ServiceAccount creation
@@ -193,7 +277,7 @@ advancedVaultAuth = lambda workspaceName: str, namespace: str, auths: [K8sAuth],
         workspaceName = workspaceName
         workspaceNamespace = namespace
         k8sAuths = auths
-        connectionSecret = terraform.TerraformConnectionSecret {
+        connectionSecret = TerraformConnectionSecret {
             name = secretName
             namespace = namespace
         }
