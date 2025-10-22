@@ -1,7 +1,7 @@
 [package]
 name = "xplane-vault-auth"
-version = "0.2.0"
-description = "KCL module for creating Vault Kubernetes authentication backends using Crossplane and Terraform provider"
+version = "0.3.0"
+description = "KCL module for creating Vault Kubernetes authentication backends using Crossplane and Terraform provider with count-based approach"
 edition = "v0.11.0"
 
 [dependencies]

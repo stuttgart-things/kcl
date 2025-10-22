@@ -9,6 +9,8 @@ schema K8sAuth:
     clusterName: str
     vaultAddr: str
     skipTlsVerify?: bool = False
+    tokenPolicies?: [str] = []
+    tokenTtl?: int = 3600
     labels?: {str: str}
     annotations?: {str: str}
 
@@ -21,8 +23,8 @@ schema VaultConfig:
     vaultTokenSecret?: str = "vault-token"
     vaultTokenSecretNamespace?: str = "vault-system"
 
-# Function to generate Terraform HCL for Vault Kubernetes Auth Backend
-generateVaultAuthTerraform = lambda config: VaultConfig -> str {
+# Function to generate Terraform HCL for a single Vault Kubernetes Auth Backend
+generateSingleVaultAuthTerraform = lambda auth: K8sAuth -> str {
     r"""# Vault provider configuration with token from secret
 provider "vault" {
   address         = var.vault_addr
@@ -30,23 +32,26 @@ provider "vault" {
   token           = var.vault_token
 }
 
-# Kubernetes auth backends for each auth configuration using count
+# Single Kubernetes auth backend
 resource "vault_auth_backend" "kubernetes" {
-  count = length(var.k8s_auths)
-
   type = "kubernetes"
-  path = "${var.cluster_name}-${var.k8s_auths[count.index].name}"
+  path = "${var.cluster_name}-${var.auth_name}"
+}
+
+# Auth backend role for the service account
+resource "vault_kubernetes_auth_backend_role" "service_account" {
+  backend                          = vault_auth_backend.kubernetes.path
+  role_name                        = var.auth_name
+  bound_service_account_names      = [var.auth_name]
+  bound_service_account_namespaces = ["default"]
+  token_ttl                        = var.token_ttl
+  token_policies                   = var.token_policies
 }
 
 # Variables
-variable "k8s_auths" {
-  description = "List of Kubernetes auth configurations"
-  type = list(object({
-    name          = string
-    cluster_name  = string
-    vault_addr    = string
-    skip_tls_verify = bool
-  }))
+variable "auth_name" {
+  description = "Authentication backend name"
+  type        = string
 }
 
 variable "cluster_name" {
@@ -71,69 +76,90 @@ variable "vault_token" {
   sensitive   = true
 }
 
-# Outputs
-output "auth_backends" {
-  description = "Created Vault auth backends"
-  value = [
-    for i in range(length(var.k8s_auths)) :
-    {
-      path = vault_auth_backend.kubernetes[i].path
-      type = vault_auth_backend.kubernetes[i].type
-      name = var.k8s_auths[i].name
-    }
-  ]
+variable "token_policies" {
+  description = "List of policies for the auth backend"
+  type        = list(string)
+  default     = []
 }
 
-output "auth_backend_names" {
-  description = "List of created auth backend names"
-  value = [for auth in var.k8s_auths : auth.name]
+variable "token_ttl" {
+  description = "Token TTL in seconds"
+  type        = number
+  default     = 3600
+}
+
+# Outputs
+output "auth_backend_path" {
+  description = "Path of the created auth backend"
+  value       = vault_auth_backend.kubernetes.path
+}
+
+output "auth_role_name" {
+  description = "Name of the created auth role"
+  value       = vault_kubernetes_auth_backend_role.service_account.role_name
 }"""
 }
 
-# Main function to create Vault Kubernetes authentication backends
-vaultK8sAuth = lambda config: VaultConfig {
-    terraformCode = generateVaultAuthTerraform(config)
-
-    # Convert K8sAuth objects to variables format
-    k8sAuthsVars = [
-        {
-            "name" = auth.name
-            "cluster_name" = auth.clusterName
-            "vault_addr" = auth.vaultAddr
-            "skip_tls_verify" = str(auth.skipTlsVerify or False)
-        } for auth in config.k8sAuths
-    ]
+# Function to create a single Vault Kubernetes auth backend
+createSingleVaultAuth = lambda auth: K8sAuth {
+    terraformCode = generateSingleVaultAuthTerraform(auth)
 
     variables = {
-        "k8s_auths" = str(k8sAuthsVars)
-        "cluster_name" = config.clusterName
-        "vault_addr" = config.vaultAddr
-        "skip_tls_verify" = str(config.skipTlsVerify or False)
+        "auth_name" = auth.name
+        "cluster_name" = auth.clusterName
+        "vault_addr" = auth.vaultAddr
+        "skip_tls_verify" = str(auth.skipTlsVerify or False)
+        "token_policies" = str(auth.tokenPolicies or [])
+        "token_ttl" = str(auth.tokenTtl or 3600)
     }
 
     terraform.inlineTerraformWorkspace(
-        name = "{}-vault-k8s-auth".format(config.clusterName)
+        name = "{}-{}-vault-auth".format(auth.clusterName, auth.name)
         terraformCode = terraformCode
         format = "HCL"
         variables = variables
     )
 }
 
-# Helper function for simple authentication setup
+# Main function to create multiple Vault Kubernetes authentication backends
+vaultK8sAuth = lambda config: VaultConfig {
+    [createSingleVaultAuth(auth) for auth in config.k8sAuths]
+}
+
+# Simple helper function for basic authentication setup
 simpleVaultK8sAuth = lambda name: str, clusterName: str, vaultAddr: str {
-    config = VaultConfig {
-        k8sAuths = [K8sAuth {
-            name = name
-            clusterName = clusterName
-            vaultAddr = vaultAddr
-        }]
+    auth = K8sAuth {
+        name = name
         clusterName = clusterName
         vaultAddr = vaultAddr
     }
-    vaultK8sAuth(config)
+    createSingleVaultAuth(auth)
 }
 
-# Advanced authentication setup with multiple auth backends
+# Simple helper with policies
+simpleVaultK8sAuthWithPolicies = lambda name: str, clusterName: str, vaultAddr: str, policies: [str] {
+    auth = K8sAuth {
+        name = name
+        clusterName = clusterName
+        vaultAddr = vaultAddr
+        tokenPolicies = policies
+    }
+    createSingleVaultAuth(auth)
+}
+
+# Helper function for authentication with custom TTL and policies
+advancedVaultK8sAuth = lambda name: str, clusterName: str, vaultAddr: str, policies: [str], ttl: int {
+    auth = K8sAuth {
+        name = name
+        clusterName = clusterName
+        vaultAddr = vaultAddr
+        tokenPolicies = policies
+        tokenTtl = ttl
+    }
+    createSingleVaultAuth(auth)
+}
+
+# Multiple auth backends (creates separate workspaces for each)
 multiVaultK8sAuth = lambda auths: [K8sAuth], clusterName: str, vaultAddr: str {
     config = VaultConfig {
         k8sAuths = auths

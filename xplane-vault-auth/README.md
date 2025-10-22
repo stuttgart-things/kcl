@@ -108,7 +108,7 @@ multiAuth = vault_auth.multiVaultK8sAuth([
 
         name = "api-service"```kcl
 
-        clusterName = "prod" 
+        clusterName = "prod"
 
         vaultAddr = "https://vault.prod.com"import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth- ✅ **OCI Package**: Available as an OCI artifact for easy consumption- **Multiple ServiceAccounts**: Support for multiple authentication configurations
 
