@@ -1,0 +1,277 @@
+name: KCL Module CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'kcl-*/**'
+      - 'xplane-*/**'
+      - 'crossplane-*/**'
+  pull_request:
+    paths:
+      - 'kcl-*/**'
+      - 'xplane-*/**'
+      - 'crossplane-*/**'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  detect-changed-modules:
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.changed-modules.outputs.modules }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed KCL modules
+        id: changed-modules
+        run: |
+          # Get changed files
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          fi
+          
+          # Extract unique module directories
+          MODULES=$(echo "$CHANGED_FILES" | grep -E '^(kcl-|xplane-|crossplane-)' | cut -d/ -f1 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          
+          echo "Detected modules: $MODULES"
+          echo "modules=$MODULES" >> $GITHUB_OUTPUT
+
+  lint-and-test:
+    needs: detect-changed-modules
+    if: needs.detect-changed-modules.outputs.modules != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.detect-changed-modules.outputs.modules) }}
+      fail-fast: false
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install KCL
+        run: |
+          curl -fsSL https://kcl-lang.io/script/install-cli.sh | bash
+          echo "$HOME/.kcl/bin" >> $GITHUB_PATH
+
+      - name: Verify KCL installation
+        run: kcl --version
+
+      - name: Format check
+        working-directory: ${{ matrix.module }}
+        run: |
+          echo "==> Checking code formatting..."
+          kcl fmt .
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "❌ Code is not formatted. Run 'kcl fmt .' locally."
+            git diff
+            exit 1
+          fi
+          echo "✅ Code is properly formatted"
+
+      - name: Lint KCL code
+        working-directory: ${{ matrix.module }}
+        run: |
+          echo "==> Linting KCL code..."
+          kcl lint . || {
+            echo "❌ Linting failed"
+            exit 1
+          }
+          echo "✅ Linting passed"
+
+      - name: Run tests
+        working-directory: ${{ matrix.module }}
+        run: |
+          echo "==> Running tests..."
+          if [ -d "tests" ]; then
+            kcl test ./... --fail-fast || {
+              echo "❌ Tests failed"
+              exit 1
+            }
+            echo "✅ All tests passed"
+          else
+            echo "⚠️  No tests directory found, skipping tests"
+          fi
+
+      - name: Test module execution
+        working-directory: ${{ matrix.module }}
+        run: |
+          echo "==> Testing module execution with default values..."
+          kcl run . || {
+            echo "❌ Module execution failed"
+            exit 1
+          }
+          echo "✅ Module executes successfully"
+
+      - name: Validate module structure
+        working-directory: ${{ matrix.module }}
+        run: |
+          echo "==> Validating module structure..."
+          
+          # Check for required files
+          [ -f "kcl.mod" ] || { echo "❌ kcl.mod not found"; exit 1; }
+          [ -f "main.k" ] || { echo "❌ main.k not found"; exit 1; }
+          [ -f "README.md" ] || { echo "❌ README.md not found"; exit 1; }
+          
+          # Extract module name and version
+          MODULE_NAME=$(grep '^name = ' kcl.mod | cut -d '"' -f 2)
+          MODULE_VERSION=$(grep '^version = ' kcl.mod | cut -d '"' -f 2)
+          
+          echo "Module: $MODULE_NAME"
+          echo "Version: $MODULE_VERSION"
+          
+          # Validate semantic versioning
+          if ! echo "$MODULE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Invalid semantic version: $MODULE_VERSION"
+            exit 1
+          fi
+          
+          echo "✅ Module structure is valid"
+          echo "MODULE_NAME=$MODULE_NAME" >> $GITHUB_ENV
+          echo "MODULE_VERSION=$MODULE_VERSION" >> $GITHUB_ENV
+
+  publish-to-oci:
+    needs: [detect-changed-modules, lint-and-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.detect-changed-modules.outputs.modules) }}
+      fail-fast: false
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install KCL
+        run: |
+          curl -fsSL https://kcl-lang.io/script/install-cli.sh | bash
+          echo "$HOME/.kcl/bin" >> $GITHUB_PATH
+
+      - name: Extract module metadata
+        id: metadata
+        working-directory: ${{ matrix.module }}
+        run: |
+          MODULE_NAME=$(grep '^name = ' kcl.mod | cut -d '"' -f 2)
+          MODULE_VERSION=$(grep '^version = ' kcl.mod | cut -d '"' -f 2)
+          
+          echo "name=$MODULE_NAME" >> $GITHUB_OUTPUT
+          echo "version=$MODULE_VERSION" >> $GITHUB_OUTPUT
+          echo "oci_ref=oci://ghcr.io/${{ github.repository_owner }}/$MODULE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Check if version exists in registry
+        id: check-version
+        run: |
+          # Try to pull the specific version
+          if kcl mod metadata ${{ steps.metadata.outputs.oci_ref }} --tag ${{ steps.metadata.outputs.version }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Version ${{ steps.metadata.outputs.version }} already exists in registry"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Version ${{ steps.metadata.outputs.version }} does not exist, will publish"
+          fi
+
+      - name: Login to GitHub Container Registry
+        if: steps.check-version.outputs.exists == 'false'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | kcl registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push module to OCI registry
+        if: steps.check-version.outputs.exists == 'false'
+        working-directory: ${{ matrix.module }}
+        run: |
+          echo "==> Publishing ${{ steps.metadata.outputs.name }}:${{ steps.metadata.outputs.version }}"
+          kcl mod push ${{ steps.metadata.outputs.oci_ref }}
+          echo "✅ Published to ${{ steps.metadata.outputs.oci_ref }}:${{ steps.metadata.outputs.version }}"
+
+      - name: Make package public
+        if: steps.check-version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MODULE_NAME="${{ steps.metadata.outputs.name }}"
+          
+          echo "==> Setting package visibility to public..."
+          
+          # Get package details
+          PACKAGE_JSON=$(gh api /orgs/${{ github.repository_owner }}/packages/container/$MODULE_NAME 2>/dev/null || echo "{}")
+          
+          if [ "$PACKAGE_JSON" = "{}" ]; then
+            echo "⚠️  Package not found in registry yet, it may take a moment to appear"
+            sleep 10
+            PACKAGE_JSON=$(gh api /orgs/${{ github.repository_owner }}/packages/container/$MODULE_NAME 2>/dev/null || echo "{}")
+          fi
+          
+          VISIBILITY=$(echo "$PACKAGE_JSON" | jq -r '.visibility // "unknown"')
+          
+          if [ "$VISIBILITY" = "public" ]; then
+            echo "✅ Package is already public"
+          elif [ "$VISIBILITY" = "private" ]; then
+            echo "Making package public via web API..."
+            
+            # Note: GitHub's REST API doesn't support changing container package visibility
+            # This would need to be done manually or via GitHub's web interface
+            # We'll add a comment to the commit/PR instead
+            
+            echo "⚠️  Package visibility must be changed manually at:"
+            echo "    https://github.com/orgs/${{ github.repository_owner }}/packages/container/$MODULE_NAME/settings"
+            echo ""
+            echo "Please set visibility to 'Public' in the Danger Zone section."
+          else
+            echo "⚠️  Could not determine package visibility"
+          fi
+
+      - name: Create release summary
+        if: steps.check-version.outputs.exists == 'false'
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## 📦 Module Published
+          
+          **Module:** \`${{ steps.metadata.outputs.name }}\`
+          **Version:** \`${{ steps.metadata.outputs.version }}\`
+          **Registry:** \`${{ steps.metadata.outputs.oci_ref }}\`
+          
+          ### Installation
+          
+          \`\`\`bash
+          kcl mod add ${{ steps.metadata.outputs.oci_ref }} --tag ${{ steps.metadata.outputs.version }}
+          \`\`\`
+          
+          ### Usage
+          
+          \`\`\`bash
+          kcl run ${{ steps.metadata.outputs.name }}
+          \`\`\`
+          
+          ### ⚠️  Post-Publication Steps
+          
+          If this is a new package, please manually set visibility to **Public**:
+          
+          👉 https://github.com/orgs/${{ github.repository_owner }}/packages/container/${{ steps.metadata.outputs.name }}/settings
+          
+          Navigate to **Danger Zone** → **Change visibility** → Select **Public**
+          EOF
+
+      - name: Skip publishing (version exists)
+        if: steps.check-version.outputs.exists == 'true'
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## ⏭️ Publication Skipped
+          
+          **Module:** \`${{ steps.metadata.outputs.name }}\`
+          **Version:** \`${{ steps.metadata.outputs.version }}\`
+          
+          Version already exists in registry. To publish a new version:
+          
+          1. Increment version in \`kcl.mod\`
+          2. Commit and push changes
+          EOF
