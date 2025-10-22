@@ -35,6 +35,11 @@ config = {
     gitRef = option("gitRef") or "refs/heads/main"
     gitPath = option("gitPath") or "clusters/vcluster/vso"
     gitPullSecret = option("gitPullSecret") or "git-token-auth"
+    # Secret rendering options
+    renderSecrets = True if option("renderSecrets") in ["true", True] else False
+    gitUsername = option("gitUsername") or ""
+    gitPassword = option("gitPassword") or ""
+    sopsAgeKey = option("sopsAgeKey") or ""
 }
 
 # Build patches list based on configuration
@@ -68,6 +73,34 @@ _perfPatch = {
 # Combine patches conditionally
 _patches = [_sopsPatch] if config.sopsEnabled else []
 _patches += [_perfPatch]
+
+# Create optional Kubernetes Secrets
+gitSecret = {
+    apiVersion = "v1"
+    kind = "Secret"
+    metadata = {
+        name = config.gitPullSecret
+        namespace = config.namespace
+    }
+    type = "Opaque"
+    stringData = {
+        username = config.gitUsername
+        password = config.gitPassword
+    }
+}
+
+sopsSecret = {
+    apiVersion = "v1"
+    kind = "Secret"
+    metadata = {
+        name = config.sopsSecretName
+        namespace = config.namespace
+    }
+    type = "Opaque"
+    stringData = {
+        "age.agekey" = config.sopsAgeKey
+    }
+}
 
 # Create the FluxInstance Custom Resource
 fluxInstance = {
@@ -107,5 +140,12 @@ fluxInstance = {
     }
 }
 
+# Build items array based on configuration
+_items = [fluxInstance]
+
+# Conditionally add secrets if renderSecrets is enabled and credentials are provided
+_gitSecretItems = [gitSecret] if (config.renderSecrets and config.gitUsername and config.gitPassword) else []
+_sopsSecretItems = [sopsSecret] if (config.renderSecrets and config.sopsEnabled and config.sopsAgeKey) else []
+
 # Output
-items = [fluxInstance]
+items = _items + _gitSecretItems + _sopsSecretItems

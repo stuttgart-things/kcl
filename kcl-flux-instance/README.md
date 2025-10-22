@@ -1,10 +1,11 @@
 # Flux KCL Module
 
-This KCL module creates a FluxInstance Custom Resource for installing and configuring Flux CD in a Kubernetes cluster.
+This KCL module creates a FluxInstance Custom Resource for installing and configuring Flux CD in a Kubernetes cluster. Optionally, it can also render Kubernetes Secrets for Git authentication and SOPS decryption.
 
 ## Features
 
 - Configurable FluxInstance with all important parameters
+- **Optional Kubernetes Secret rendering** for Git and SOPS
 - SOPS integration for encrypted secrets
 - Performance tuning for controllers
 - Git repository synchronization
@@ -91,6 +92,41 @@ kcl run kcl-flux-instance \
   -D gitUrl=https://github.com/my-org/my-repo.git | kubectl apply -f -
 ```
 
+### Render with Kubernetes Secrets
+
+Render FluxInstance along with Git and SOPS secrets in one command:
+
+```bash
+kcl run kcl-flux-instance \
+  -D gitUrl=https://github.com/my-org/my-repo.git \
+  -D renderSecrets=true \
+  -D gitUsername=my-github-user \
+  -D gitPassword=ghp_myPersonalAccessToken \
+  -D sopsAgeKey="AGE-SECRET-KEY-1..." \
+  | kubectl apply -f -
+```
+
+### Only Git Secret (without SOPS)
+
+```bash
+kcl run kcl-flux-instance \
+  -D gitUrl=https://github.com/my-org/my-repo.git \
+  -D renderSecrets=true \
+  -D gitUsername=my-user \
+  -D gitPassword=my-token \
+  -D sopsEnabled=false \
+  | kubectl apply -f -
+```
+
+### Only FluxInstance (no secrets)
+
+```bash
+# Secrets must be created manually
+kcl run kcl-flux-instance \
+  -D gitUrl=https://github.com/my-org/my-repo.git \
+  | kubectl apply -f -
+```
+
 ## Configuration Parameters
 
 | Parameter | Type | Default | Description |
@@ -115,6 +151,10 @@ kcl run kcl-flux-instance \
 | `gitRef` | string | `refs/heads/main` | Git branch/tag |
 | `gitPath` | string | `clusters/vcluster/vso` | Path in repository |
 | `gitPullSecret` | string | `git-token-auth` | Secret for Git authentication |
+| `renderSecrets` | bool | `false` | **Render Kubernetes Secrets for Git and SOPS** |
+| `gitUsername` | string | `""` | **Git username (only if renderSecrets=true)** |
+| `gitPassword` | string | `""` | **Git password/token (only if renderSecrets=true)** |
+| `sopsAgeKey` | string | `""` | **SOPS AGE private key (only if renderSecrets=true and sopsEnabled=true)** |
 
 ## Components
 
