@@ -38,10 +38,10 @@ jobs:
           else
             CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
           fi
-          
+
           # Extract unique module directories
           MODULES=$(echo "$CHANGED_FILES" | grep -E '^(kcl-|xplane-|crossplane-)' | cut -d/ -f1 | sort -u | jq -R -s -c 'split("\n")[:-1]')
-          
+
           echo "Detected modules: $MODULES"
           echo "modules=$MODULES" >> $GITHUB_OUTPUT
 
@@ -53,7 +53,7 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.detect-changed-modules.outputs.modules) }}
       fail-fast: false
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -116,25 +116,25 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: |
           echo "==> Validating module structure..."
-          
+
           # Check for required files
           [ -f "kcl.mod" ] || { echo "❌ kcl.mod not found"; exit 1; }
           [ -f "main.k" ] || { echo "❌ main.k not found"; exit 1; }
           [ -f "README.md" ] || { echo "❌ README.md not found"; exit 1; }
-          
+
           # Extract module name and version
           MODULE_NAME=$(grep '^name = ' kcl.mod | cut -d '"' -f 2)
           MODULE_VERSION=$(grep '^version = ' kcl.mod | cut -d '"' -f 2)
-          
+
           echo "Module: $MODULE_NAME"
           echo "Version: $MODULE_VERSION"
-          
+
           # Validate semantic versioning
           if ! echo "$MODULE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "❌ Invalid semantic version: $MODULE_VERSION"
             exit 1
           fi
-          
+
           echo "✅ Module structure is valid"
           echo "MODULE_NAME=$MODULE_NAME" >> $GITHUB_ENV
           echo "MODULE_VERSION=$MODULE_VERSION" >> $GITHUB_ENV
@@ -147,7 +147,7 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.detect-changed-modules.outputs.modules) }}
       fail-fast: false
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -163,7 +163,7 @@ jobs:
         run: |
           MODULE_NAME=$(grep '^name = ' kcl.mod | cut -d '"' -f 2)
           MODULE_VERSION=$(grep '^version = ' kcl.mod | cut -d '"' -f 2)
-          
+
           echo "name=$MODULE_NAME" >> $GITHUB_OUTPUT
           echo "version=$MODULE_VERSION" >> $GITHUB_OUTPUT
           echo "oci_ref=oci://ghcr.io/${{ github.repository_owner }}/$MODULE_NAME" >> $GITHUB_OUTPUT
@@ -199,29 +199,29 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           MODULE_NAME="${{ steps.metadata.outputs.name }}"
-          
+
           echo "==> Setting package visibility to public..."
-          
+
           # Get package details
           PACKAGE_JSON=$(gh api /orgs/${{ github.repository_owner }}/packages/container/$MODULE_NAME 2>/dev/null || echo "{}")
-          
+
           if [ "$PACKAGE_JSON" = "{}" ]; then
             echo "⚠️  Package not found in registry yet, it may take a moment to appear"
             sleep 10
             PACKAGE_JSON=$(gh api /orgs/${{ github.repository_owner }}/packages/container/$MODULE_NAME 2>/dev/null || echo "{}")
           fi
-          
+
           VISIBILITY=$(echo "$PACKAGE_JSON" | jq -r '.visibility // "unknown"')
-          
+
           if [ "$VISIBILITY" = "public" ]; then
             echo "✅ Package is already public"
           elif [ "$VISIBILITY" = "private" ]; then
             echo "Making package public via web API..."
-            
+
             # Note: GitHub's REST API doesn't support changing container package visibility
             # This would need to be done manually or via GitHub's web interface
             # We'll add a comment to the commit/PR instead
-            
+
             echo "⚠️  Package visibility must be changed manually at:"
             echo "    https://github.com/orgs/${{ github.repository_owner }}/packages/container/$MODULE_NAME/settings"
             echo ""
@@ -235,29 +235,29 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY << EOF
           ## 📦 Module Published
-          
+
           **Module:** \`${{ steps.metadata.outputs.name }}\`
           **Version:** \`${{ steps.metadata.outputs.version }}\`
           **Registry:** \`${{ steps.metadata.outputs.oci_ref }}\`
-          
+
           ### Installation
-          
+
           \`\`\`bash
           kcl mod add ${{ steps.metadata.outputs.oci_ref }} --tag ${{ steps.metadata.outputs.version }}
           \`\`\`
-          
+
           ### Usage
-          
+
           \`\`\`bash
           kcl run ${{ steps.metadata.outputs.name }}
           \`\`\`
-          
+
           ### ⚠️  Post-Publication Steps
-          
+
           If this is a new package, please manually set visibility to **Public**:
-          
+
           👉 https://github.com/orgs/${{ github.repository_owner }}/packages/container/${{ steps.metadata.outputs.name }}/settings
-          
+
           Navigate to **Danger Zone** → **Change visibility** → Select **Public**
           EOF
 
@@ -266,12 +266,12 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY << EOF
           ## ⏭️ Publication Skipped
-          
+
           **Module:** \`${{ steps.metadata.outputs.name }}\`
           **Version:** \`${{ steps.metadata.outputs.version }}\`
-          
+
           Version already exists in registry. To publish a new version:
-          
+
           1. Increment version in \`kcl.mod\`
           2. Commit and push changes
           EOF

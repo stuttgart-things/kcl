@@ -59,10 +59,10 @@ import ..main as mymodule
 test_basic_functionality = lambda {
     """Test basic module functionality"""
     result = mymodule.items
-    
+
     assert len(result) > 0, "Should generate resources"
     assert result[0].kind == "MyResource", "Should have correct kind"
-    
+
     print("✅ test_basic_functionality passed")
 }
 
