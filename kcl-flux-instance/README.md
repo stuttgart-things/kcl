@@ -10,18 +10,38 @@ This KCL module creates a FluxInstance Custom Resource for installing and config
 - Git repository synchronization
 - Flexible component selection
 
+## Installation
+
+### From OCI Registry
+
+```bash
+# Add module from Stuttgart Things registry
+kcl mod add oci://ghcr.io/stuttgart-things/kcl-flux-instance
+
+# Or add with specific version
+kcl mod add oci://ghcr.io/stuttgart-things/kcl-flux-instance --tag 0.1.0
+```
+
+### Local Development
+
+```bash
+# Clone and use locally
+git clone https://github.com/stuttgart-things/kcl.git
+cd kcl/kcl-flux-instance
+```
+
 ## Usage
 
 ### Basic Installation with Default Values
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k
+kcl run kcl-flux-instance
 ```
 
 ### With Custom Values
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D name=my-flux \
   -D namespace=flux-system \
   -D version=2.4 \
@@ -34,7 +54,7 @@ kcl run /home/sthings/projects/kcl/flux/main.k \
 ### Performance Optimization
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D concurrent=20 \
   -D requeueDependency=3s
 ```
@@ -42,14 +62,14 @@ kcl run /home/sthings/projects/kcl/flux/main.k \
 ### Without SOPS Integration
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D sopsEnabled=false
 ```
 
 ### Cluster Configuration
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D multitenant=true \
   -D networkPolicy=true \
   -D domain=my-cluster.local
@@ -58,7 +78,7 @@ kcl run /home/sthings/projects/kcl/flux/main.k \
 ### Output to File
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D gitUrl=https://github.com/my-org/my-repo.git \
   -D gitPath=clusters/staging \
   -o flux-instance.yaml
@@ -67,7 +87,7 @@ kcl run /home/sthings/projects/kcl/flux/main.k \
 ### Apply Directly to Cluster
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D gitUrl=https://github.com/my-org/my-repo.git | kubectl apply -f -
 ```
 
@@ -112,7 +132,7 @@ The following Flux components can be enabled:
 ### Minimal Configuration for Dev Environment
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D name=flux-dev \
   -D namespace=flux-dev \
   -D gitUrl=https://github.com/my-org/dev-configs.git \
@@ -124,7 +144,7 @@ kcl run /home/sthings/projects/kcl/flux/main.k \
 ### Production Configuration with Full Control
 
 ```bash
-kcl run /home/sthings/projects/kcl/flux/main.k \
+kcl run kcl-flux-instance \
   -D name=flux-prod \
   -D namespace=flux-system \
   -D version=2.4 \
@@ -149,6 +169,6 @@ kcl run /home/sthings/projects/kcl/flux/main.k \
 ## Installing Dependencies
 
 ```bash
-cd /home/sthings/projects/kcl/flux
+cd kcl-flux-instance
 kcl mod download
 ```
