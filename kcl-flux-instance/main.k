@@ -27,8 +27,9 @@ config = {
     # SOPS settings
     sopsEnabled = True if option("sopsEnabled") == None else (option("sopsEnabled") == "true" or option("sopsEnabled") == True)
     sopsSecretName = option("sopsSecretName") or "sops-age"
-    # Performance settings
-    concurrent = int(option("concurrent")) if option("concurrent") else 10
+    # Performance settings - safe string to int conversion
+    _concurrentValue = option("concurrent")
+    concurrent = int(str(_concurrentValue)) if _concurrentValue and str(_concurrentValue).isdigit() else 10
     requeueDependency = option("requeueDependency") or "5s"
     # Git sync settings
     gitUrl = option("gitUrl") or "https://github.com/stuttgart-things/stuttgart-things.git"

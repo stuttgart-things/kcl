@@ -13,7 +13,7 @@ kubectl create secret generic git-token-auth \
   --from-literal=username=my-user \
   --from-literal=password=my-token
 
-# SOPS decryption secret  
+# SOPS decryption secret
 kubectl create secret generic sops-age \
   --namespace flux-system \
   --from-literal=age.agekey="AGE-SECRET-KEY-1..."
@@ -121,7 +121,7 @@ stringData:
    # Better: Use environment variables
    export GIT_PASSWORD="ghp_..."
    export SOPS_AGE_KEY="AGE-SECRET-KEY-1..."
-   
+
    kcl run oci://ghcr.io/stuttgart-things/kcl-flux-instance --tag 0.2.0 \
      -D gitUrl=https://github.com/my-org/my-repo.git \
      -D renderSecrets=true \
@@ -141,13 +141,13 @@ stringData:
      -D gitPassword="${GIT_PASSWORD}" \
      -D sopsAgeKey="${SOPS_AGE_KEY}" \
      > flux-with-secrets.yaml
-   
+
    # Review the file
    cat flux-with-secrets.yaml
-   
+
    # Apply
    kubectl apply -f flux-with-secrets.yaml
-   
+
    # Clean up
    shred -u flux-with-secrets.yaml
    ```
