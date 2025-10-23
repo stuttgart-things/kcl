@@ -1,0 +1,33 @@
+[dependencies]
+  [dependencies.crossplane-provider-helm]
+    name = "crossplane-provider-helm"
+    full_name = "crossplane-helm-models_0.1.1"
+    version = "0.1.1"
+    sum = "ZtM1OJzO9p7S8GYqjPaH1PjYIE967T2/ENAoCy9c9qE="
+    reg = "ghcr.io"
+    repo = "stuttgart-things/crossplane-provider-helm"
+    oci_tag = "0.1.1"
+  [dependencies.flux-helmrelease]
+    name = "flux-helmrelease"
+    full_name = "flux-helmrelease_0.1.0"
+    version = "0.1.0"
+    sum = "1Pd3n5k5Pz8/e6neQWri4faRCn2EyF5Yaj25eN/X/wU="
+    reg = "ghcr.io"
+    repo = "stuttgart-things/flux-helmrelease"
+    oci_tag = "0.1.0"
+  [dependencies.flux-kustomization]
+    name = "flux-kustomization"
+    full_name = "flux-kustomization_0.1.0"
+    version = "0.1.0"
+    sum = "yuhF6easn7DMs3yvlYHDGZCi+3ftHyt1xhs44H8ZbfQ="
+    reg = "ghcr.io"
+    repo = "stuttgart-things/flux-kustomization"
+    oci_tag = "0.1.0"
+  [dependencies.k8s]
+    name = "k8s"
+    full_name = "k8s_1.32.4"
+    version = "1.32.4"
+    sum = "WrltC/mTXtdzmhBZxlvM71wJL5C/UZ/vW+bF3nFvNbM="
+    reg = "ghcr.io"
+    repo = "kcl-lang/k8s"
+    oci_tag = "1.32.4"
