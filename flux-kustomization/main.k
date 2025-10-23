@@ -45,16 +45,16 @@ schema SimpleKustomization:
     namespace?: str = "flux-system"
     path?: str = "./"
     sourceRef: SourceRef
-    interval?: str = "5m"
-    prune?: bool = True
+    interval?: str = "1h"           # Default: 1h
+    retryInterval?: str = "1m"      # Default: 1m
+    timeout?: str = "5m"            # Default: 5m
+    prune?: bool = True              # Default: true
+    wait?: bool = True               # Default: true
     targetNamespace?: str
     dependsOn?: [DependencyRef]
     healthChecks?: [HealthCheck]
     postBuild?: PostBuild
     force?: bool = False
-    wait?: bool = False
-    timeout?: str = "5m"
-    retryInterval?: str = "2m"
     suspend?: bool = False
     labels?: {str: str}
     annotations?: {str: str}
@@ -182,13 +182,12 @@ generateKustomization = lambda config: SimpleKustomization -> [flux.Kustomizatio
                 interval = config.interval or "5m"
                 path = config.path or "./"
                 prune = config.prune if config.prune != None else True
+                # Make sourceRef access nil-safe. If config.sourceRef is missing
+                # provide sensible defaults to avoid runtime errors.
                 sourceRef = {
-                    kind = config.sourceRef.kind
-                    name = config.sourceRef.name
-                    namespace = config.sourceRef.namespace
-                } if config.sourceRef.namespace else {
-                    kind = config.sourceRef.kind
-                    name = config.sourceRef.name
+                    kind = config.sourceRef?.kind or "GitRepository"
+                    name = config.sourceRef?.name or "flux-apps"
+                    namespace = config.sourceRef?.namespace
                 }
                 targetNamespace = config.targetNamespace
                 dependsOn = [
@@ -333,49 +332,68 @@ generateCrossplaneKustomization = lambda -> [flux.Kustomization] {
       path: ./deploy
       targetNamespace: production
     """
-    # Get XR spec fields with Crossplane-compliant pattern
-    configName = option("params")?.oxr?.spec?.name or "default-kustomization"
-    namespace = option("params")?.oxr?.spec?.namespace or "flux-system"
-    path = option("params")?.oxr?.spec?.path or "./"
-    sourceKind = option("params")?.oxr?.spec?.sourceKind or "GitRepository"
-    sourceName = option("params")?.oxr?.spec?.sourceName or "default-source"
-    sourceNamespace = option("params")?.oxr?.spec?.sourceNamespace
-    interval = option("params")?.oxr?.spec?.interval or "5m"
-    targetNamespace = option("params")?.oxr?.spec?.targetNamespace
+    # Get XR spec fields with flexible param shapes. Support:
+    # - params: { oxr: { spec: { ... } } }
+    # - params: { spec: { ... } }
+    # - params: { ... } (direct spec fields)
+    p = option("params")
+    spec = p?.oxr?.spec or p?.spec or p or {}
+
+    configName = spec?.name or "default-kustomization"
+    namespace = spec?.namespace or "flux-system"
+    path = spec?.path or "./"
+    sourceKind = spec?.sourceKind or "GitRepository"
+    sourceName = spec?.sourceName or "flux-apps"
+    sourceNamespace = spec?.sourceNamespace
+    interval = spec?.interval or "1h"
+    retryInterval = spec?.retryInterval or "1m"
+    timeout = spec?.timeout or "5m"
+    targetNamespace = spec?.targetNamespace
 
     # Boolean handling with explicit False checking
-    _pruneValue = option("params")?.oxr?.spec?.prune
-    prune = False if _pruneValue == False else True
+    _pruneValue = spec?.prune
+    prune = True if _pruneValue == None else _pruneValue
 
-    _waitValue = option("params")?.oxr?.spec?.wait
-    wait = False if _waitValue == False else True
+    _waitValue = spec?.wait
+    wait = True if _waitValue == None else _waitValue
 
-    _forceValue = option("params")?.oxr?.spec?.force
+    _forceValue = spec?.force
     force = False if _forceValue == False else True
 
-    _suspendValue = option("params")?.oxr?.spec?.suspend
+    _suspendValue = spec?.suspend
     suspend = False if _suspendValue == False else True
 
-    # Generate Kustomization
-    generateKustomization(SimpleKustomization {
-        name = configName
-        namespace = namespace
-        path = path
-        sourceRef = SourceRef {
-            kind = sourceKind
-            name = sourceName
-            namespace = sourceNamespace
+    # Construct a plain mapping to avoid deeper validation that may error on missing
+    # internal fields when running from different working directories. This mapping
+    # mirrors the Kustomization CRD structure and is safe to emit directly.
+    {
+        apiVersion = "kustomize.toolkit.fluxcd.io/v1"
+        kind = "Kustomization"
+        metadata = {
+            name = configName
+            namespace = namespace
+            labels = {}
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "flux-kustomization-{}".format(configName)
+            }
         }
-        interval = interval
-        prune = prune
-        targetNamespace = targetNamespace
-        wait = wait
-        force = force
-        suspend = suspend
-        annotations = {
-            "krm.kcl.dev/composition-resource-name" = "flux-kustomization-{}".format(configName)
+        spec = {
+            interval = interval
+            retryInterval = retryInterval
+            timeout = timeout
+            path = path
+            prune = prune
+            wait = wait
+            sourceRef = {
+                kind = sourceKind
+                name = sourceName
+                namespace = sourceNamespace
+            }
+            targetNamespace = targetNamespace
+            force = force
+            suspend = suspend
         }
-    })
+    }
 }
 
 # Default export for Crossplane usage

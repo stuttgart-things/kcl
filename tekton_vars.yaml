@@ -1,0 +1,16 @@
+oxr:
+  spec:
+    name: tekton
+    namespace: flux-system
+    path: ./cicd/tekton
+    sourceKind: GitRepository
+    sourceName: flux-apps
+    interval: 1h
+    retryInterval: 1m
+    timeout: 5m
+    prune: true
+    wait: true
+    postBuild:
+      substitute:
+        TEKTON_NAMESPACE: tekton-pipelines
+        TEKTON_VERSION: 0.76.1
