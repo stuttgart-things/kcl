@@ -1,5 +1,34 @@
 # Decisions
+---
 
+## Mandatory Task Check Before Every Commit
+
+**Date:** 2025-10-23
+**Status:** Accepted
+
+**Context:**
+To ensure code quality, security, and compliance, every commit must be preceded by a mandatory task check. This includes running pre-commit hooks, linting, secret detection, and any other automated checks defined in the Taskfile or CI pipeline.
+
+**Decision:**
+Before every commit, the following must be executed:
+1. Run all pre-commit hooks (e.g. `pre-commit run -a`)
+2. Run the main Taskfile check (e.g. `task check` or `task mustrun`)
+3. Ensure all checks pass before proceeding with the commit
+
+**Benefits:**
+- Prevents accidental commits of secrets, broken code, or formatting errors
+- Automatisiert die Einhaltung von Projektstandards
+- Reduziert manuelle Fehler und erhöht die Zuverlässigkeit
+
+**Enforcement:**
+- Commits dürfen nur nach erfolgreichem Task-Check erfolgen
+- CI/CD prüft, ob alle Checks bestanden wurden
+- Dokumentation und Code-Reviews müssen diese Praxis bestätigen
+
+**Alternatives considered:**
+- Commit ohne Checks (abgelehnt – erhöht Fehlerquote und Sicherheitsrisiko)
+
+---
 ## Use Crossplane-Compliant Variable Structure for All Dagger Functions
 
 **Date:** 2024-10-19
