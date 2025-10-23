@@ -835,7 +835,7 @@ dagger call -m github.com/stuttgart-things/dagger/kcl@latest convert-crd \
 **Generated Structure:**
 ```
 generated-models/
-├── kcl.mod                          # Module definition  
+├── kcl.mod                          # Module definition
 ├── k8s/apimachinery/pkg/apis/meta/v1/  # K8s core types
 ├── v1/                              # API version v1 schemas
 │   └── <group>_v1_<resource>.k

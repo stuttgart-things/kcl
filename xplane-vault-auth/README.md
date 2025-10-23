@@ -144,9 +144,9 @@ config = vault_auth.VaultConfig {    "prod-cluster",                  # cluster 
 
             skipTlsVerify = False``````bash- **Connection Secrets**: Optional output management through Kubernetes secrets
 
-            vaultTokenSecret = "vault-root-token"
+            vaultTokenSecret = "vault-root-token" # pragma: allowlist secret # pragma: allowlist secret
 
-            vaultTokenSecretNamespace = "vault-system"
+            vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret # pragma: allowlist secret
 
         }
 
@@ -158,9 +158,9 @@ config = vault_auth.VaultConfig {    "prod-cluster",                  # cluster 
 
     skipTlsVerify = False
 
-    vaultTokenSecret = "vault-root-token"```kclkcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0- ✅ **Vault Auth Backend Creation**: Creates actual Vault Kubernetes authentication backends- **Flexible Configuration**: Simple helpers and advanced configuration options
+    vaultTokenSecret = "vault-root-token" # pragma: allowlist secret # pragma: allowlist secret```kclkcl mod add oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0- ✅ **Vault Auth Backend Creation**: Creates actual Vault Kubernetes authentication backends- **Flexible Configuration**: Simple helpers and advanced configuration options
 
-    vaultTokenSecretNamespace = "vault-system"
+    vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret # pragma: allowlist secret
 
 }import oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 as vault_auth
 
@@ -278,11 +278,11 @@ output "auth_backends" {
 
 - Faster plan/apply cycles for large numbers of backends
 
-- Less memory usage during Terraform execution            vaultTokenSecret = "vault-root-token")
+- Less memory usage during Terraform execution            vaultTokenSecret = "vault-root-token" # pragma: allowlist secret) # pragma: allowlist secret
 
 - Simpler state management
 
-            vaultTokenSecretNamespace = "vault-system"
+            vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret # pragma: allowlist secret
 
 ### ✅ **Maintainability**
 
@@ -306,11 +306,11 @@ output "auth_backends" {
 
 cd xplane-vault-auth
 
-kcl run tests/test_main.k    vaultTokenSecret = "vault-root-token"
+kcl run tests/test_main.k    vaultTokenSecret = "vault-root-token" # pragma: allowlist secret
 
 ```
 
-    vaultTokenSecretNamespace = "vault-system"
+    vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret
 
 ### Running Examples
 
@@ -443,11 +443,11 @@ This module creates Crossplane `Workspace` resources that contain Terraform conf
 
 
 
-The module generates Terraform configurations like:            vaultTokenSecret = "vault-root-token")
+The module generates Terraform configurations like:            vaultTokenSecret = "vault-root-token" # pragma: allowlist secret)
 
 
 
-```hcl            vaultTokenSecretNamespace = "vault-system"
+```hcl            vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret
 
 provider "vault" {
 
@@ -471,11 +471,11 @@ resource "vault_auth_backend" "kubernetes" {
 
   }
 
-    vaultTokenSecret = "vault-root-token"
+    vaultTokenSecret = "vault-root-token" # pragma: allowlist secret
 
   type = "kubernetes"
 
-  path = "${var.cluster_name}-${each.value["name"]}"    vaultTokenSecretNamespace = "vault-system"# Define authentication configurations
+  path = "${var.cluster_name}-${each.value["name"]}"    vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret# Define authentication configurations
 
 }
 
@@ -650,11 +650,11 @@ This module creates Crossplane `Workspace` resources that contain Terraform conf
 
 
 
-The module generates Terraform configurations like:            vaultTokenSecret = "vault-root-token"
+The module generates Terraform configurations like:            vaultTokenSecret = "vault-root-token" # pragma: allowlist secret
 
 
 
-```hcl            vaultTokenSecretNamespace = "vault-system"#### 3. Full Configuration Control
+```hcl            vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret#### 3. Full Configuration Control
 
 provider "vault" {
 
@@ -678,11 +678,11 @@ resource "vault_auth_backend" "kubernetes" {
 
   }
 
-    vaultTokenSecret = "vault-root-token"
+    vaultTokenSecret = "vault-root-token" # pragma: allowlist secret
 
   type = "kubernetes"
 
-  path = "${var.cluster_name}-${each.value["name"]}"    vaultTokenSecretNamespace = "vault-system"    k8sAuths = [
+  path = "${var.cluster_name}-${each.value["name"]}"    vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret    k8sAuths = [
 
 }
 

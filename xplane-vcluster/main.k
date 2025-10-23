@@ -132,7 +132,7 @@ kubeconfig_reader = obj.Object {
                 name = vclusterSecretName
                 namespace = vclusterSecretNamespace
                 fieldPath = "data.config"
-                toConnectionSecretKey = "kubeconfig"
+                toConnectionSecretKey = "kubeconfig" # pragma: allowlist secret
             }
             {
                 apiVersion = "v1"
@@ -140,7 +140,7 @@ kubeconfig_reader = obj.Object {
                 name = vclusterSecretName
                 namespace = vclusterSecretNamespace
                 fieldPath = "data.certificate-authority"
-                toConnectionSecretKey = "ca.crt"
+                toConnectionSecretKey = "ca.crt" # pragma: allowlist secret
             }
         ]
         writeConnectionSecretToRef = {

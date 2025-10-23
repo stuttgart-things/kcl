@@ -143,7 +143,7 @@ vaultK8sAuth = lambda auth: K8sAuth -> [TerraformWorkspace] {
         "vault_namespace" = auth.vaultNamespace
         "auth_path" = auth.authPath
     }
-    
+
     [
         inlineTerraformWorkspace(
             name = f"{auth.name}-vault-k8s-auth"
@@ -174,7 +174,7 @@ advancedVaultK8sAuth = lambda auth: K8sAuth, customTerraformCode?: str -> [Terra
         "auth_path" = auth.authPath or "kubernetes"
         "cluster_role" = auth.clusterRole or "system:auth-delegator"
     }
-    
+
     [
         inlineTerraformWorkspace(
             name = f"{auth.name}-vault-k8s-auth-advanced"

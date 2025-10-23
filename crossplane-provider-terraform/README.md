@@ -24,7 +24,7 @@ kcl mod add ghcr.io/stuttgart-things/crossplane-provider-terraform:0.1.0
 ### From Source
 
 ```bash
-# Clone the KCL repository  
+# Clone the KCL repository
 git clone https://github.com/stuttgart-things/kcl.git
 cd kcl/crossplane-provider-terraform
 ```
@@ -41,7 +41,7 @@ import crossplane_provider_terraform as terraform
 # Create a simple workspace from a Git repository
 workspace = terraform.gitTerraformWorkspace(
     "my-infrastructure",
-    "https://github.com/company/terraform-modules.git", 
+    "https://github.com/company/terraform-modules.git",
     "aws/vpc",
     {
         "region": "us-west-2"
@@ -52,7 +52,7 @@ workspace = terraform.gitTerraformWorkspace(
 
 #### 2. Inline Terraform Code
 
-```kcl  
+```kcl
 inline_workspace = terraform.inlineTerraformWorkspace(
     "quick-test",
     """
@@ -94,25 +94,25 @@ advanced_workspace = terraform.generateTerraformWorkspace(terraform.TerraformWor
     namespace = "terraform-system"
     labels = {
         "environment": "production"
-        "team": "platform" 
+        "team": "platform"
         "managed-by": "crossplane"
     }
     annotations = {
         "description": "Production infrastructure managed by Terraform"
         "contact": "platform-team@company.com"
     }
-    
+
     # Terraform configuration
     source = "Remote"
     module = "https://github.com/company/terraform-modules.git//aws/complete-setup"
-    
+
     # Variables from multiple sources
     variables = {
-        "region": "us-west-2" 
+        "region": "us-west-2"
         "environment": "production"
         "cluster_name": "prod-cluster"
     }
-    
+
     # Environment variables from secrets
     environmentVariables = [
         terraform.TerraformEnvVar {
@@ -132,7 +132,7 @@ advanced_workspace = terraform.generateTerraformWorkspace(terraform.TerraformWor
             }
         }
     ]
-    
+
     # Variable files from ConfigMaps
     variableFiles = [
         terraform.TerraformVarFile {
@@ -145,20 +145,20 @@ advanced_workspace = terraform.generateTerraformWorkspace(terraform.TerraformWor
             }
         }
     ]
-    
+
     # Terraform CLI customization
     initArgs = ["-upgrade", "-backend-config=production.hcl"]
     planArgs = ["-detailed-exitcode", "-out=tfplan"]
     applyArgs = ["-auto-approve", "tfplan"]
     destroyArgs = ["-auto-approve"]
-    
+
     # Provider and connection configuration
     providerConfigRef = "terraform-aws-provider"
     connectionSecret = terraform.TerraformConnectionSecret {
         name = "infrastructure-outputs"
         namespace = "terraform-system"
     }
-    
+
     # Management policies
     managementPolicies = ["Create", "Update", "Delete", "Observe"]
     deletionPolicy = "Delete"
@@ -231,7 +231,7 @@ Creates a simple Terraform workspace from a Git repository.
 Creates a workspace with inline Terraform code.
 
 **Parameters:**
-- `name` (string): Workspace name  
+- `name` (string): Workspace name
 - `terraformCode` (string): Inline Terraform code
 - `format` (string): Code format (HCL/JSON)
 - `variables` ({str: str}): Terraform variables
@@ -243,7 +243,7 @@ Creates a workspace with connection secrets for outputs.
 - `name` (string): Workspace name
 - `gitUrl` (string): Git repository URL
 - `secretName` (string): Connection secret name
-- `secretNamespace` (string): Connection secret namespace  
+- `secretNamespace` (string): Connection secret namespace
 - `variables` ({str: str}): Terraform variables
 
 #### `generateTerraformWorkspace(config)`
@@ -261,7 +261,7 @@ cd crossplane-provider-terraform
 kcl run tests/test_main.k
 ```
 
-### Running Examples  
+### Running Examples
 
 ```bash
 kcl run examples/simple-workspace.k
@@ -297,7 +297,7 @@ spec:
       spec:
         source: |
           import crossplane_provider_terraform as terraform
-          
+
           workspaces = terraform.gitTerraformWorkspace(
               option("oxr").spec.name,
               option("oxr").spec.gitUrl,

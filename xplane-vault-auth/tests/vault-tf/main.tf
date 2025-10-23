@@ -12,6 +12,7 @@ terraform {
 provider "vault" {
   address         = var.vault_addr
   skip_tls_verify = var.skip_tls_verify
+  token          = "vault-token-placeholder" // Replace with a valid Vault token
 }
 
 // CREATE KUBERNETES BACKEND

@@ -56,8 +56,8 @@ fullConfig = vault_auth.vaultK8sAuth(vault_auth.VaultConfig {
     clusterName = "production"
     vaultAddr = "https://vault.example.com"
     skipTlsVerify = false
-    vaultTokenSecret = "vault-token"
-    vaultTokenSecretNamespace = "vault-system"
+    vaultTokenSecret = "vault-token" # pragma: allowlist secret
+    vaultTokenSecretNamespace = "vault-system" # pragma: allowlist secret
 })
 
 # Output all configurations

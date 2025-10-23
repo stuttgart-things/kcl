@@ -48,8 +48,8 @@ fullConfig = vault_auth.VaultConfig {
     clusterName = "staging"
     vaultAddr = "https://vault.staging.com"
     skipTlsVerify = True
-    vaultTokenSecret = "custom-vault-token"
-    vaultTokenSecretNamespace = "security"
+    vaultTokenSecret = "custom-vault-token" # pragma: allowlist secret
+    vaultTokenSecretNamespace = "security" # pragma: allowlist secret
 }
 
 fullAuth = vault_auth.vaultK8sAuth(fullConfig)

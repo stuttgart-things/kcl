@@ -11,7 +11,7 @@ test_git_workspace = lambda {
         "modules/vpc",
         {"region": "us-west-2"}
     )
-    
+
     # Assertions
     assert len(workspaces) == 1
     assert workspaces[0].metadata.name == "test-workspace"
@@ -31,14 +31,14 @@ resource "null_resource" "test" {
   }
 }
     """
-    
+
     workspaces = terraform.inlineTerraformWorkspace(
         "inline-test",
         terraformCode,
         "HCL",
         {"var1": "value1"}
     )
-    
+
     # Assertions
     assert len(workspaces) == 1
     assert workspaces[0].metadata.name == "inline-test"
@@ -77,27 +77,27 @@ test_advanced_workspace = lambda {
         initArgs = ["-upgrade"]
         enableTerraformCLILogging = True
     }
-    
+
     workspaces = terraform.generateTerraformWorkspace(config)
-    
+
     # Assertions
     assert len(workspaces) == 1
     ws = workspaces[0]
-    
+
     assert ws.metadata.name == "advanced-test"
     assert ws.metadata.namespace == "test-ns"
     assert ws.metadata.labels.test == "true"
-    
+
     assert ws.spec.forProvider.source == "Remote"
     assert ws.spec.forProvider.module == "https://github.com/example/modules.git"
     assert len(ws.spec.forProvider.vars) == 2
     assert len(ws.spec.forProvider.env) == 1
     assert ws.spec.forProvider.env[0].name == "TF_VAR_secret"
     assert ws.spec.forProvider.env[0].secretKeyRef.name == "test-secret"
-    
+
     assert ws.spec.writeConnectionSecretToRef.name == "test-outputs"
     assert ws.spec.writeConnectionSecretToRef.namespace == "test-ns"
-    
+
     assert ws.spec.forProvider.initArgs == ["-upgrade"]
     assert ws.spec.forProvider.enableTerraformCLILogging == True
 }
@@ -111,11 +111,11 @@ test_secret_workspace = lambda {
         "secure-ns",
         {"db_size": "small"}
     )
-    
-    # Assertions  
+
+    # Assertions
     assert len(workspaces) == 1
     ws = workspaces[0]
-    
+
     assert ws.metadata.name == "secret-test"
     assert ws.spec.forProvider.source == "Remote"
     assert ws.spec.forProvider.module == "https://github.com/example/secure.git"
@@ -130,10 +130,10 @@ test_default_values = lambda {
         name = "defaults-test"
         module = "https://github.com/example/test.git"
     }
-    
+
     workspaces = terraform.generateTerraformWorkspace(config)
     ws = workspaces[0]
-    
+
     # Check defaults
     assert ws.metadata.namespace == "default"
     assert ws.spec.forProvider.source == "Remote"
@@ -145,7 +145,7 @@ test_default_values = lambda {
 
 # Run all tests
 test_git_workspace()
-test_inline_workspace() 
+test_inline_workspace()
 test_advanced_workspace()
 test_secret_workspace()
 test_default_values()

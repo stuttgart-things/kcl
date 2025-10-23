@@ -1506,5 +1506,3 @@ schema HelmToolkitFluxcdIoV2beta2HelmReleaseStatusHistoryItems0TestHooksAnon:
     lastStarted?: str
 
     phase?: str
-
-

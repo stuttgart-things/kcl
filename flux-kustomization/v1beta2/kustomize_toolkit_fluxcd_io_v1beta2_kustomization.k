@@ -751,5 +751,3 @@ schema KustomizeToolkitFluxcdIoV1beta2KustomizationStatusInventoryEntriesItems0:
     id: str
 
     v: str
-
-

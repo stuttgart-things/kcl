@@ -107,7 +107,7 @@ test_sync_config = lambda {
     assert sync.kind == "GitRepository", "Should sync from GitRepository"
     assert "github.com" in sync.url, "Should have valid Git URL"
     assert sync.ref == "refs/heads/main", "Should have correct Git ref"
-    assert sync.pullSecret == "git-token-auth", "Should have pull secret configured"
+    assert sync.pullSecret == "git-token-auth", "Should have pull secret configured" # pragma: allowlist secret
 
     print("✅ test_sync_config passed")
 }

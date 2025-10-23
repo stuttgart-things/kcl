@@ -37,23 +37,23 @@ fullConfig = vault_auth.VaultConfig {
             clusterName = "staging"
             vaultAddr = "https://vault.staging.com"
             skipTlsVerify = true  # for development environments
-            vaultTokenSecret = "custom-vault-token"
-            vaultTokenSecretNamespace = "security"
+            vaultTokenSecret = "custom-vault-token" # pragma: allowlist secret
+            vaultTokenSecretNamespace = "security" # pragma: allowlist secret
         }
         vault_auth.K8sAuth {
             name = "backend"
             clusterName = "staging"
             vaultAddr = "https://vault.staging.com"
             skipTlsVerify = true
-            vaultTokenSecret = "custom-vault-token"
-            vaultTokenSecretNamespace = "security"
+            vaultTokenSecret = "custom-vault-token" # pragma: allowlist secret
+            vaultTokenSecretNamespace = "security" # pragma: allowlist secret
         }
     ]
     clusterName = "staging"
     vaultAddr = "https://vault.staging.com"
     skipTlsVerify = true
-    vaultTokenSecret = "custom-vault-token"
-    vaultTokenSecretNamespace = "security"
+    vaultTokenSecret = "custom-vault-token" # pragma: allowlist secret
+    vaultTokenSecretNamespace = "security" # pragma: allowlist secret
 }
 
 fullAuth = vault_auth.vaultK8sAuth(fullConfig)

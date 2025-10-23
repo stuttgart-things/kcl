@@ -8,7 +8,7 @@ import k8s.api.core.v1 as corev1
 schema TerraformWorkspace:
     """
     TerraformWorkspace defines a Terraform workspace managed through Crossplane.
-    
+
     This schema provides a simplified interface for creating Terraform workspaces
     with common configurations while exposing the full Crossplane Terraform Provider API.
     """
@@ -17,34 +17,34 @@ schema TerraformWorkspace:
     namespace?: str = "default"
     labels?: {str: str}
     annotations?: {str: str}
-    
+
     # Terraform configuration
     source: "Remote" | "Inline" | "Flux" = "Remote"
     module: str
     entrypoint?: str = ""
     inlineFormat?: "HCL" | "JSON" = "HCL"
-    
+
     # Terraform variables
     variables?: {str: str}
     variableFiles?: [TerraformVarFile]
     environmentVariables?: [TerraformEnvVar]
-    
+
     # CLI arguments
     initArgs?: [str] = []
     planArgs?: [str] = []
     applyArgs?: [str] = []
     destroyArgs?: [str] = []
-    
+
     # Provider configuration
     providerConfigRef?: str = "default"
-    
+
     # Connection secrets
     connectionSecret?: TerraformConnectionSecret
-    
+
     # Management policies
     managementPolicies?: [str] = ["*"]
     deletionPolicy?: "Delete" | "Orphan" = "Delete"
-    
+
     # Advanced options
     enableTerraformCLILogging?: bool = False
 
@@ -77,14 +77,14 @@ schema TerraformConnectionSecret:
 generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Workspace] {
     """
     Generate a Crossplane Terraform Workspace resource from simplified configuration.
-    
+
     Args:
         config: TerraformWorkspace configuration
-        
+
     Returns:
         List containing the generated Workspace resource
     """
-    
+
     # Build metadata
     metadata = {
         name = config.name
@@ -92,7 +92,7 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
         labels = config.labels or {}
         annotations = config.annotations or {}
     }
-    
+
     # Build environment variables
     envVars = []
     if config.environmentVariables:
@@ -102,7 +102,7 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
                 value = env.value
                 configMapKeyRef = {
                     name = env.configMapRef.name
-                    namespace = env.configMapRef.namespace  
+                    namespace = env.configMapRef.namespace
                     key = env.configMapRef.key
                 } if env.configMapRef else Undefined
                 secretKeyRef = {
@@ -112,7 +112,7 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
                 } if env.secretRef else Undefined
             } for env in config.environmentVariables
         ]
-    
+
     # Build variable files
     varFiles = []
     if config.variableFiles:
@@ -132,7 +132,7 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
                 } if varFile.secretRef else Undefined
             } for varFile in config.variableFiles
         ]
-    
+
     # Build variables
     vars = []
     if config.variables:
@@ -142,7 +142,7 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
                 value = v
             } for k, v in config.variables
         ]
-    
+
     # Create the Workspace resource
     [
         workspace.Workspace {
@@ -178,23 +178,23 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
 
 # Utility functions for common Terraform workspace patterns
 
-# Simple Git-based Terraform workspace  
+# Simple Git-based Terraform workspace
 gitTerraformWorkspace = lambda name: str, gitUrl: str, path: str, variables: {str: str} -> [workspace.Workspace] {
     """
     Create a simple Terraform workspace from a Git repository.
-    
+
     Args:
         name: Workspace name
         gitUrl: Git repository URL
         path: Path within repository (use "" for root)
         variables: Terraform variables
-        
+
     Returns:
         List containing the generated Workspace resource
     """
-    
+
     module = gitUrl + ("/" + path if path else "")
-    
+
     generateTerraformWorkspace(TerraformWorkspace {
         name = name
         source = "Remote"
@@ -207,17 +207,17 @@ gitTerraformWorkspace = lambda name: str, gitUrl: str, path: str, variables: {st
 inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, variables: {str: str} -> [workspace.Workspace] {
     """
     Create a Terraform workspace with inline Terraform code.
-    
+
     Args:
         name: Workspace name
         terraformCode: Inline Terraform code
         format: Code format (HCL or JSON)
         variables: Terraform variables
-        
+
     Returns:
         List containing the generated Workspace resource
     """
-    
+
     generateTerraformWorkspace(TerraformWorkspace {
         name = name
         source = "Inline"
@@ -231,18 +231,18 @@ inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, va
 secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secretNamespace: str, variables: {str: str} -> [workspace.Workspace] {
     """
     Create a Terraform workspace with connection secrets for outputs.
-    
+
     Args:
-        name: Workspace name  
+        name: Workspace name
         gitUrl: Git repository URL
         secretName: Name for connection secret
         secretNamespace: Namespace for connection secret
         variables: Terraform variables
-        
+
     Returns:
         List containing the generated Workspace resource
     """
-    
+
     generateTerraformWorkspace(TerraformWorkspace {
         name = name
         source = "Remote"

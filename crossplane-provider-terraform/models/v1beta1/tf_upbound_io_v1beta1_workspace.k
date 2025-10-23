@@ -453,5 +453,3 @@ schema TfUpboundIoV1beta1WorkspaceStatusConditionsItems0:
     status: str
 
     $type: str
-
-

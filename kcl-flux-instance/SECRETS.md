@@ -119,8 +119,8 @@ stringData:
 2. **Use secure secret management**
    ```bash
    # Better: Use environment variables
-   export GIT_PASSWORD="ghp_..."
-   export SOPS_AGE_KEY="AGE-SECRET-KEY-1..."
+   export GIT_PASSWORD="ghp_..." # pragma: allowlist secret
+   export SOPS_AGE_KEY="AGE-SECRET-KEY-1..." # pragma: allowlist secret
 
    kcl run oci://ghcr.io/stuttgart-things/kcl-flux-instance --tag 0.2.0 \
      -D gitUrl=https://github.com/my-org/my-repo.git \

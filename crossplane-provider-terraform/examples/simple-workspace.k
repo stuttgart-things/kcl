@@ -42,15 +42,15 @@ advanced_workspace = terraform.generateTerraformWorkspace(terraform.TerraformWor
     annotations = {
         "description": "Advanced Terraform workspace with full configuration"
     }
-    
+
     source = "Remote"
     module = "https://github.com/stuttgart-things/terraform-modules.git//kubernetes/namespace"
-    
+
     variables = {
         "namespace_name": "my-app"
         "labels": "{\"environment\":\"production\",\"team\":\"platform\"}"
     }
-    
+
     environmentVariables = [
         terraform.TerraformEnvVar {
             name = "TF_VAR_cluster_endpoint"
@@ -61,7 +61,7 @@ advanced_workspace = terraform.generateTerraformWorkspace(terraform.TerraformWor
             }
         }
     ]
-    
+
     variableFiles = [
         terraform.TerraformVarFile {
             source = "ConfigMapKey"
@@ -73,18 +73,18 @@ advanced_workspace = terraform.generateTerraformWorkspace(terraform.TerraformWor
             }
         }
     ]
-    
+
     initArgs = ["-upgrade"]
     planArgs = ["-detailed-exitcode"]
     applyArgs = ["-auto-approve"]
-    
+
     providerConfigRef = "terraform-provider-config"
-    
+
     connectionSecret = terraform.TerraformConnectionSecret {
         name = "terraform-outputs"
         namespace = "terraform-system"
     }
-    
+
     managementPolicies = ["Create", "Update", "Delete"]
     deletionPolicy = "Delete"
     enableTerraformCLILogging = True

@@ -15,7 +15,7 @@ This file tracks the Custom Resource Definitions (CRDs) used in this module and 
 ### CRD Details
 - **API Group**: helm.toolkit.fluxcd.io
 - **Kinds**: HelmRelease
-- **API Versions**: 
+- **API Versions**:
   - v2 (primary, 1504 lines)
   - v2beta2 (compatibility, 1510 lines)
 

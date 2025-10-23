@@ -278,7 +278,7 @@ tokenReaders = [
                     name = auth.name
                     namespace = auth.namespace
                     fieldPath = "data.token"
-                    toConnectionSecretKey = "token"
+                    toConnectionSecretKey = "token" # pragma: allowlist secret
                 }
             ]
             writeConnectionSecretToRef = {
