@@ -803,3 +803,55 @@ echo "- Import Date: $(date)" >> crd-sources.md
 - Documentation MUST include both simple and advanced examples
 
 ````
+
+---
+
+## Use Dagger KCL Module for CRD to KCL Schema Conversion
+
+**Date:** 2025-10-23
+**Status:** Accepted
+
+**Context:**
+Converting Kubernetes Custom Resource Definitions (CRDs) to KCL schemas is a critical task when building KCL modules for Crossplane providers, Flux resources, or any Kubernetes operator. Manual conversion using `kcl import` requires downloading files, managing dependencies, and ensuring consistent tooling versions across development environments.
+
+**Decision:**
+Use the `stuttgart-things/dagger` KCL module for automated CRD-to-KCL schema conversion instead of manual local conversion.
+
+**Dagger Module Usage:**
+```bash
+# Convert CRD from web source (recommended)
+dagger call -m github.com/stuttgart-things/dagger/kcl@latest convert-crd \
+  --crd-source "https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/main/config/data/flux/v2.7.2/kustomize-controller.yaml" \
+  --progress plain \
+  export --path=./generated-models
+
+# Convert local CRD file
+dagger call -m github.com/stuttgart-things/dagger/kcl@latest convert-crd \
+  --crd-file ./my-crd.yaml \
+  --progress plain \
+  export --path=./generated-models
+```
+
+**Generated Structure:**
+```
+generated-models/
+├── kcl.mod                          # Module definition  
+├── k8s/apimachinery/pkg/apis/meta/v1/  # K8s core types
+├── v1/                              # API version v1 schemas
+│   └── <group>_v1_<resource>.k
+└── v1beta1/                         # API version v1beta1 schemas
+    └── <group>_v1beta1_<resource>.k
+```
+
+**Benefits:**
+- **Reproducibility**: Consistent conversion results across all environments
+- **No Local Dependencies**: No need to install/manage KCL CLI locally
+- **Remote Sources**: Direct conversion from URLs without manual downloads
+- **CI/CD Ready**: Easy integration in pipelines
+- **Containerized**: Isolated environment prevents conflicts
+
+**Enforcement:**
+- All new KCL modules with CRD dependencies MUST use Dagger module
+- Document CRD source URLs in module README
+- Track CRD versions in `crd-sources.md` file
+- Re-run conversion when upstream CRDs are updated

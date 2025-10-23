@@ -13,33 +13,97 @@
 - [ ] Verify `kcl.mod` dependencies section is correctly configured
 - [ ] Add other module-specific dependencies: `kcl mod add <package>` (as needed)
 
-### CRD to KCL Schema Conversion
-- [ ] **Identify target CRDs**: Determine which Crossplane provider CRDs to convert
-  - [ ] Find CRD YAML files in upstream repositories (e.g., GitHub releases)
+### CRD to KCL Schema Conversion (Using Dagger Module)
+
+#### Using Dagger KCL Module for Automated Conversion
+**Recommended approach** - Use the stuttgart-things/dagger KCL module for automated, reproducible CRD conversion:
+
+- [ ] **Identify target CRDs**: Determine which Crossplane provider or Kubernetes CRDs to convert
+  - [ ] Find CRD YAML files in upstream repositories (e.g., GitHub releases, operator repos)
   - [ ] Identify specific CRD versions and API groups needed
-- [ ] **Download CRD definitions**:
+  - [ ] Note the CRD URL for automated conversion
+
+- [ ] **Convert CRD using Dagger module** (recommended):
 ```bash
-# Example: Download Terraform Provider Workspace CRD
-wget -O tf_workspaces.yaml https://raw.githubusercontent.com/crossplane-contrib/provider-terraform/main/package/crds/tf.upbound.io_workspaces.yaml
+# Convert CRD from web source (no local download needed)
+dagger call -m github.com/stuttgart-things/dagger/kcl@latest convert-crd \
+  --crd-source "https://raw.githubusercontent.com/controlplaneio-fluxcd/flux-operator/main/config/data/flux/v2.7.2/kustomize-controller.yaml" \
+  --progress plain \
+  export --path=./models
+
+# Alternative: Convert local CRD file
+dagger call -m github.com/stuttgart-things/dagger/kcl@latest convert-crd \
+  --crd-file ./my-crd.yaml \
+  --progress plain \
+  export --path=./models
 ```
-- [ ] **Convert CRDs to KCL schemas**:
-```bash
-# Import CRD and generate KCL models
-kcl import -m crd <crd-file>.yaml
-```
+
 - [ ] **Verify generated models**:
-  - [ ] Check `models/v1beta1/` directory for generated schemas
+  - [ ] Check `models/` directory structure:
+    ```
+    models/
+    ├── kcl.mod                 # Generated module definition
+    ├── k8s/                    # Kubernetes core types
+    │   └── apimachinery/pkg/apis/meta/v1/
+    ├── v1/                     # API version v1 schemas
+    │   └── <resource>_v1_<name>.k
+    └── v1beta1/               # API version v1beta1 schemas (if present)
+        └── <resource>_v1beta1_<name>.k
+    ```
   - [ ] Verify schema structure matches expected CRD specification
   - [ ] Ensure all required/optional fields are correctly typed
+  - [ ] Check that imports reference correct Kubernetes types
+
+- [ ] **Integrate generated models into module**:
+```bash
+# Move generated models into your module directory
+mv models/* <module-name>/
+cd <module-name>
+
+# Update kcl.mod if needed (merge dependencies)
+# The generated kcl.mod provides the base package structure
+```
+
 - [ ] **Validate schema generation**:
 ```bash
 # Test schema compilation
-kcl run models/v1beta1/<resource-schema>.k
+cd <module-name>
+kcl run v1/<resource-schema>.k
+
+# Verify types resolve correctly
+kcl doc v1/<resource-schema>.k
 ```
-- [ ] **Create wrapper schemas** (optional):
+
+- [ ] **Create wrapper schemas** (recommended for complex CRDs):
   - [ ] Simplify complex CRD schemas for easier usage
   - [ ] Add helper functions for common configuration patterns
   - [ ] Provide default values and validation logic
+  - [ ] Create examples demonstrating both direct CRD usage and wrapper functions
+
+#### Manual Conversion (Alternative)
+For cases where Dagger module is not available:
+
+- [ ] **Download CRD definitions**:
+```bash
+# Example: Download CRD manually
+wget -O my-crd.yaml https://raw.githubusercontent.com/example/operator/main/config/crds/example.yaml
+```
+
+- [ ] **Convert using local kcl import**:
+```bash
+# Import CRD and generate KCL models
+kcl import -m crd my-crd.yaml
+
+# Output will be in models/ directory
+```
+
+#### Benefits of Dagger Module Approach
+- ✅ **Reproducible**: Same conversion results across environments
+- ✅ **Automated**: No manual downloads or cleanup needed
+- ✅ **Containerized**: Consistent KCL version and tooling
+- ✅ **Remote sources**: Direct conversion from URLs
+- ✅ **Clean output**: Properly structured with kcl.mod
+- ✅ **CI/CD friendly**: Easy integration in pipelines
 
 ### Write KCL Code
 - [ ] Create main composition file: `main.k`
