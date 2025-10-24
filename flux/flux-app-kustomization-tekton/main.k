@@ -1,5 +1,3 @@
-
-
 import flux_helmrelease.v2.helm_toolkit_fluxcd_io_v2_helm_release as helm
 
 schema TektonConfig:

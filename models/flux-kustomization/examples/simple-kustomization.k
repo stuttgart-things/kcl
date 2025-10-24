@@ -1,97 +1,259 @@
+
+import flux_kustomization as flux
+
 """
-Simple Flux Kustomization Example
-
-This example demonstrates creating a basic Flux Kustomization
-using the simplified helper functions.
+Example usage of Flux Kustomization resources in KCL
 """
 
-import ..main as flux
+import flux_kustomization.v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
 
-# Example 1: Simple GitRepository-based Kustomization
-simpleApp = flux.gitKustomization(
-    "my-application",
-    "my-git-repo",
-    "./deploy/production"
-)
-
-# Example 2: Full configuration with all options
-advancedApp = flux.generateKustomization(flux.SimpleKustomization {
-    name = "advanced-app"
-    namespace = "flux-system"
-    path = "./apps/staging"
-    sourceRef = flux.SourceRef {
-        kind = "GitRepository"
-        name = "platform-repo"
+# Basic Kustomization example
+basic_kustomization = flux.Kustomization {
+    metadata = {
+        name = "my-app"
         namespace = "flux-system"
     }
-    interval = "10m"
-    prune = True
-    targetNamespace = "staging"
-    wait = True
-    timeout = "10m"
-    force = False
-    dependsOn = [
-        flux.DependencyRef {
-            name = "infrastructure"
+    spec = {
+        interval = "5m"
+        prune = True
+        sourceRef = {
+            kind = "GitRepository"
+            name = "my-repo"
         }
-    ]
-    healthChecks = [
-        flux.HealthCheck {
-            apiVersion = "apps/v1"
-            kind = "Deployment"
-            namespace = "staging"
+        path = "./manifests"
+    }
+}
+
+# Advanced Kustomization with health checks and post-build substitutions
+advanced_kustomization = flux.Kustomization {
+    metadata = {
+        name = "infrastructure"
+        namespace = "flux-system"
+        labels = {
+            environment = "production"
         }
-    ]
-    postBuild = flux.PostBuild {
-        substitute = {
-            ENVIRONMENT = "staging"
-            REGION = "eu-west-1"
+    }
+    spec = {
+        interval = "10m"
+        retryInterval = "2m"
+        timeout = "5m"
+        prune = True
+        wait = True
+        force = False
+
+        sourceRef = {
+            kind = "GitRepository"
+            name = "infrastructure-repo"
+            namespace = "flux-system"
         }
-        substituteFrom = [
-            flux.SubstituteReference {
-                kind = "ConfigMap"
-                name = "cluster-config"
+
+        path = "./clusters/production"
+        targetNamespace = "default"
+
+        # Add common labels and annotations to all resources
+        commonMetadata = {
+            labels = {
+                "app.kubernetes.io/managed-by" = "flux"
+                "environment" = "production"
+            }
+            annotations = {
+                "owner" = "platform-team"
+            }
+        }
+
+        # Dependencies on other Kustomizations
+        dependsOn = [
+            {
+                name = "cert-manager"
+                namespace = "flux-system"
+            }
+            {
+                name = "ingress-nginx"
+            }
+        ]
+
+        # Health checks for specific resources
+        healthChecks = [
+            {
+                kind = "Deployment"
+                name = "my-app"
+                namespace = "default"
+                apiVersion = "apps/v1"
+            }
+            {
+                kind = "Service"
+                name = "my-service"
+            }
+        ]
+
+        # Variable substitution
+        postBuild = {
+            substitute = {
+                CLUSTER_NAME = "prod-cluster"
+                DOMAIN = "example.com"
+                REPLICAS = "3"
+            }
+            substituteFrom = [
+                {
+                    kind = "ConfigMap"
+                    name = "cluster-vars"
+                }
+                {
+                    kind = "Secret"
+                    name = "cluster-secrets"
+                    optional = True
+                }
+            ]
+        }
+
+        # Patches for specific resources
+        patches = [
+            {
+                patch = """
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: my-app
+                spec:
+                  replicas: 3
+                """
+                target = {
+                    kind = "Deployment"
+                    name = "my-app"
+                    labelSelector = "app=my-app"
+                }
+            }
+        ]
+
+        # Image overrides
+        images = [
+            {
+                name = "nginx"
+                newName = "my-registry.io/nginx"
+                newTag = "1.21.0"
+            }
+            {
+                name = "redis"
+                newName = "my-registry.io/redis"
+                digest = "sha256:abc123..."
             }
         ]
     }
-    labels = {
-        "app.kubernetes.io/managed-by" = "flux"
-        "environment" = "staging"
-    }
-    annotations = {
-        "description" = "Staging environment application"
-    }
-})
+}
 
-# Example 3: OCI Repository-based Kustomization
-ociApp = flux.ociKustomization(
-    "oci-application",
-    "my-oci-repo",
-    "./manifests"
-)
-
-# Example 4: Multi-environment with dependencies
-infrastructure = flux.gitKustomization(
-    "infrastructure",
-    "platform-repo",
-    "./infrastructure"
-)
-
-applications = flux.generateKustomization(flux.SimpleKustomization {
-    name = "applications"
-    sourceRef = flux.SourceRef {
-        kind = "GitRepository"
-        name = "platform-repo"
+# Kustomization with SOPS decryption
+encrypted_kustomization = flux.Kustomization {
+    metadata = {
+        name = "secrets"
+        namespace = "flux-system"
     }
-    path = "./applications"
-    dependsOn = [
-        flux.DependencyRef {
-            name = "infrastructure"
+    spec = {
+        interval = "5m"
+        prune = True
+
+        sourceRef = {
+            kind = "GitRepository"
+            name = "secrets-repo"
         }
-    ]
-    prune = True
-    wait = True
-})
 
-# Export all examples
-items = simpleApp + advancedApp + ociApp + infrastructure + applications
+        path = "./secrets"
+
+        # Enable SOPS decryption
+        decryption = {
+            provider = "sops"
+            secretRef = {
+                name = "sops-gpg"
+            }
+        }
+    }
+}
+
+# Kustomization for multi-cluster deployment
+remote_cluster_kustomization = flux.Kustomization {
+    metadata = {
+        name = "remote-app"
+        namespace = "flux-system"
+    }
+    spec = {
+        interval = "10m"
+        prune = True
+
+        sourceRef = {
+            kind = "GitRepository"
+            name = "app-repo"
+        }
+
+        # Deploy to remote cluster
+        kubeConfig = {
+            secretRef = {
+                name = "remote-cluster-kubeconfig"
+                key = "value"
+            }
+        }
+
+        serviceAccountName = "flux-reconciler"
+    }
+}
+
+# Kustomization with name prefix/suffix
+namespaced_kustomization = flux.Kustomization {
+    metadata = {
+        name = "staging-app"
+        namespace = "flux-system"
+    }
+    spec = {
+        interval = "5m"
+        prune = True
+
+        sourceRef = {
+            kind = "GitRepository"
+            name = "app-repo"
+        }
+
+        path = "./app"
+        targetNamespace = "staging"
+
+        # Add prefix/suffix to resource names
+        namePrefix = "staging-"
+        nameSuffix = "-v2"
+    }
+}
+
+# Kustomization with custom health check expressions (CEL)
+cel_health_kustomization = flux.Kustomization {
+    metadata = {
+        name = "custom-health"
+        namespace = "flux-system"
+    }
+    spec = {
+        interval = "5m"
+        prune = True
+        wait = True
+
+        sourceRef = {
+            kind = "GitRepository"
+            name = "app-repo"
+        }
+
+        # Custom health checks using CEL expressions
+        healthCheckExprs = [
+            {
+                apiVersion = "v1"
+                kind = "MyCustomResource"
+                current = "object.status.phase == 'Ready'"
+                failed = "object.status.phase == 'Failed'"
+                inProgress = "object.status.phase == 'Progressing'"
+            }
+        ]
+    }
+}
+
+# Export all kustomizations as a list
+kustomizations = [
+    basic_kustomization,
+    advanced_kustomization,
+    encrypted_kustomization,
+    remote_cluster_kustomization,
+    namespaced_kustomization,
+    cel_health_kustomization,
+]
