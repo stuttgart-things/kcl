@@ -212,17 +212,21 @@ generateKustomization = lambda config: SimpleKustomization -> [flux.Kustomizatio
                     }
                     for hc in config.healthChecks
                 ] if config.healthChecks else []
+                # Emit postBuild and merge defaults per-key so YAML can override.
                 postBuild = {
-                    substitute = config.postBuild.substitute or {}
+                    substitute = {
+                        "TEKTON_NAMESPACE" = config.postBuild?.substitute?.TEKTON_NAMESPACE or "tekton-pipelines"
+                        "TEKTON_VERSION" = config.postBuild?.substitute?.TEKTON_VERSION or "0.76.1"
+                    }
                     substituteFrom = [
                         {
                             kind = ref.kind
                             name = ref.name
                             optional = ref.optional if ref.optional != None else False
                         }
-                        for ref in config.postBuild.substituteFrom
-                    ] if config.postBuild.substituteFrom else []
-                } if config.postBuild else {}
+                        for ref in (config.postBuild?.substituteFrom or [])
+                    ]
+                }
                 force = config.force if config.force != None else False
                 wait = config.wait if config.wait != None else False
                 timeout = config.timeout or "5m"
@@ -301,7 +305,7 @@ ociKustomization = lambda name: str, ociRepoName: str, path: str = "./" -> [flux
 
 # --- Crossplane XR Helper ---
 
-generateCrossplaneKustomization = lambda -> [flux.Kustomization] {
+generateCrossplaneKustomization = lambda -> any {
     """
     Generate Kustomization from Crossplane XR spec using standard variable pattern.
 
@@ -366,6 +370,7 @@ generateCrossplaneKustomization = lambda -> [flux.Kustomization] {
     # Construct a plain mapping to avoid deeper validation that may error on missing
     # internal fields when running from different working directories. This mapping
     # mirrors the Kustomization CRD structure and is safe to emit directly.
+    # Emit postBuild substitutions with per-key fallback so spec values override defaults
     {
         apiVersion = "kustomize.toolkit.fluxcd.io/v1"
         kind = "Kustomization"
@@ -392,6 +397,13 @@ generateCrossplaneKustomization = lambda -> [flux.Kustomization] {
             targetNamespace = targetNamespace
             force = force
             suspend = suspend
+            postBuild = {
+                substitute = {
+                    "TEKTON_NAMESPACE" = spec?.postBuild?.substitute?.TEKTON_NAMESPACE or "tekton-pipelines"
+                    "TEKTON_VERSION" = spec?.postBuild?.substitute?.TEKTON_VERSION or "0.76.1"
+                }
+                substituteFrom = spec?.postBuild?.substituteFrom or []
+            }
         }
     }
 }
