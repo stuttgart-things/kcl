@@ -6,6 +6,7 @@
 kcl --quiet main.k \
 -D enable_tekton=true \
 -D enable_crossplane=true \
+-D crossplane_namespace='"1.23"' \
 --format yaml | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //'
 ```
 
