@@ -1,5 +1,5 @@
 [package]
-name = "sthings-flux-kustomizations"
+name = "flux-app-kustomizations"
 edition = "v0.11.2"
 version = "0.0.1"
 

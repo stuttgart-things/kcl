@@ -19,6 +19,28 @@ tasks:
         else
           echo "Skipping provider addition."
         fi
+            yq -i '.modules += ["$MODULE_NAME"]' kcl.mod
+
+  create-object-module-from-crd:
+    desc: Convert CRDs to KCL
+    vars:
+      EXPORT_ROOT: ./models
+    cmds:
+      - |
+        CRD_SOURCE=$(gum input --placeholder "Enter CRD source URL" \
+        --prompt "CRD Source: ")
+        MODULE_NAME=$(gum input --placeholder "Enter module name" \
+        --prompt "Module Name: ")
+
+        # Run dagger command with the provided CRD source
+
+        dagger call -m github.com/stuttgart-things/dagger/kcl@v0.36.0 convert-crd \
+          --crd-source "$CRD_SOURCE" \
+          --progress plain \
+          export --path={{ .EXPORT_ROOT }}/${MODULE_NAME}
+
+        # Add module name to kcl.mod using yq
+        yq -i '.name += ["'"${MODULE_NAME}"'"]' {{ .EXPORT_ROOT }}/${MODULE_NAME}/kcl.mod
 
   do:
     desc: Select a task to run
