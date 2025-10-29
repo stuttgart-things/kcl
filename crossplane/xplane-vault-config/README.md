@@ -131,6 +131,7 @@ kcl run main.k -D params='{
   "oxr": {
     "spec": {
       "name": "eso-only",
+      "clusterName": "in-cluster",
       "csiEnabled": false,
       "vsoEnabled": false,
       "esoEnabled": true
