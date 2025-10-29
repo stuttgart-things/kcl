@@ -17,7 +17,8 @@ KCL module for deploying Vault-related Helm releases using Crossplane Helm Provi
 
 ## Deployed Components
 
-### 1. Secrets Store CSI Driver
+<details><summary>Secrets Store CSI Driver</summary>
+
 **Purpose:** Enables Kubernetes secrets to be mounted as volumes from external secret stores like Vault.
 
 - **Chart:** `secrets-store-csi-driver` v1.5.4 (configurable)
@@ -25,7 +26,10 @@ KCL module for deploying Vault-related Helm releases using Crossplane Helm Provi
 - **Default Namespace:** `secrets-store-csi`
 - **Features:** Secret rotation, Linux support
 
-### 2. Vault Secrets Operator (VSO)
+</details>
+
+<details><summary>Vault Secrets Operator (VSO)</summary>
+
 **Purpose:** Manages Vault secrets and authentication for Kubernetes workloads.
 
 - **Chart:** `vault-secrets-operator` v1.0.1 (configurable)
@@ -33,7 +37,10 @@ KCL module for deploying Vault-related Helm releases using Crossplane Helm Provi
 - **Default Namespace:** `vault-secrets-operator`
 - **Features:** Direct encrypted cache, default Vault connection
 
-### 3. External Secrets Operator (ESO)
+</details>
+
+<details><summary>External Secrets Operator (ESO)</summary>
+
 **Purpose:** Manages secrets from external systems like Vault, AWS Secrets Manager, etc.
 
 - **Chart:** `external-secrets` v0.20.3 (configurable)
@@ -41,20 +48,33 @@ KCL module for deploying Vault-related Helm releases using Crossplane Helm Provi
 - **Default Namespace:** `external-secrets`
 - **Features:** CRD installation, service monitoring, multi-provider support## Usage
 
-### Basic Usage with Defaults
+</details>
+
+<details><summary>Render with Defaults + Set target cluster/provider</summary>
 
 ```bash
-kcl run main.k -D params='{}'
+kcl run --quiet main.k -D params='{"oxr": {"spec": {"clusterName": "vlcuster-k3s-tink1"}}}' --format yaml
 ```
 
-### Basic Usage with Defaults + Apply to cluster
+</details>
+
+<details><summary>Render with Conditions + Apply to cluster</summary>
 
 ```bash
-kcl run --quiet main.k -D params='{"oxr": {"spec": {"clusterName": "vlcuster-k3s-tink1"}}}' --format yaml \
-  | yq eval -P '.items[]' - \
-  | awk 'BEGIN{doc""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}' \
-  | kubectl apply -f -
+kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "name": "eso-only",
+      "clusterName": "in-cluster",
+      "csiEnabled": false,
+      "vsoEnabled": false,
+      "esoEnabled": true
+    }
+  }
+}' --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}' | kubectl apply -f -
 ```
+
+</details>
 
 ### Basic Usage with Two Auth Configurations + Apply to cluster
 
@@ -65,21 +85,23 @@ kcl run --quiet main.k -D params='{"oxr": {"spec": {"clusterName": "vlcuster-k3s
   | kubectl apply -f -
 ```
 
-### Production Configuration
+### Basic Usage with Two Auth Configurations + Apply to cluster
 
 ```bash
 kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "name": "vault-prod-config",
-      "namespaceCsi": "secrets-store-csi",
-      "namespaceVso": "vault-secrets-operator",
-      "clusterName": "prod-cluster",
-      "csiEnabled": true,
-      "vsoEnabled": true
+      "name": "eso-only",
+      "clusterName": "in-cluster",
+      "csiEnabled": false,
+      "vsoEnabled": false,
+      "esoEnabled": true
     }
   }
-}'
+}' --format yaml \
+| yq eval -P '.items[]' - \
+| awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}' \
+| kubectl apply -f -
 ```
 
 ### Custom Chart Versions
