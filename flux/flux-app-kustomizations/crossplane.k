@@ -4,6 +4,7 @@ Usage: kcl run base.k crossplane.k
 """
 import base
 import flux_kustomization.v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
+import "../../models/flux-source/v1/source_toolkit_fluxcd_io_v1_o_c_i_repository.k"
 
 # Crossplane Configuration
 crossplane_namespace: str = option("crossplane_namespace") or "crossplane-system"
@@ -22,7 +23,7 @@ kubernetes = [flux.Kustomization {
     spec.retryInterval = base.default_retry_interval
     spec.timeout = base.default_timeout
     spec.sourceRef = {
-        kind = "GitRepository"
+        kind = base.source_repo_kind
         name = base.source_repo_name
     }
     spec.path = crossplane_path
@@ -37,3 +38,16 @@ kubernetes = [flux.Kustomization {
         CROSSPLANE_TERRAFORM_PROVIDER_IMAGE = crossplane_terraform_provider_image
     }
 }]
+oci_repository: OCIRepository = {
+    metadata: {
+        name: "my-app"
+        namespace: "flux-system"
+    }
+    spec: {
+        interval: "5m"
+        url: "oci://ghcr.io/your-org/your-repo"
+        ref: {
+            tag: "1.0.0"
+        }
+    }
+}

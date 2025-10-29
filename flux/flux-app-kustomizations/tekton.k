@@ -18,7 +18,7 @@ kubernetes = [flux.Kustomization {
     spec.retryInterval = base.default_retry_interval
     spec.timeout = base.default_timeout
     spec.sourceRef = {
-        kind = "GitRepository"
+        kind = base.source_repo_kind
         name = base.source_repo_name
     }
     spec.path = tekton_path

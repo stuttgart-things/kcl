@@ -1,4 +1,4 @@
-# flux-kustomization
+# FLUX-APP-KUSTOMIZATIONS
 
 ## RENDER
 
