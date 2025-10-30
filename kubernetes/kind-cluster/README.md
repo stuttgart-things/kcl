@@ -89,7 +89,7 @@ kcl run main.k
 kcl run main.k examples/dev-cluster.k
 
 # Customize with CLI options
-kcl run main.k -D nodeImage="kindest/node:v1.35.0" -D apiServerPort=6443
+kcl run main.k -D portRangeStart=32100 -D portRangeCount=2  -D clusterName=gitea -D apiServerAddress=$(hostname -f) -D 'registryMirrors=["https://docker.harbor.idp.kubermatic.sva.dev"]'
 
 # Combine example + overrides
 kcl run main.k examples/dev-cluster.k -D clusterName="my-cluster"
