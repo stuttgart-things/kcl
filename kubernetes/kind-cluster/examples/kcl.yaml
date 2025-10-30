@@ -1,0 +1,15 @@
+# Example KCL settings file
+# This demonstrates how to pass complex data structures like port mappings
+#
+# Usage:
+#   kcl run main.k -Y kcl.yaml
+
+kcl_options:
+  extraPortMappings:
+    - containerPort: 6443
+      hostPort: 6443
+      protocol: "TCP"
+    - containerPort: 80
+      hostPort: 8080
+    - containerPort: 443
+      hostPort: 8443
