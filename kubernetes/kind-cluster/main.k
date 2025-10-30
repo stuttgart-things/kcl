@@ -24,8 +24,12 @@ _clusterName = option("clusterName") or "platform-cluster"
 _containerMountPath = option("containerMountPath") or "/data"
 
 # Container registry mirror configuration
-_registryMirror1 = option("registryMirror1") or "https://docker.harbor.idp.kubermatic.sva.dev"
-_registryMirror2 = option("registryMirror2") or "https://registry-1.docker.io"
+_registryMirrors = option("registryMirrors") if option("registryMirrors") != None else [
+    "https://registry-1.docker.io"
+]
+
+# Build the registry mirror endpoint string
+_mirrorEndpoints = ", ".join(['"{}"'.format(m) for m in _registryMirrors]) if _registryMirrors else ""
 
 _cluster = schema.Cluster {
     name = _clusterName
@@ -56,8 +60,8 @@ _cluster = schema.Cluster {
     ]
     containerdConfigPatches = [
         """[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-  endpoint = ["${_registryMirror1}", "${_registryMirror2}"]"""
-    ]
+  endpoint = [${_mirrorEndpoints}]"""
+    ] if _registryMirrors else []
 }
 
 # Output cluster fields at root level

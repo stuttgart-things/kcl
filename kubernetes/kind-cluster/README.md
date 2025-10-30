@@ -25,7 +25,7 @@ Variables are defined with underscore prefix (private) to prevent them from appe
 | Custom port list | `-D 'extraPortMappings=[{...}]'` or use file |
 | Change cluster name | `-D clusterName="my-cluster"` |
 | Different mount path | `-D mountBasePath="/data"` |
-| Custom registry mirror | `-D registryMirror1="https://my-registry.com"` |
+| Custom registry mirrors | `-D 'registryMirrors=["https://my-registry.com"]'` |
 | Enable kube-proxy | `-D kubeProxyMode="iptables"` |
 | Use preset config | `kcl run main.k examples/dev-cluster.k` |
 
@@ -75,8 +75,7 @@ Variables are defined with underscore prefix (private) to prevent them from appe
 
 | Option Name | Default | Description |
 |----------|---------|-------------|
-| `registryMirror1` | `"https://docker.harbor.idp.kubermatic.sva.dev"` | Primary registry mirror endpoint |
-| `registryMirror2` | `"https://registry-1.docker.io"` | Secondary registry mirror endpoint (fallback) |
+| `registryMirrors` | `["https://docker.harbor.idp.kubermatic.sva.dev", "https://registry-1.docker.io"]` | List of registry mirror endpoints (can contain 0, 1, 2, or more mirrors) |
 
 ## Usage Examples
 
@@ -144,14 +143,17 @@ kcl run main.k -D containerMountPath="/var/data"
 ### Custom Registry Mirrors
 
 ```bash
-# Change primary registry mirror
-kcl run main.k -D registryMirror1="https://my-registry.example.com"
+# Use a single custom registry mirror
+kcl run main.k -D 'registryMirrors=["https://my-registry.example.com"]'
 
-# Change both mirrors
-kcl run main.k -D registryMirror1="https://mirror1.example.com" -D registryMirror2="https://mirror2.example.com"
+# Use multiple registry mirrors (with fallbacks)
+kcl run main.k -D 'registryMirrors=["https://mirror1.example.com", "https://mirror2.example.com", "https://mirror3.example.com"]'
 
-# Use only Docker Hub (no custom mirror)
-kcl run main.k -D registryMirror1="https://registry-1.docker.io" -D registryMirror2="https://registry-1.docker.io"
+# Use only Docker Hub (direct, no mirrors)
+kcl run main.k -D 'registryMirrors=["https://registry-1.docker.io"]'
+
+# Disable registry mirrors completely
+kcl run main.k -D 'registryMirrors=[]'
 ```
 
 ### Custom Networking
@@ -188,9 +190,11 @@ kcl run main.k \
   -D portRangeCount=2 \
   -D clusterName=gitea \
   -D apiServerAddress=$(hostname -f) \
-  -D registryMirror1=https://docker.harbor.idp.kubermatic.sva.dev \
+  -D 'registryMirrors=["https://docker.harbor.idp.kubermatic.sva.dev"]' \
   -D apiServerPort=${KUBE_API_PORT} > /tmp/cluster.yaml
 ```
+
+**Important:** When passing `registryMirrors` via `-D`, you must use JSON array syntax with square brackets and quotes: `'registryMirrors=["url1", "url2"]'`. Don't pass it as a plain string.
 
 ### Output to File
 
