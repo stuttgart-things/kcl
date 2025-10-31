@@ -2,12 +2,12 @@ import .cilium
 import .cert_manager as cert
 import .defaults as defaults
 
-helmDefaults = defaults.helmDefaults
+helmDefaults = defaults._helmDefaults
 
 # Create a registry of all available apps
 _app_registry = {
-    cilium = cilium.app
-    cert_manager = cert.app
+    cilium = cilium._app
+    cert_manager = cert._app
 }
 
 # Default apps to install

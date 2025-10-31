@@ -8,7 +8,7 @@ _ipRangeStart = option("ciliumIpRangeStart") or "172.18.250.0"
 _ipRangeEnd = option("ciliumIpRangeEnd") or "172.18.250.50"
 _clusterName = option("ciliumClusterName") or "kind"
 
-app = schema.HelmfileEntry {
+_app = schema.HelmfileEntry {
     path = _path
     values = [
         {
