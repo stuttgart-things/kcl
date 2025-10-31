@@ -1,5 +1,5 @@
 """
-Generic schema for helmfile configuration
+Generic and flexible schema for Helmfile configuration
 """
 
 schema HelmDefaults:
@@ -10,10 +10,12 @@ schema HelmDefaults:
     recreatePods?: bool
     force?: bool
 
+
 schema HelmfileEntry:
     """HelmfileEntry represents a single helmfile with its configuration"""
     path: str
-    values?: [any]
+    values?: [{str: any}]  # list of arbitrary key-value maps
+
 
 schema HelmfileConfig:
     """HelmfileConfig is the root configuration for helmfile"""
