@@ -1,6 +1,6 @@
 import .schema
 
-helmDefaults = schema.HelmDefaults {
+_helmDefaults = schema.HelmDefaults {
     verify = False
     wait = True
     timeout = 600
