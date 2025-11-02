@@ -42,4 +42,6 @@ repos:
         language: python
         # for backward compatibility
         files: .*  # all files
-        args: ["--exclude-files", ".dagger/postgresdb/dagger.json"]
+        args: ["--exclude-files", ".dagger/postgresdb/dagger.json",
+                "--exclude-files", "crossplane/xplane-base/README.md"
+        ]
