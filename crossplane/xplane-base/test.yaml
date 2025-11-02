@@ -1,0 +1,17 @@
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: kind-demo
+  namespace: default
+spec:
+  destination:
+    create: true
+    name: kind-demo
+    overwrite: false
+  hmacSecretData: true
+  mount: kubeconfigs          # This is correct
+  path: kv/demo-infra         # Changed: was "kind-demo", should be "kv/demo-infra"
+  refreshAfter: 10s
+  type: kv-v2
+  vaultAuthRef: dev
