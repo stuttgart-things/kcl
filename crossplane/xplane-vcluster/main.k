@@ -1,60 +1,58 @@
-import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
-import crossplane_provider_kubernetes.v1alpha2.kubernetes_crossplane_io_v1alpha2_object as obj
-import crossplane_provider_kubernetes.v1alpha1.kubernetes_crossplane_io_v1alpha1_provider_config as kube_pc
-
 # --- Get XR spec fields ---
-name = option("params")?.oxr?.spec?.name or "test"
-version = option("params")?.oxr?.spec?.version or "0.29.0"
-chartName = option("params")?.oxr?.spec?.chartName or "vcluster"
-repository = option("params")?.oxr?.spec?.repository or "https://charts.loft.sh"
-clusterName = option("params")?.oxr?.spec?.clusterName or "kind"
-targetNamespace = option("params")?.oxr?.spec?.targetNamespace or "vcluster"
+_params = option("params")
+name = _params?.oxr?.spec?.name or "test"
+version = _params?.oxr?.spec?.version or "0.29.0"
+chartName = _params?.oxr?.spec?.chartName or "vcluster"
+repository = _params?.oxr?.spec?.repository or "https://charts.loft.sh"
+clusterName = _params?.oxr?.spec?.clusterName or "kind"
+targetNamespace = _params?.oxr?.spec?.targetNamespace or "vcluster"
 
 # VCluster specific configuration
-storageClass = option("params")?.oxr?.spec?.storageClass or "standard"
-bindAddress = option("params")?.oxr?.spec?.bindAddress or "0.0.0.0"
-proxyPort = option("params")?.oxr?.spec?.proxyPort or 8443
-nodePort = option("params")?.oxr?.spec?.nodePort or 32443
-extraSANs = option("params")?.oxr?.spec?.extraSANs or ["localhost"]
-serverUrl = option("params")?.oxr?.spec?.serverUrl or "https://localhost:32443"
+storageClass = _params?.oxr?.spec?.storageClass or "standard"
+bindAddress = _params?.oxr?.spec?.bindAddress or "0.0.0.0"
+proxyPort = _params?.oxr?.spec?.proxyPort or 8443
+nodePort = _params?.oxr?.spec?.nodePort or 32443
+extraSANs = _params?.oxr?.spec?.extraSANs or ["localhost"]
+serverUrl = _params?.oxr?.spec?.serverUrl or "https://localhost:32443"
 
 # Additional values
-customValues = option("params")?.oxr?.spec?.values or {}
+customValues = _params?.oxr?.spec?.values or {}
 
 # Additional secrets configuration for better Crossplane integration
-additionalSecrets = option("params")?.oxr?.spec?.additionalSecrets or []
+additionalSecrets = _params?.oxr?.spec?.additionalSecrets or []
 
 # Connection secret configuration
-enableConnectionSecret = option("params")?.oxr?.spec?.connectionSecret?.enabled or True
-connectionSecretName = option("params")?.oxr?.spec?.connectionSecret?.name or "{}-connection".format(name)
-connectionSecretNamespace = option("params")?.oxr?.spec?.connectionSecret?.namespace or "crossplane-system"
-vclusterSecretName = option("params")?.oxr?.spec?.connectionSecret?.vclusterSecretName or "vc-{}".format(name)
-vclusterSecretNamespace = option("params")?.oxr?.spec?.connectionSecret?.vclusterSecretNamespace or targetNamespace
+connectionSecretConfig = _params?.oxr?.spec?.connectionSecret or {}
+enableConnectionSecret = True if connectionSecretConfig == {} else (connectionSecretConfig?.enabled or True)
+connectionSecretName = connectionSecretConfig?.name or "{}-connection".format(name)
+connectionSecretNamespace = connectionSecretConfig?.namespace or "crossplane-system"
+vclusterSecretName = connectionSecretConfig?.vclusterSecretName or "vc-{}".format(name)
+vclusterSecretNamespace = connectionSecretConfig?.vclusterSecretNamespace or targetNamespace
 
 # VCluster Helm Release
-release = helm.Release {
+release = {
     apiVersion = "helm.crossplane.io/v1beta1"
     kind = "Release"
     metadata = {
         name = name
         annotations = {
-            "krm.kcl.dev/composition-resource-name": "vcluster-release"
+            "krm.kcl.dev/composition-resource-name" = "vcluster-release"
         }
     }
     spec = {
         deletionPolicy = "Delete"
-        providerConfigRef: {
+        providerConfigRef = {
             name = clusterName
         }
         managementPolicies = ["*"]
-        forProvider: {
-            chart: {
+        forProvider = {
+            chart = {
                 name = chartName
                 repository = repository
                 version = version
             }
             namespace = targetNamespace
-            values: {
+            values = {
                 controlPlane = {
                     statefulSet = {
                         persistence = {
@@ -89,24 +87,24 @@ release = helm.Release {
                         }
                     }
                 }
-                exportKubeConfig = {
+                exportKubeConfig = ({
                     server = serverUrl
                 } | ({
                     additionalSecrets = additionalSecrets
-                } if additionalSecrets else {})
+                } if additionalSecrets else {}))
             } | customValues
         }
     }
 }
 
 # Kubernetes Object to create connection secret from VCluster kubeconfig
-kubeconfig_reader = obj.Object {
+kubeconfig_reader = {
     apiVersion = "kubernetes.crossplane.io/v1alpha2"
     kind = "Object"
     metadata = {
-        name = "vcluster-kubeconfig-reader"
+        name = name
         annotations = {
-            "krm.kcl.dev/composition-resource-name": "vcluster-kube-reader"
+            "krm.kcl.dev/composition-resource-name" = name
         }
     }
     spec = {
@@ -144,20 +142,20 @@ kubeconfig_reader = obj.Object {
             }
         ]
         writeConnectionSecretToRef = {
-            name = connectionSecretName  # This is what gets created
+            name = connectionSecretName
             namespace = connectionSecretNamespace
         }
     }
 } if enableConnectionSecret else {}
 
 # Kubernetes ProviderConfig for VCluster
-vcluster_kube_provider_config = kube_pc.ProviderConfig {
+vcluster_kube_provider_config = {
     apiVersion = "kubernetes.crossplane.io/v1alpha1"
     kind = "ProviderConfig"
     metadata = {
         name = name
         annotations = {
-            "krm.kcl.dev/composition-resource-name": "vcluster-kubernetes-providerconfig"
+            "krm.kcl.dev/composition-resource-name" = "vcluster-kubernetes-providerconfig"
         }
     }
     spec = {
@@ -165,21 +163,21 @@ vcluster_kube_provider_config = kube_pc.ProviderConfig {
             source = "Secret"
             secretRef = {
                 namespace = connectionSecretNamespace
-                name = connectionSecretName  # Fixed: matches the Object's output
+                name = connectionSecretName
                 key = "kubeconfig"
             }
         }
     }
 } if enableConnectionSecret else {}
 
-# Helm ProviderConfig for VCluster (created as raw YAML)
+# Helm ProviderConfig for VCluster
 vcluster_helm_provider_config = {
     apiVersion = "helm.crossplane.io/v1beta1"
     kind = "ProviderConfig"
     metadata = {
         name = "{}-helm".format(name)
         annotations = {
-            "krm.kcl.dev/composition-resource-name": "vcluster-helm-providerconfig"
+            "krm.kcl.dev/composition-resource-name" = "vcluster-helm-providerconfig"
         }
     }
     spec = {

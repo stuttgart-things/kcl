@@ -121,7 +121,7 @@ createSingleVaultAuth = lambda auth: K8sAuth {
     )
 }
 
-# Main function to create multiple Vault Kubernetes authentication backends
+# Main function - now returns a flat list
 vaultK8sAuth = lambda config: VaultConfig {
     [createSingleVaultAuth(auth) for auth in config.k8sAuths]
 }

@@ -41,7 +41,7 @@ cd xplane-vcluster && kcl mod push oci://ghcr.io/stuttgart-things/xplane-vcluste
 kcl run oci://ghcr.io/stuttgart-things/xplane-vcluster -D params='{
   "oxr": {
     "spec": {
-      "name": "vlcuster-k3s-tink1",
+      "name": "vcluster-k3s-tink1",
       "version": "0.29.0",
       "clusterName": "k3s-tink1",
       "targetNamespace": "vcluster-k3s-tink2",
@@ -57,7 +57,7 @@ kcl run oci://ghcr.io/stuttgart-things/xplane-vcluster -D params='{
       "serverUrl": "https://10.31.103.23:32445",
       "additionalSecrets": [
         {
-          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "name": "vc-vcluster-k3s-tink1-crossplane",
           "namespace": "vcluster-k3s-tink2",
           "context": "vcluster-crossplane-context",
           "server": "https://10.31.103.23:32445"
@@ -66,7 +66,7 @@ kcl run oci://ghcr.io/stuttgart-things/xplane-vcluster -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretName": "vc-vcluster-k3s-tink1", # pragma: allowlist secret
         "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
@@ -83,38 +83,36 @@ kcl run oci://ghcr.io/stuttgart-things/xplane-vcluster -D params='{
 cd xplane-vcluster && kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "name": "vlcuster-k3s-tink1",
+      "name": "vcluster-k3s-tink3",
       "version": "0.29.0",
       "clusterName": "k3s-tink1",
-      "targetNamespace": "vcluster-k3s-tink2",
+      "targetNamespace": "vcluster-k3s-tink3",
       "storageClass": "local-path",
       "bindAddress": "0.0.0.0",
       "proxyPort": 8443,
-      "nodePort": 32445,
+      "nodePort": 32455,
       "extraSANs": [
         "test-k3s1.labul.sva.de",
         "10.31.103.23",
         "localhost"
       ],
-      "serverUrl": "https://10.31.103.23:32445",
+      "serverUrl": "https://10.31.103.23:32455",
       "additionalSecrets": [
         {
-          "name": "vc-vlcuster-k3s-tink1-crossplane",
-          "namespace": "vcluster-k3s-tink2",
+          "name": "vc-vcluster-k3s-tink3-crossplane",
+          "namespace": "vcluster-k3s-tink3",
           "context": "vcluster-crossplane-context",
-          "server": "https://10.31.103.23:32445"
+          "server": "https://10.31.103.23:32455"
         }
       ],
       "connectionSecret": {
-        "name": "vcluster-k3s-tink2-connection",
-        "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
-        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
+          "namespace": "default"
       }
     }
   }
-}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d'
+}' --format yaml | grep -A 1000 "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //' | kubectl apply -f -
 ```
+
 
 #### 2. One-Step Deployment (Direct Apply)
 
@@ -123,7 +121,7 @@ cd xplane-vcluster && kcl run main.k -D params='{
 cd xplane-vcluster && kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "name": "vlcuster-k3s-tink1",
+      "name": "vcluster-k3s-tink1",
       "version": "0.29.0",
       "clusterName": "k3s-tink1",
       "targetNamespace": "vcluster-k3s-tink2",
@@ -139,7 +137,7 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "serverUrl": "https://10.31.103.23:32445",
       "additionalSecrets": [
         {
-          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "name": "vc-vcluster-k3s-tink1-crossplane",
           "namespace": "vcluster-k3s-tink2",
           "context": "vcluster-crossplane-context",
           "server": "https://10.31.103.23:32445"
@@ -148,7 +146,7 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretName": "vc-vcluster-k3s-tink1", # pragma: allowlist secret
         "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
@@ -163,7 +161,7 @@ cd xplane-vcluster && kcl run main.k -D params='{
 cd xplane-vcluster && kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "name": "vlcuster-k3s-tink1",
+      "name": "vcluster-k3s-tink1",
       "version": "0.29.0",
       "clusterName": "k3s-tink1",
       "targetNamespace": "vcluster-k3s-tink2",
@@ -179,7 +177,7 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "serverUrl": "https://10.31.103.23:32445",
       "additionalSecrets": [
         {
-          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "name": "vc-vcluster-k3s-tink1-crossplane",
           "namespace": "vcluster-k3s-tink2",
           "context": "vcluster-crossplane-context",
           "server": "https://10.31.103.23:32445"
@@ -188,7 +186,7 @@ cd xplane-vcluster && kcl run main.k -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretName": "vc-vcluster-k3s-tink1", # pragma: allowlist secret
         "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
@@ -206,7 +204,7 @@ kubectl apply -f vcluster-k3s-tink2.yaml
 
 ```bash
 # Watch the helm release
-kubectl get releases vlcuster-k3s-tink1 -w
+kubectl get releases vcluster-k3s-tink1 -w
 
 # Check VCluster pods
 kubectl get pods -n vcluster-k3s-tink2
@@ -215,8 +213,8 @@ kubectl get pods -n vcluster-k3s-tink2
 kubectl get secret vcluster-k3s-tink2-connection -n crossplane-system
 
 # Check ProviderConfigs are ready
-kubectl get providerconfig vlcuster-k3s-tink1
-kubectl get providerconfig vlcuster-k3s-tink1-helm
+kubectl get providerconfig vcluster-k3s-tink1
+kubectl get providerconfig vcluster-k3s-tink1-helm
 ```
 
 #### 4. Extract and Test VCluster Kubeconfig
@@ -268,7 +266,7 @@ The module creates the following Crossplane resources:
 apiVersion: helm.crossplane.io/v1beta1
 kind: Release
 metadata:
-  name: vlcuster-k3s-tink1
+  name: vcluster-k3s-tink1
 spec:
   deletionPolicy: Delete
   forProvider:
@@ -283,7 +281,7 @@ spec:
       exportKubeConfig:
         server: https://10.31.103.23:32445
         additionalSecrets:
-          - name: vc-vlcuster-k3s-tink1-crossplane
+          - name: vc-vcluster-k3s-tink1-crossplane
             namespace: vcluster-k3s-tink2
   managementPolicies: ["*"]
   providerConfigRef:
@@ -306,12 +304,12 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-        name: vc-vlcuster-k3s-tink1
+        name: vc-vcluster-k3s-tink1
         namespace: vcluster-k3s-tink2
   connectionDetails:
     - apiVersion: v1
       kind: Secret
-      name: vc-vlcuster-k3s-tink1
+      name: vc-vcluster-k3s-tink1
       namespace: vcluster-k3s-tink2
       fieldPath: data.config
       toConnectionSecretKey: kubeconfig
@@ -325,7 +323,7 @@ spec:
 apiVersion: kubernetes.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: vlcuster-k3s-tink1
+  name: vcluster-k3s-tink1
 spec:
   credentials:
     source: Secret
@@ -340,7 +338,7 @@ spec:
 apiVersion: helm.crossplane.io/v1beta1
 kind: ProviderConfig
 metadata:
-  name: vlcuster-k3s-tink1-helm
+  name: vcluster-k3s-tink1-helm
 spec:
   credentials:
     source: Secret
@@ -404,7 +402,7 @@ spec:
       data:
         message: "Hello from VCluster via Crossplane!"
   providerConfigRef:
-    name: vlcuster-k3s-tink1  # References the generated ProviderConfig
+    name: vcluster-k3s-tink1  # References the generated ProviderConfig
 ```
 
 ### Helm Releases in VCluster
@@ -421,7 +419,7 @@ spec:
       version: "15.14.2"
     namespace: default
   providerConfigRef:
-    name: vlcuster-k3s-tink1-helm  # References the generated Helm ProviderConfig
+    name: vcluster-k3s-tink1-helm  # References the generated Helm ProviderConfig
 ```
 
 ## Prerequisites
@@ -468,7 +466,7 @@ spec:
 kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "name": "vlcuster-k3s-tink1",
+      "name": "vcluster-k3s-tink1",
       "version": "0.29.0",
       "clusterName": "k3s-tink1",
       "targetNamespace": "vcluster-k3s-tink2",
@@ -484,7 +482,7 @@ kcl run main.k -D params='{
       "serverUrl": "https://10.31.103.23:32445",
       "additionalSecrets": [
         {
-          "name": "vc-vlcuster-k3s-tink1-crossplane",
+          "name": "vc-vcluster-k3s-tink1-crossplane",
           "namespace": "vcluster-k3s-tink2",
           "context": "vcluster-crossplane-context",
           "server": "https://10.31.103.23:32445"
@@ -493,7 +491,7 @@ kcl run main.k -D params='{
       "connectionSecret": {
         "name": "vcluster-k3s-tink2-connection",
         "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vlcuster-k3s-tink1", # pragma: allowlist secret
+        "vclusterSecretName": "vc-vcluster-k3s-tink1", # pragma: allowlist secret
         "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
       }
     }
@@ -512,27 +510,27 @@ kubectl get object vcluster-kubeconfig-reader
 kubectl describe object vcluster-kubeconfig-reader
 
 # Check if VCluster secret exists
-kubectl get secret vc-vlcuster-k3s-tink1 -n vcluster-k3s-tink1
+kubectl get secret vc-vcluster-k3s-tink1 -n vcluster-k3s-tink1
 
 # Check connection secret
-kubectl get secret vlcuster-k3s-tink1-connection -n crossplane-system
+kubectl get secret vcluster-k3s-tink1-connection -n crossplane-system
 ```
 
 #### 2. ProviderConfig Issues
 ```bash
 # Check ProviderConfig status
-kubectl get providerconfig vlcuster-k3s-tink1
-kubectl describe providerconfig vlcuster-k3s-tink1
+kubectl get providerconfig vcluster-k3s-tink1
+kubectl describe providerconfig vcluster-k3s-tink1
 
 # Test connectivity
-kubectl get nodes --kubeconfig=<(kubectl get secret vlcuster-k3s-tink1-connection -n crossplane-system -o jsonpath='{.data.kubeconfig}' | base64 -d)
+kubectl get nodes --kubeconfig=<(kubectl get secret vcluster-k3s-tink1-connection -n crossplane-system -o jsonpath='{.data.kubeconfig}' | base64 -d)
 ```
 
 ### 3. Release Status
 ```bash
 # Check Helm release status
-kubectl get release vlcuster-k3s-tink1
-kubectl describe release vlcuster-k3s-tink1
+kubectl get release vcluster-k3s-tink1
+kubectl describe release vcluster-k3s-tink1
 
 # Check VCluster pods
 kubectl get pods -n vcluster-k3s-tink1

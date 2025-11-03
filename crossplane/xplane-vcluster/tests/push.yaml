@@ -1,0 +1,23 @@
+---
+apiVersion: external-secrets.io/v1alpha1
+kind: PushSecret
+metadata:
+  name: pushsecret-vcluster-k3s-tink3
+  namespace: default
+spec:
+  data:
+  - conversionStrategy: None
+    match:
+      remoteRef:
+        property: kubeconfig
+        remoteKey: vcluster-k3s-tink3-connection  # Changed this
+      secretKey: kubeconfig
+  deletionPolicy: None
+  refreshInterval: 1m
+  secretStoreRefs:
+  - kind: SecretStore
+    name: vault-backend-kubeconfigs
+  selector:
+    secret:
+      name: vcluster-k3s-tink3-connection
+  updatePolicy: Replace

@@ -14,7 +14,8 @@ vsoChartVersion = option("params")?.oxr?.spec?.vsoChartVersion or "1.0.1"
 esoChartVersion = option("params")?.oxr?.spec?.esoChartVersion or "0.20.3"
 
 # K8s Auth configurations - independent from Helm releases
-k8sAuths = option("params")?.oxr?.spec?.k8sAuths or [
+_k8sAuthsProvided = option("params")?.oxr?.spec
+k8sAuths = _k8sAuthsProvided.k8sAuths if "k8sAuths" in _k8sAuthsProvided else [
     {"name": "vault-auth-{}".format(configName), "namespace": "default"}
 ]
 

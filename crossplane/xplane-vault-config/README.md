@@ -50,13 +50,43 @@ KCL module for deploying Vault-related Helm releases using Crossplane Helm Provi
 
 </details>
 
-<details><summary>Render with Defaults + Set target cluster/provider</summary>
+<details><summary>Apply with Namespaces, releases and service account secret reader</summary>
 
 ```bash
-kcl run --quiet main.k -D params='{"oxr": {"spec": {"clusterName": "vlcuster-k3s-tink1"}}}' --format yaml
+kcl run --quiet main.k -D params='{"oxr": {"spec": {"clusterName": "prod"}}}' --format yaml | grep -A 1000 "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //' | kubectl apply -f -
 ```
 
 </details>
+
+<details><summary>APPLY HELM RELEASES ONLY</summary>
+
+```bash
+kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "clusterName": "prod",
+      "csiEnabled": true,
+      "vsoEnabled": true,
+      "esoEnabled": true,
+      "k8sAuths": [
+          {"name": "vault-auth-app1", "namespace": "app1"},
+          {"name": "vault-auth-app2", "namespace": "app2"}
+      ]
+    }
+  }
+}' --format yaml | grep -A 1000 "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //' | kubectl apply -f -
+```
+
+</details>
+
+
+        "k8sAuths": [
+          {"name": "vault-auth-app1", "namespace": "app1"},
+          {"name": "vault-auth-app2", "namespace": "app2"}
+        ]
+
+
+
 
 <details><summary>Render with Conditions + Apply to cluster</summary>
 

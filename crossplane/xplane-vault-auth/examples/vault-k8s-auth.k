@@ -13,19 +13,19 @@ multiAuth = vault_auth.multiVaultK8sAuth([
         name = "web-app"
         clusterName = "prod"
         vaultAddr = "https://vault.prod.com"
-        skipTlsVerify = false
+        skipTlsVerify = False
     }
     vault_auth.K8sAuth {
         name = "api-service"
         clusterName = "prod"
         vaultAddr = "https://vault.prod.com"
-        skipTlsVerify = false
+        skipTlsVerify = False
     }
     vault_auth.K8sAuth {
         name = "worker"
         clusterName = "prod"
         vaultAddr = "https://vault.prod.com"
-        skipTlsVerify = false
+        skipTlsVerify = False
     }
 ], "prod", "https://vault.prod.com")
 
@@ -36,27 +36,24 @@ fullConfig = vault_auth.VaultConfig {
             name = "frontend"
             clusterName = "staging"
             vaultAddr = "https://vault.staging.com"
-            skipTlsVerify = true  # for development environments
-            vaultTokenSecret = "custom-vault-token" # pragma: allowlist secret
-            vaultTokenSecretNamespace = "security" # pragma: allowlist secret
+            skipTlsVerify = True  # for development environments
+            tokenPolicies = ["read-secrets"]
+            tokenTtl = 7200
         }
         vault_auth.K8sAuth {
             name = "backend"
             clusterName = "staging"
             vaultAddr = "https://vault.staging.com"
-            skipTlsVerify = true
-            vaultTokenSecret = "custom-vault-token" # pragma: allowlist secret
-            vaultTokenSecretNamespace = "security" # pragma: allowlist secret
+            skipTlsVerify = True
+            tokenPolicies = ["read-secrets", "write-logs"]
+            tokenTtl = 3600
         }
     ]
     clusterName = "staging"
     vaultAddr = "https://vault.staging.com"
-    skipTlsVerify = true
+    skipTlsVerify = True
     vaultTokenSecret = "custom-vault-token" # pragma: allowlist secret
     vaultTokenSecretNamespace = "security" # pragma: allowlist secret
 }
 
 fullAuth = vault_auth.vaultK8sAuth(fullConfig)
-
-# Output the resources
-[simpleAuth[0], multiAuth[0], fullAuth[0]]
