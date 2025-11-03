@@ -34,48 +34,6 @@ cd xplane-vcluster && kcl mod push oci://ghcr.io/stuttgart-things/xplane-vcluste
 
 ## Usage
 
-### Using from OCI Registry
-
-```bash
-# Use module directly from OCI registry (no local clone needed)
-kcl run oci://ghcr.io/stuttgart-things/xplane-vcluster -D params='{
-  "oxr": {
-    "spec": {
-      "name": "vcluster-k3s-tink1",
-      "version": "0.29.0",
-      "clusterName": "k3s-tink1",
-      "targetNamespace": "vcluster-k3s-tink2",
-      "storageClass": "local-path",
-      "bindAddress": "0.0.0.0",
-      "proxyPort": 8443,
-      "nodePort": 32445,
-      "extraSANs": [
-        "test-k3s1.labul.sva.de",
-        "10.31.103.23",
-        "localhost"
-      ],
-      "serverUrl": "https://10.31.103.23:32445",
-      "additionalSecrets": [
-        {
-          "name": "vc-vcluster-k3s-tink1-crossplane",
-          "namespace": "vcluster-k3s-tink2",
-          "context": "vcluster-crossplane-context",
-          "server": "https://10.31.103.23:32445"
-        }
-      ],
-      "connectionSecret": {
-        "name": "vcluster-k3s-tink2-connection",
-        "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vcluster-k3s-tink1", # pragma: allowlist secret
-        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
-      }
-    }
-  }
-}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | kubectl apply -f -
-```
-
-### Generate and Apply VCluster Release (Local Development)
-
 #### 1. Generate YAML Only (Preview)
 
 ```bash
@@ -107,97 +65,18 @@ cd xplane-vcluster && kcl run main.k -D params='{
       ],
       "connectionSecret": {
           "namespace": "default"
+      },
+      "pushSecret": {
+        "enabled": true,
+        "name": "pushsecret-vcluster-k3s-tink1",
+        "namespace": "default",
+        "clusterName": "in-cluster",
+        "secretStoreRef": "vault-backend-kubeconfigs", # pragma: allowlist secret
+        "refreshInterval": "1m"
       }
     }
   }
 }' --format yaml | grep -A 1000 "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //' | kubectl apply -f -
-```
-
-
-#### 2. One-Step Deployment (Direct Apply)
-
-```bash
-# VCluster with connection secrets and ProviderConfigs - direct apply
-cd xplane-vcluster && kcl run main.k -D params='{
-  "oxr": {
-    "spec": {
-      "name": "vcluster-k3s-tink1",
-      "version": "0.29.0",
-      "clusterName": "k3s-tink1",
-      "targetNamespace": "vcluster-k3s-tink2",
-      "storageClass": "local-path",
-      "bindAddress": "0.0.0.0",
-      "proxyPort": 8443,
-      "nodePort": 32445,
-      "extraSANs": [
-        "test-k3s1.labul.sva.de",
-        "10.31.103.23",
-        "localhost"
-      ],
-      "serverUrl": "https://10.31.103.23:32445",
-      "additionalSecrets": [
-        {
-          "name": "vc-vcluster-k3s-tink1-crossplane",
-          "namespace": "vcluster-k3s-tink2",
-          "context": "vcluster-crossplane-context",
-          "server": "https://10.31.103.23:32445"
-        }
-      ],
-      "connectionSecret": {
-        "name": "vcluster-k3s-tink2-connection",
-        "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vcluster-k3s-tink1", # pragma: allowlist secret
-        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
-      }
-    }
-  }
-}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | kubectl apply -f -
-```
-
-#### 3. Generate to File and Apply Separately
-
-```bash
-# Generate all resources to file
-cd xplane-vcluster && kcl run main.k -D params='{
-  "oxr": {
-    "spec": {
-      "name": "vcluster-k3s-tink1",
-      "version": "0.29.0",
-      "clusterName": "k3s-tink1",
-      "targetNamespace": "vcluster-k3s-tink2",
-      "storageClass": "local-path",
-      "bindAddress": "0.0.0.0",
-      "proxyPort": 8443,
-      "nodePort": 32445,
-      "extraSANs": [
-        "test-k3s1.labul.sva.de",
-        "10.31.103.23",
-        "localhost"
-      ],
-      "serverUrl": "https://10.31.103.23:32445",
-      "additionalSecrets": [
-        {
-          "name": "vc-vcluster-k3s-tink1-crossplane",
-          "namespace": "vcluster-k3s-tink2",
-          "context": "vcluster-crossplane-context",
-          "server": "https://10.31.103.23:32445"
-        }
-      ],
-      "connectionSecret": {
-        "name": "vcluster-k3s-tink2-connection",
-        "namespace": "crossplane-system",
-        "vclusterSecretName": "vc-vcluster-k3s-tink1", # pragma: allowlist secret
-        "vclusterSecretNamespace": "vcluster-k3s-tink2" # pragma: allowlist secret
-      }
-    }
-  }
-}' --format yaml | grep -A 1000 "^items:" | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' > vcluster-k3s-tink2.yaml
-
-# Review the generated file
-cat vcluster-k3s-tink2.yaml
-
-# Apply to cluster
-kubectl apply -f vcluster-k3s-tink2.yaml
 ```
 
 #### 3. Monitor Deployment

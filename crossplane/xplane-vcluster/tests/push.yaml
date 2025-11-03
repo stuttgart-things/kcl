@@ -11,7 +11,7 @@ spec:
       remoteRef:
         property: kubeconfig
         remoteKey: vcluster-k3s-tink3-connection  # Changed this
-      secretKey: kubeconfig
+      secretKey: kubeconfig # pragma: allowlist secret
   deletionPolicy: None
   refreshInterval: 1m
   secretStoreRefs:

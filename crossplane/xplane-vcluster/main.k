@@ -29,6 +29,15 @@ connectionSecretNamespace = connectionSecretConfig?.namespace or "crossplane-sys
 vclusterSecretName = connectionSecretConfig?.vclusterSecretName or "vc-{}".format(name)
 vclusterSecretNamespace = connectionSecretConfig?.vclusterSecretNamespace or targetNamespace
 
+# PushSecret configuration
+pushSecretConfig = _params?.oxr?.spec?.pushSecret or {}
+enablePushSecret = pushSecretConfig?.enabled or False
+pushSecretName = pushSecretConfig?.name or "pushsecret-{}".format(name)
+pushSecretNamespace = pushSecretConfig?.namespace or "default"
+pushSecretClusterName = pushSecretConfig?.clusterName or clusterName  # Can be different from main clusterName
+pushSecretStoreRef = pushSecretConfig?.secretStoreRef or "vault-backend-kubeconfigs"
+pushSecretRefreshInterval = pushSecretConfig?.refreshInterval or "1m"
+
 # VCluster Helm Release
 release = {
     apiVersion = "helm.crossplane.io/v1beta1"
@@ -109,7 +118,7 @@ kubeconfig_reader = {
     }
     spec = {
         deletionPolicy = "Delete"
-        managementPolicies = ["Observe"]  # Important: Only observe, don't manage!
+        managementPolicies = ["Observe"]
         providerConfigRef = {
             name = clusterName
         }
@@ -147,6 +156,62 @@ kubeconfig_reader = {
         }
     }
 } if enableConnectionSecret else {}
+
+# PushSecret for External Secrets Operator (wrapped in Kubernetes Object)
+push_secret = {
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
+    metadata = {
+        name = "{}-pushsecret".format(name)
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vcluster-pushsecret"
+        }
+    }
+    spec = {
+        deletionPolicy = "Delete"
+        providerConfigRef = {
+            name = pushSecretClusterName  # Uses separate cluster config
+        }
+        forProvider = {
+            manifest = {
+                apiVersion = "external-secrets.io/v1alpha1"
+                kind = "PushSecret"
+                metadata = {
+                    name = pushSecretName
+                    namespace = pushSecretNamespace
+                }
+                spec = {
+                    data = [
+                        {
+                            conversionStrategy = "None"
+                            match = {
+                                remoteRef = {
+                                    property = "kubeconfig"
+                                    remoteKey = connectionSecretName
+                                }
+                                secretKey = "kubeconfig" # pragma: allowlist secret
+                            }
+                        }
+                    ]
+                    deletionPolicy = "None"
+                    refreshInterval = pushSecretRefreshInterval
+                    secretStoreRefs = [
+                        {
+                            kind = "SecretStore"
+                            name = pushSecretStoreRef
+                        }
+                    ]
+                    selector = {
+                        secret = {
+                            name = connectionSecretName
+                        }
+                    }
+                    updatePolicy = "Replace"
+                }
+            }
+        }
+    }
+} if enablePushSecret and enableConnectionSecret else {}
 
 # Kubernetes ProviderConfig for VCluster
 vcluster_kube_provider_config = {
@@ -195,4 +260,5 @@ vcluster_helm_provider_config = {
 # Build items list
 base_items = [release]
 connection_items = [kubeconfig_reader, vcluster_kube_provider_config, vcluster_helm_provider_config] if enableConnectionSecret else []
-items = base_items + connection_items
+push_secret_items = [push_secret] if enablePushSecret and enableConnectionSecret else []
+items = base_items + connection_items + push_secret_items
