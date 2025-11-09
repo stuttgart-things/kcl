@@ -1,0 +1,14 @@
+---
+apiVersion: kubernetes.crossplane.io/v1alpha2
+kind: Object
+metadata:
+  name: test-namespace
+spec:
+  providerConfigRef:
+    name: vcluster-k3s-tink5
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: test-namespace

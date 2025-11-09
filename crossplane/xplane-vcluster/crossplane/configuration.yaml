@@ -1,0 +1,13 @@
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Configuration
+metadata:
+  name: xplane-vault-auth-config
+  labels:
+    provider: terraform
+    service: vault-auth
+spec:
+  package: oci://ghcr.io/stuttgart-things/ # NOT THE KCL HERE!
+  packagePullPolicy: IfNotPresent
+  revisionActivationPolicy: Automatic
+  revisionHistoryLimit: 1

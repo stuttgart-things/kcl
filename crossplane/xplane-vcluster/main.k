@@ -240,7 +240,7 @@ vcluster_helm_provider_config = {
     apiVersion = "helm.crossplane.io/v1beta1"
     kind = "ProviderConfig"
     metadata = {
-        name = "{}-helm".format(name)
+        name = name
         annotations = {
             "krm.kcl.dev/composition-resource-name" = "vcluster-helm-providerconfig"
         }

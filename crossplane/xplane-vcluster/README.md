@@ -64,14 +64,17 @@ cd xplane-vcluster && kcl run main.k -D params='{
         }
       ],
       "connectionSecret": {
-          "namespace": "default"
+        "name": "vcluster-k3s-tink3-connection",
+        "namespace": "crossplane-system",
+        "vclusterSecretName": "vc-vcluster-k3s-tink3",
+        "vclusterSecretNamespace": "vcluster-k3s-tink3"
       },
       "pushSecret": {
         "enabled": true,
-        "name": "pushsecret-vcluster-k3s-tink1",
+        "name": "pushsecret-vcluster-k3s-tink3",
         "namespace": "default",
-        "clusterName": "in-cluster",
-        "secretStoreRef": "vault-backend-kubeconfigs", # pragma: allowlist secret
+        "clusterName": "k3s-tink1",
+        "secretStoreRef": "vault-backend-kubeconfigs",
         "refreshInterval": "1m"
       }
     }
