@@ -76,6 +76,9 @@ cd xplane-vcluster && kcl run main.k -D params='{
         "clusterName": "k3s-tink1",
         "secretStoreRef": "vault-backend-kubeconfigs",
         "refreshInterval": "1m"
+      },
+      "providerConfig": {
+        "clusterName": "in-cluster"
       }
     }
   }

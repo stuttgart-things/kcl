@@ -38,6 +38,10 @@ pushSecretClusterName = pushSecretConfig?.clusterName or clusterName  # Can be d
 pushSecretStoreRef = pushSecretConfig?.secretStoreRef or "vault-backend-kubeconfigs"
 pushSecretRefreshInterval = pushSecretConfig?.refreshInterval or "1m"
 
+# ProviderConfig configuration (for creating ProviderConfigs on Crossplane cluster)
+providerConfigConfig = _params?.oxr?.spec?.providerConfig or {}
+providerConfigClusterName = providerConfigConfig?.clusterName or clusterName  # Cluster where ProviderConfigs are created
+
 # VCluster Helm Release
 release = {
     apiVersion = "helm.crossplane.io/v1beta1"
@@ -213,45 +217,75 @@ push_secret = {
     }
 } if enablePushSecret and enableConnectionSecret else {}
 
-# Kubernetes ProviderConfig for VCluster
+# Kubernetes ProviderConfig for VCluster (wrapped in Object)
 vcluster_kube_provider_config = {
-    apiVersion = "kubernetes.crossplane.io/v1alpha1"
-    kind = "ProviderConfig"
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
     metadata = {
-        name = name
+        name = "{}-kube-providerconfig".format(name)
         annotations = {
             "krm.kcl.dev/composition-resource-name" = "vcluster-kubernetes-providerconfig"
         }
     }
     spec = {
-        credentials = {
-            source = "Secret"
-            secretRef = {
-                namespace = connectionSecretNamespace
-                name = connectionSecretName
-                key = "kubeconfig"
+        deletionPolicy = "Delete"
+        providerConfigRef = {
+            name = providerConfigClusterName  # Uses dedicated providerConfig cluster config
+        }
+        forProvider = {
+            manifest = {
+                apiVersion = "kubernetes.crossplane.io/v1alpha1"
+                kind = "ProviderConfig"
+                metadata = {
+                    name = name
+                }
+                spec = {
+                    credentials = {
+                        source = "Secret"
+                        secretRef = {
+                            namespace = connectionSecretNamespace
+                            name = connectionSecretName
+                            key = "kubeconfig"
+                        }
+                    }
+                }
             }
         }
     }
 } if enableConnectionSecret else {}
 
-# Helm ProviderConfig for VCluster
+# Helm ProviderConfig for VCluster (wrapped in Object)
 vcluster_helm_provider_config = {
-    apiVersion = "helm.crossplane.io/v1beta1"
-    kind = "ProviderConfig"
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
     metadata = {
-        name = name
+        name = "{}-helm-providerconfig".format(name)
         annotations = {
             "krm.kcl.dev/composition-resource-name" = "vcluster-helm-providerconfig"
         }
     }
     spec = {
-        credentials = {
-            source = "Secret"
-            secretRef = {
-                namespace = connectionSecretNamespace
-                name = connectionSecretName
-                key = "kubeconfig"
+        deletionPolicy = "Delete"
+        providerConfigRef = {
+            name = providerConfigClusterName  # Uses dedicated providerConfig cluster config
+        }
+        forProvider = {
+            manifest = {
+                apiVersion = "helm.crossplane.io/v1beta1"
+                kind = "ProviderConfig"
+                metadata = {
+                    name = name
+                }
+                spec = {
+                    credentials = {
+                        source = "Secret"
+                        secretRef = {
+                            namespace = connectionSecretNamespace
+                            name = connectionSecretName
+                            key = "kubeconfig"
+                        }
+                    }
+                }
             }
         }
     }

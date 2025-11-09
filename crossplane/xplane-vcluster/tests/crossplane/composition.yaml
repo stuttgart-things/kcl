@@ -22,7 +22,7 @@ spec:
       metadata:
         name: vcluster
       spec:
-        source: oci://ghcr.io/stuttgart-things/xplane-vcluster:0.29.4
+        source: oci://ghcr.io/stuttgart-things/xplane-vcluster:0.29.6
   - step: automatically-detect-ready-composed-resources
     functionRef:
       name: function-auto-ready

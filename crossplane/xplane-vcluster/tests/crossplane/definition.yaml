@@ -114,6 +114,14 @@ spec:
                     type: string
                     description: Namespace of the vcluster source secret
 
+              providerConfig:
+                type: object
+                description: Configuration for ProviderConfig creation
+                properties:
+                  clusterName:
+                    type: string
+                    description: Cluster name where ProviderConfigs are created (typically Crossplane cluster)
+
               # PushSecret configuration
               pushSecret:
                 type: object

@@ -47,3 +47,7 @@ spec:
     clusterName: in-cluster
     secretStoreRef: vault-backend-kubeconfigs
     refreshInterval: 1m
+
+  # ProviderConfig configuration
+  providerConfig:
+    clusterName: in-cluster
