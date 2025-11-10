@@ -1,0 +1,129 @@
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xvaultconfigs.vaultconfig.stuttgart-things.com
+spec:
+  group: vaultconfig.stuttgart-things.com
+  names:
+    kind: XvaultConfig
+    plural: xvaultconfigs
+  claimNames:
+    kind: VaultConfig
+    plural: vaultconfigs
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              # Basic configuration
+              name:
+                type: string
+                description: "Configuration name used as suffix for resources"
+                default: "vault-config"
+
+              clusterName:
+                type: string
+                description: "Name of the target Kubernetes cluster (ProviderConfig reference)"
+                default: "default"
+
+              # vcluster support
+              isVcluster:
+                type: boolean
+                description: "Set to true for vcluster deployments (disables health checks that fail in vcluster)"
+                default: false
+
+              # Namespace configuration
+              namespaceCsi:
+                type: string
+                description: "Namespace for Secrets Store CSI Driver"
+                default: "secrets-store-csi"
+
+              namespaceVso:
+                type: string
+                description: "Namespace for Vault Secrets Operator"
+                default: "vault-secrets-operator"
+
+              namespaceEso:
+                type: string
+                description: "Namespace for External Secrets Operator"
+                default: "external-secrets"
+
+              # Chart versions
+              csiChartVersion:
+                type: string
+                description: "Helm chart version for Secrets Store CSI Driver"
+                default: "1.5.4"
+
+              vsoChartVersion:
+                type: string
+                description: "Helm chart version for Vault Secrets Operator"
+                default: "1.0.1"
+
+              esoChartVersion:
+                type: string
+                description: "Helm chart version for External Secrets Operator"
+                default: "0.20.3"
+
+              # Feature flags
+              csiEnabled:
+                type: boolean
+                description: "Enable Secrets Store CSI Driver deployment"
+                default: true
+
+              vsoEnabled:
+                type: boolean
+                description: "Enable Vault Secrets Operator deployment"
+                default: true
+
+              esoEnabled:
+                type: boolean
+                description: "Enable External Secrets Operator deployment"
+                default: true
+
+              # Kubernetes authentication configurations
+              k8sAuths:
+                type: array
+                description: "List of Kubernetes authentication configurations for Vault"
+                items:
+                  type: object
+                  required:
+                  - name
+                  - namespace
+                  properties:
+                    name:
+                      type: string
+                      description: "Name of the ServiceAccount and associated resources"
+                    namespace:
+                      type: string
+                      description: "Namespace where the ServiceAccount will be created"
+                default:
+                - name: "vault-auth-vault-config"
+                  namespace: "default"
+            required:
+            - clusterName
+          status:
+            type: object
+            properties:
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+                      format: date-time
+                    reason:
+                      type: string
+                    message:
+                      type: string

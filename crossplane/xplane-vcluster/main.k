@@ -1,298 +1,413 @@
+import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+import crossplane_provider_kubernetes.v1alpha2.kubernetes_crossplane_io_v1alpha2_object as k8s
+
 # --- Get XR spec fields ---
-_params = option("params")
-name = _params?.oxr?.spec?.name or "test"
-version = _params?.oxr?.spec?.version or "0.29.0"
-chartName = _params?.oxr?.spec?.chartName or "vcluster"
-repository = _params?.oxr?.spec?.repository or "https://charts.loft.sh"
-clusterName = _params?.oxr?.spec?.clusterName or "kind"
-targetNamespace = _params?.oxr?.spec?.targetNamespace or "vcluster"
+configName = option("params")?.oxr?.spec?.name or "vault-config"
+namespaceCsi = option("params")?.oxr?.spec?.namespaceCsi or "secrets-store-csi"
+namespaceVso = option("params")?.oxr?.spec?.namespaceVso or "vault-secrets-operator"
+namespaceEso = option("params")?.oxr?.spec?.namespaceEso or "external-secrets"
+clusterName = option("params")?.oxr?.spec?.clusterName or "default"
 
-# VCluster specific configuration
-storageClass = _params?.oxr?.spec?.storageClass or "standard"
-bindAddress = _params?.oxr?.spec?.bindAddress or "0.0.0.0"
-proxyPort = _params?.oxr?.spec?.proxyPort or 8443
-nodePort = _params?.oxr?.spec?.nodePort or 32443
-extraSANs = _params?.oxr?.spec?.extraSANs or ["localhost"]
-serverUrl = _params?.oxr?.spec?.serverUrl or "https://localhost:32443"
+# vcluster flag for special handling
+_isVclusterValue = option("params")?.oxr?.spec?.isVcluster
+isVcluster = True if _isVclusterValue == True else False
 
-# Additional values
-customValues = _params?.oxr?.spec?.values or {}
+# Chart versions
+csiChartVersion = option("params")?.oxr?.spec?.csiChartVersion or "1.5.4"
+vsoChartVersion = option("params")?.oxr?.spec?.vsoChartVersion or "1.0.1"
+esoChartVersion = option("params")?.oxr?.spec?.esoChartVersion or "0.11.3"
 
-# Additional secrets configuration for better Crossplane integration
-additionalSecrets = _params?.oxr?.spec?.additionalSecrets or []
+# K8s Auth configurations - independent from Helm releases
+_k8sAuthsProvided = option("params")?.oxr?.spec
+k8sAuths = _k8sAuthsProvided.k8sAuths if "k8sAuths" in _k8sAuthsProvided else [
+    {"name": "vault-auth-{}".format(configName), "namespace": "default"}
+]
 
-# Connection secret configuration
-connectionSecretConfig = _params?.oxr?.spec?.connectionSecret or {}
-enableConnectionSecret = True if connectionSecretConfig == {} else (connectionSecretConfig?.enabled or True)
-connectionSecretName = connectionSecretConfig?.name or "{}-connection".format(name)
-connectionSecretNamespace = connectionSecretConfig?.namespace or "crossplane-system"
-vclusterSecretName = connectionSecretConfig?.vclusterSecretName or "vc-{}".format(name)
-vclusterSecretNamespace = connectionSecretConfig?.vclusterSecretNamespace or targetNamespace
+# Boolean flags with explicit False checking
+_csiEnabledValue = option("params")?.oxr?.spec?.csiEnabled
+csiEnabled = False if _csiEnabledValue == False else True
 
-# PushSecret configuration
-pushSecretConfig = _params?.oxr?.spec?.pushSecret or {}
-enablePushSecret = pushSecretConfig?.enabled or False
-pushSecretName = pushSecretConfig?.name or "pushsecret-{}".format(name)
-pushSecretNamespace = pushSecretConfig?.namespace or "default"
-pushSecretClusterName = pushSecretConfig?.clusterName or clusterName  # Can be different from main clusterName
-pushSecretStoreRef = pushSecretConfig?.secretStoreRef or "vault-backend-kubeconfigs"
-pushSecretRefreshInterval = pushSecretConfig?.refreshInterval or "1m"
+_vsoEnabledValue = option("params")?.oxr?.spec?.vsoEnabled
+vsoEnabled = False if _vsoEnabledValue == False else True
 
-# ProviderConfig configuration (for creating ProviderConfigs on Crossplane cluster)
-providerConfigConfig = _params?.oxr?.spec?.providerConfig or {}
-providerConfigClusterName = providerConfigConfig?.clusterName or clusterName  # Cluster where ProviderConfigs are created
+_esoEnabledValue = option("params")?.oxr?.spec?.esoEnabled
+esoEnabled = False if _esoEnabledValue == False else True
 
-# VCluster Helm Release
-release = {
+# Create a safe resource name from cluster name (replace dots, underscores with dashes)
+safeClusterName = clusterName.replace(".", "-").replace("_", "-")
+
+# Secrets Store CSI Driver Release
+csiRelease = helm.Release {
     apiVersion = "helm.crossplane.io/v1beta1"
     kind = "Release"
     metadata = {
-        name = name
+        name = "csi-${configName}-${safeClusterName}"
         annotations = {
-            "krm.kcl.dev/composition-resource-name" = "vcluster-release"
+            "krm.kcl.dev/composition-resource-name" = "vault-csi-{}-{}".format(configName, safeClusterName)
         }
     }
     spec = {
-        deletionPolicy = "Delete"
-        providerConfigRef = {
+        providerConfigRef: {
             name = clusterName
         }
-        managementPolicies = ["*"]
-        forProvider = {
-            chart = {
-                name = chartName
-                repository = repository
-                version = version
+        forProvider: {
+            chart: {
+                name = "secrets-store-csi-driver"
+                repository = "https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts"
+                version = csiChartVersion
             }
-            namespace = targetNamespace
-            values = {
-                controlPlane = {
-                    statefulSet = {
-                        persistence = {
-                            volumeClaim = {
-                                storageClass = storageClass
-                            }
-                        }
-                    }
-                    distro = {
-                        k8s = {
-                            enabled = True
-                        }
-                    }
-                    proxy = {
-                        bindAddress = bindAddress
-                        port = proxyPort
-                        extraSANs = extraSANs
-                    }
-                    service = {
-                        enabled = True
-                        spec = {
-                            type = "NodePort"
-                            ports = [
-                                {
-                                    name = "https"
-                                    port = 443
-                                    targetPort = proxyPort
-                                    nodePort = nodePort
-                                    protocol = "TCP"
-                                }
-                            ]
-                        }
+            namespace = namespaceCsi
+            wait: True
+            waitTimeout: "10m"
+            values: {
+                "secrets-store-csi-driver": {
+                    enableSecretRotation: True
+                    linux: {
+                        enabled: True
                     }
                 }
-                exportKubeConfig = ({
-                    server = serverUrl
-                } | ({
-                    additionalSecrets = additionalSecrets
-                } if additionalSecrets else {}))
-            } | customValues
+            }
         }
     }
 }
 
-# Kubernetes Object to create connection secret from VCluster kubeconfig
-kubeconfig_reader = {
-    apiVersion = "kubernetes.crossplane.io/v1alpha2"
-    kind = "Object"
+# Vault Secrets Operator Release
+vsoRelease = helm.Release {
+    apiVersion = "helm.crossplane.io/v1beta1"
+    kind = "Release"
     metadata = {
-        name = name
+        name = "vso-${configName}-${safeClusterName}"
         annotations = {
-            "krm.kcl.dev/composition-resource-name" = name
+            "krm.kcl.dev/composition-resource-name" = "vault-vso-{}-{}".format(configName, safeClusterName)
         }
     }
     spec = {
-        deletionPolicy = "Delete"
-        managementPolicies = ["Observe"]
-        providerConfigRef = {
+        providerConfigRef: {
             name = clusterName
         }
-        forProvider = {
-            manifest = {
-                apiVersion = "v1"
-                kind = "Secret"
-                metadata = {
-                    name = vclusterSecretName
-                    namespace = vclusterSecretNamespace
-                }
+        forProvider: {
+            chart: {
+                name = "vault-secrets-operator"
+                repository = "https://helm.releases.hashicorp.com"
+                version = vsoChartVersion
             }
-        }
-        connectionDetails = [
-            {
-                apiVersion = "v1"
-                kind = "Secret"
-                name = vclusterSecretName
-                namespace = vclusterSecretNamespace
-                fieldPath = "data.config"
-                toConnectionSecretKey = "kubeconfig" # pragma: allowlist secret
-            }
-            {
-                apiVersion = "v1"
-                kind = "Secret"
-                name = vclusterSecretName
-                namespace = vclusterSecretNamespace
-                fieldPath = "data.certificate-authority"
-                toConnectionSecretKey = "ca.crt" # pragma: allowlist secret
-            }
-        ]
-        writeConnectionSecretToRef = {
-            name = connectionSecretName
-            namespace = connectionSecretNamespace
-        }
-    }
-} if enableConnectionSecret else {}
-
-# PushSecret for External Secrets Operator (wrapped in Kubernetes Object)
-push_secret = {
-    apiVersion = "kubernetes.crossplane.io/v1alpha2"
-    kind = "Object"
-    metadata = {
-        name = "{}-pushsecret".format(name)
-        annotations = {
-            "krm.kcl.dev/composition-resource-name" = "vcluster-pushsecret"
-        }
-    }
-    spec = {
-        deletionPolicy = "Delete"
-        providerConfigRef = {
-            name = pushSecretClusterName  # Uses separate cluster config
-        }
-        forProvider = {
-            manifest = {
-                apiVersion = "external-secrets.io/v1alpha1"
-                kind = "PushSecret"
-                metadata = {
-                    name = pushSecretName
-                    namespace = pushSecretNamespace
-                }
-                spec = {
-                    data = [
-                        {
-                            conversionStrategy = "None"
-                            match = {
-                                remoteRef = {
-                                    property = "kubeconfig"
-                                    remoteKey = connectionSecretName
-                                }
-                                secretKey = "kubeconfig" # pragma: allowlist secret
+            namespace = namespaceVso
+            wait: True
+            waitTimeout: "10m"
+            values: {
+                "vault-secrets-operator": {
+                    defaultVaultConnection: {
+                        enabled: True
+                    }
+                    controller: {
+                        manager: {
+                            clientCache: {
+                                persistenceModel: "direct-encrypted"
                             }
                         }
-                    ]
-                    deletionPolicy = "None"
-                    refreshInterval = pushSecretRefreshInterval
-                    secretStoreRefs = [
-                        {
-                            kind = "SecretStore"
-                            name = pushSecretStoreRef
-                        }
-                    ]
-                    selector = {
-                        secret = {
-                            name = connectionSecretName
-                        }
                     }
-                    updatePolicy = "Replace"
                 }
             }
         }
     }
-} if enablePushSecret and enableConnectionSecret else {}
+}
 
-# Kubernetes ProviderConfig for VCluster (wrapped in Object)
-vcluster_kube_provider_config = {
-    apiVersion = "kubernetes.crossplane.io/v1alpha2"
-    kind = "Object"
+# External Secrets Operator Release - vcluster optimized with cluster-aware naming
+# Conditionally disable probes for vcluster
+_esoProbeConfig = {
+    "enabled": False
+} if isVcluster else {}
+
+esoRelease = helm.Release {
+    apiVersion = "helm.crossplane.io/v1beta1"
+    kind = "Release"
     metadata = {
-        name = "{}-kube-providerconfig".format(name)
+        name = "eso-${configName}-${safeClusterName}"
         annotations = {
-            "krm.kcl.dev/composition-resource-name" = "vcluster-kubernetes-providerconfig"
+            "krm.kcl.dev/composition-resource-name" = "vault-eso-{}-{}".format(configName, safeClusterName)
         }
     }
     spec = {
-        deletionPolicy = "Delete"
-        providerConfigRef = {
-            name = providerConfigClusterName  # Uses dedicated providerConfig cluster config
+        providerConfigRef: {
+            name = clusterName
         }
-        forProvider = {
-            manifest = {
-                apiVersion = "kubernetes.crossplane.io/v1alpha1"
-                kind = "ProviderConfig"
-                metadata = {
-                    name = name
+        forProvider: {
+            chart: {
+                name = "external-secrets"
+                repository = "https://charts.external-secrets.io"
+                version = esoChartVersion
+            }
+            namespace = namespaceEso
+            wait: True
+            waitTimeout: "10m"
+            values: {
+                installCRDs: True
+
+                # Webhook configuration
+                webhook: {
+                    port: 10250
+                    create: True
+                    certCheckInterval: "5m"
+                    lookaheadInterval: "168h"
                 }
-                spec = {
-                    credentials = {
-                        source = "Secret"
-                        secretRef = {
-                            namespace = connectionSecretNamespace
-                            name = connectionSecretName
-                            key = "kubeconfig"
+
+                # Cert controller - conditionally disable probes for vcluster
+                certController: {
+                    create: True
+                    requeueInterval: "5m"
+                    readinessProbe: _esoProbeConfig if isVcluster else {
+                        enabled: True
+                    }
+                    livenessProbe: _esoProbeConfig if isVcluster else {
+                        enabled: True
+                    }
+                    resources: {
+                        limits: {
+                            cpu: "200m"
+                            memory: "256Mi"
+                        }
+                        requests: {
+                            cpu: "50m"
+                            memory: "128Mi"
+                        }
+                    }
+                }
+
+                # Main controller - also disable probes for vcluster
+                replicaCount: 1
+                readinessProbe: _esoProbeConfig if isVcluster else {
+                    enabled: True
+                }
+                livenessProbe: _esoProbeConfig if isVcluster else {
+                    enabled: True
+                }
+                resources: {
+                    limits: {
+                        cpu: "200m"
+                        memory: "256Mi"
+                    }
+                    requests: {
+                        cpu: "50m"
+                        memory: "128Mi"
+                    }
+                }
+
+                # Monitoring
+                serviceMonitor: {
+                    enabled: True
+                }
+
+                # Logging
+                logLevel: "info"
+            }
+        }
+    }
+}
+
+# K8s Auth resources are generated from the independent k8sAuths configuration
+# Now include cluster name in resource naming
+
+# Generate ServiceAccount objects for each auth
+serviceAccounts = [
+    k8s.Object {
+        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        kind = "Object"
+        metadata = {
+            name = "serviceaccount-${auth.name}-${safeClusterName}"
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "vault-serviceaccount-${auth.name}-${safeClusterName}"
+            }
+        }
+        spec = {
+            forProvider = {
+                manifest = {
+                    apiVersion = "v1"
+                    kind = "ServiceAccount"
+                    metadata = {
+                        name = auth.name
+                        namespace = auth.namespace
+                    }
+                    automountServiceAccountToken = True
+                }
+            }
+            managementPolicies = ["*"]
+            providerConfigRef = {
+                name = clusterName
+            }
+        }
+    }
+    for auth in k8sAuths
+]
+
+# Generate Secret objects for each auth
+secrets = [
+    k8s.Object {
+        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        kind = "Object"
+        metadata = {
+            name = "secret-${auth.name}-${safeClusterName}"
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "vault-secret-${auth.name}-${safeClusterName}"
+            }
+        }
+        spec = {
+            forProvider = {
+                manifest = {
+                    apiVersion = "v1"
+                    kind = "Secret"
+                    metadata = {
+                        name = auth.name
+                        namespace = auth.namespace
+                        annotations = {
+                            "kubernetes.io/service-account.name" = auth.name
+                            "kubernetes.io/service-account.namespace" = auth.namespace
+                        }
+                    }
+                    type = "kubernetes.io/service-account-token"
+                }
+            }
+            managementPolicies = ["*"]
+            providerConfigRef = {
+                name = clusterName
+            }
+        }
+    }
+    for auth in k8sAuths
+]
+
+# Generate ClusterRoleBinding objects for each auth
+clusterRoleBindings = [
+    k8s.Object {
+        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        kind = "Object"
+        metadata = {
+            name = "clusterrolebinding-${auth.name}-${safeClusterName}"
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "vault-clusterrolebinding-${auth.name}-${safeClusterName}"
+            }
+        }
+        spec = {
+            forProvider = {
+                manifest = {
+                    apiVersion = "rbac.authorization.k8s.io/v1"
+                    kind = "ClusterRoleBinding"
+                    metadata = {
+                        name = auth.name
+                    }
+                    roleRef = {
+                        apiGroup = "rbac.authorization.k8s.io"
+                        kind = "ClusterRole"
+                        name = "system:auth-delegator"
+                    }
+                    subjects = [{
+                        kind = "ServiceAccount"
+                        name = auth.name
+                        namespace = auth.namespace
+                    }]
+                }
+            }
+            managementPolicies = ["*"]
+            providerConfigRef = {
+                name = clusterName
+            }
+        }
+    }
+    for auth in k8sAuths
+]
+
+# Generate Token Reader objects for each auth - reads token from service account secrets
+tokenReaders = [
+    k8s.Object {
+        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        kind = "Object"
+        metadata = {
+            name = "token-reader-${auth.name}-${safeClusterName}"
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "vault-token-reader-{}-{}".format(auth.name, safeClusterName)
+            }
+        }
+        spec = {
+            deletionPolicy = "Delete"
+            managementPolicies = ["Observe"]  # Important: Only observe, don't manage!
+            providerConfigRef = {
+                name = clusterName
+            }
+            forProvider = {
+                manifest = {
+                    apiVersion = "v1"
+                    kind = "Secret"
+                    metadata = {
+                        name = auth.name
+                        namespace = auth.namespace
+                    }
+                }
+            }
+            connectionDetails = [
+                {
+                    apiVersion = "v1"
+                    kind = "Secret"
+                    name = auth.name
+                    namespace = auth.namespace
+                    fieldPath = "data.token"
+                    toConnectionSecretKey = "token" # pragma: allowlist secret
+                }
+            ]
+            writeConnectionSecretToRef = {
+                name = "vault-token-{}-{}".format(auth.name, safeClusterName)  # Connection secret with token and cluster
+                namespace = "crossplane-system"
+            }
+        }
+    }
+    for auth in k8sAuths
+]
+
+# Collect all unique namespaces that need to be created
+_helmNamespaces = []
+_helmNamespaces += [namespaceCsi] if csiEnabled else []
+_helmNamespaces += [namespaceVso] if vsoEnabled else []
+_helmNamespaces += [namespaceEso] if esoEnabled else []
+
+_authNamespaces = [auth.namespace for auth in k8sAuths]
+_allNamespaces = _helmNamespaces + _authNamespaces
+
+# Remove duplicates - simple approach with list comprehension
+_uniqueMap = {ns: None for ns in _allNamespaces}
+uniqueNamespaces = [ns for ns in _uniqueMap]
+
+# Generate Namespace objects for all unique namespaces - include cluster name
+namespaces = [
+    k8s.Object {
+        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        kind = "Object"
+        metadata = {
+            name = "namespace-${ns.replace('_', '-').replace('.', '-')}-${safeClusterName}"
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "vault-namespace-${ns.replace('_', '-').replace('.', '-')}-${safeClusterName}"
+            }
+        }
+        spec = {
+            forProvider = {
+                manifest = {
+                    apiVersion = "v1"
+                    kind = "Namespace"
+                    metadata = {
+                        name = ns
+                        labels = {
+                            "app.kubernetes.io/managed-by" = "crossplane"
+                            "vault.crossplane.io/config" = configName
+                            "vault.crossplane.io/cluster" = safeClusterName
                         }
                     }
                 }
             }
-        }
-    }
-} if enableConnectionSecret else {}
-
-# Helm ProviderConfig for VCluster (wrapped in Object)
-vcluster_helm_provider_config = {
-    apiVersion = "kubernetes.crossplane.io/v1alpha2"
-    kind = "Object"
-    metadata = {
-        name = "{}-helm-providerconfig".format(name)
-        annotations = {
-            "krm.kcl.dev/composition-resource-name" = "vcluster-helm-providerconfig"
-        }
-    }
-    spec = {
-        deletionPolicy = "Delete"
-        providerConfigRef = {
-            name = providerConfigClusterName  # Uses dedicated providerConfig cluster config
-        }
-        forProvider = {
-            manifest = {
-                apiVersion = "helm.crossplane.io/v1beta1"
-                kind = "ProviderConfig"
-                metadata = {
-                    name = name
-                }
-                spec = {
-                    credentials = {
-                        source = "Secret"
-                        secretRef = {
-                            namespace = connectionSecretNamespace
-                            name = connectionSecretName
-                            key = "kubeconfig"
-                        }
-                    }
-                }
+            managementPolicies = ["*"]
+            providerConfigRef = {
+                name = clusterName
             }
         }
     }
-} if enableConnectionSecret else {}
+    for ns in uniqueNamespaces if ns != "default"  # Skip creating 'default' namespace
+]
 
-# Build items list
-base_items = [release]
-connection_items = [kubeconfig_reader, vcluster_kube_provider_config, vcluster_helm_provider_config] if enableConnectionSecret else []
-push_secret_items = [push_secret] if enablePushSecret and enableConnectionSecret else []
-items = base_items + connection_items + push_secret_items
+# Generate items conditionally - Namespaces first, then Helm releases + Kubernetes resources + Token readers
+items = namespaces + ([csiRelease] if csiEnabled else []) + ([vsoRelease] if vsoEnabled else []) + ([esoRelease] if esoEnabled else []) + serviceAccounts + secrets + clusterRoleBindings + tokenReaders

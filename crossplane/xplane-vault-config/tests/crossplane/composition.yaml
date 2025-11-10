@@ -2,27 +2,27 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: vcluster
+  name: vault-config
   labels:
     provider-helm: "true"
     provider-kubernetes: "true"
-    service: vcluster
+    service: vault-config
 spec:
   compositeTypeRef:
-    apiVersion: vcluster.stuttgart-things.com/v1alpha1
-    kind: XVcluster
+    apiVersion: vaultconfig.stuttgart-things.com/v1alpha1
+    kind: XvaultConfig
   mode: Pipeline
   pipeline:
-  - step: vcluster
+  - step: vault-config
     functionRef:
       name: function-kcl
     input:
       apiVersion: krm.kcl.dev/v1alpha1
       kind: KCLInput
       metadata:
-        name: vcluster
+        name: vault-config
       spec:
-        source: oci://ghcr.io/stuttgart-things/xplane-vcluster:0.29.6
+        source: oci://ghcr.io/stuttgart-things/xplane-vault-config:0.3.5
   - step: automatically-detect-ready-composed-resources
     functionRef:
       name: function-auto-ready

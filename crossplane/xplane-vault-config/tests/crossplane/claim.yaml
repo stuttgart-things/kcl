@@ -1,0 +1,33 @@
+---
+apiVersion: vaultconfig.stuttgart-things.com/v1alpha1
+kind: VaultConfig
+metadata:
+  name: multi-auth-vault-config
+  namespace: default
+spec:
+  # Configuration name - used as suffix for all resources
+  name: test
+
+  # Target cluster
+  clusterName: vcluster-k3s-tink5
+  isVcluster: true
+  # Custom namespaces
+  namespaceCsi: secrets-csi
+  namespaceVso: vault-operator
+  namespaceEso: external-secrets-system
+
+  # Specific chart versions
+  csiChartVersion: "1.5.4"
+  vsoChartVersion: "1.0.1"
+  esoChartVersion: "1.0.0"
+
+  # Enable only External Secrets Operator and CSI Driver
+  csiEnabled: true
+  vsoEnabled: true
+  esoEnabled: true
+
+  # Multiple Kubernetes authentication configurations
+  # Each creates: ServiceAccount, Secret, ClusterRoleBinding, and token reader
+  k8sAuths:
+  - name: vault-auth-app1
+    namespace: default
