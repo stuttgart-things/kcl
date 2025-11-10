@@ -1,6 +1,25 @@
 # xplane-vault-auth
 
 ```bash
+kcl run vault-k8s-auth.k -D params='{
+    "oxr": {
+      "spec": {
+        "clusterName": "vcluster-k3s-tink5",
+        "vaultAddr": "https://vault.bla",
+        "vaultTokenSecret": "vault",
+        "k8sAuths": [
+          {"name": "frontend", "tokenPolicies": ["read-secrets"]},
+          {"name": "backend", "tokenPolicies": ["read-secrets","write-logs"]}
+        ]
+      }
+    }
+  }' --format yaml
+```
+
+
+
+
+```bash
 kcl run --quiet examples/simple-auth.k | grep -A 1000 "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //'
 ```
 
