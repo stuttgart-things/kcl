@@ -4,8 +4,8 @@
 kcl run vault-k8s-auth.k -D params='{
     "oxr": {
       "spec": {
-        "clusterName": "vcluster-k3s-tink5",
-        "vaultAddr": "https://vault.bla",
+        "clusterName": "default",
+        "vaultAddr": "https://vault.demo-infra.sthings-vsphere.labul.sva.de",
         "vaultTokenSecret": "vault",
         "k8sAuths": [
           {"name": "frontend", "tokenPolicies": ["read-secrets"]},
@@ -13,7 +13,21 @@ kcl run vault-k8s-auth.k -D params='{
         ]
       }
     }
-  }' --format yaml
+  }' --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}' | kubectl apply -f -
+```
+
+```bash
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault
+  namespace: crossplane-system
+type: Opaque
+stringData:
+  # HCL format - the value must be quoted in the HCL syntax
+  terraform.tfvars: |
+    vault_token = "hvs..."
 ```
 
 
