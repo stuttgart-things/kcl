@@ -9,7 +9,7 @@ _clusterName = _spec?.clusterName or "default"
 _vaultAddr = _spec?.vaultAddr or "https://vault.example.com"
 _vaultTokenSecret = _spec?.vaultTokenSecret or "vault"
 _vaultTokenSecretNamespace = _spec?.vaultTokenSecretNamespace or "crossplane-system"
-_vaultTokenSecretKey = _spec?.vaultTokenSecretKey or "token"
+_vaultTokenSecretKey = _spec?.vaultTokenSecretKey or "terraform.tfvars"
 
 # --- Allow overriding of k8sAuth entries via params ---
 _k8sAuths = [
@@ -36,6 +36,7 @@ _config = vault_auth.VaultConfig {
     skipTlsVerify = True
     vaultTokenSecret = _vaultTokenSecret
     vaultTokenSecretNamespace = _vaultTokenSecretNamespace
+    vaultTokenSecretKey = _vaultTokenSecretKey
 }
 
 # --- Generate Vault auth workspaces ---

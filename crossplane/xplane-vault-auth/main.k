@@ -21,9 +21,9 @@ schema VaultConfig:
     clusterName: str
     vaultAddr: str
     skipTlsVerify?: bool = False
-    vaultTokenSecret?: str = "vault-token"
+    vaultTokenSecret?: str = "vault"
     vaultTokenSecretNamespace?: str = "crossplane-system"
-    vaultTokenSecretKey?: str = "token"
+    vaultTokenSecretKey?: str = "terraform.tfvars"
 
 # Function to generate Terraform HCL for a single Vault Kubernetes Auth Backend
 generateSingleVaultAuthTerraform = lambda auth: K8sAuth -> str {
@@ -108,6 +108,11 @@ output "auth_role_name" {
 }"""
 }
 
+# Helper function to convert a list to a JSON array string
+_listToJson = lambda items: [str] -> str {
+    '["' + '","'.join(items) + '"]'
+}
+
 # Function to create a single Vault Kubernetes auth backend with varFiles support
 createSingleVaultAuth = lambda auth: K8sAuth, config: VaultConfig {
     terraformCode = generateSingleVaultAuthTerraform(auth)
@@ -116,10 +121,10 @@ createSingleVaultAuth = lambda auth: K8sAuth, config: VaultConfig {
         "auth_name" = auth.name
         "cluster_name" = auth.clusterName
         "vault_addr" = auth.vaultAddr
-        "skip_tls_verify" = str(auth.skipTlsVerify or False)
-        "token_policies" = str(auth.tokenPolicies or [])
+        "skip_tls_verify" = "true" if auth.skipTlsVerify else "false"
+        "token_policies" = _listToJson(auth.tokenPolicies or [])
         "token_ttl" = str(auth.tokenTtl or 3600)
-        "bound_service_account_namespaces" = str(auth.boundServiceAccountNamespaces or ["default"])
+        "bound_service_account_namespaces" = _listToJson(auth.boundServiceAccountNamespaces or ["default"])
     }
 
     # Create workspace - this returns a list
@@ -130,17 +135,17 @@ createSingleVaultAuth = lambda auth: K8sAuth, config: VaultConfig {
         variables = variables
     )
 
-    # Add varFiles for vault token from Kubernetes secret to each workspace in the list
+    # Add varFiles to each workspace - let KCL infer the type
     [
         workspace | {
             spec.forProvider.varFiles = [{
                 source = "SecretKey"
+                format = "HCL"
                 secretKeyRef = {
                     namespace = config.vaultTokenSecretNamespace or "crossplane-system"
-                    name = config.vaultTokenSecret or "vault-token"
-                    key = config.vaultTokenSecretKey or "token"
+                    name = config.vaultTokenSecret or "vault"
+                    key = config.vaultTokenSecretKey or "terraform.tfvars"
                 }
-                format = "HCL"
             }]
         } for workspace in workspaces
     ]
