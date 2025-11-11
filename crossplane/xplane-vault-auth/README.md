@@ -1,6 +1,7 @@
 # xplane-vault-auth
 
 ```bash
+cd examples
 kcl run vault-k8s-auth.k -D params='{
     "oxr": {
       "spec": {
@@ -15,6 +16,10 @@ kcl run vault-k8s-auth.k -D params='{
     }
   }' --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}' | kubectl apply -f -
 ```
+
+* seperate clustername from tf provider name
+* add sa token + crt
+* add crossplane config
 
 ```bash
 ---
