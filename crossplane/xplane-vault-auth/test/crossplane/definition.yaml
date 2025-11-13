@@ -22,6 +22,26 @@ spec:
           spec:
             type: object
             properties:
+              # ✅ ADD THIS FIRST - Crossplane needs this to track managed resources
+              resourceRefs:
+                type: array
+                description: "References to managed resources created by this composition"
+                items:
+                  type: object
+                  properties:
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                    - apiVersion
+                    - kind
+                    - name
+              # Your existing fields below
               clusterName:
                 type: string
                 description: "Kubernetes cluster name for Vault auth backend"
