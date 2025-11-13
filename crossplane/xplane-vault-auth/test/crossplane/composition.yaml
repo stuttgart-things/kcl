@@ -1,0 +1,23 @@
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vault-k8s-auth-kcl
+  labels:
+    crossplane.io/xrd: xvaultk8sauths.vault.crossplane.io
+spec:
+  compositeTypeRef:
+    apiVersion: vault.crossplane.io/v1alpha1
+    kind: XVaultK8sAuth
+  mode: Pipeline
+  pipeline:
+  - step: vault-auth
+    functionRef:
+      name: function-kcl
+    input:
+      apiVersion: krm.kcl.dev/v1alpha1
+      kind: KCLInput
+      metadata:
+        name: vault-auth
+      spec:
+        source: oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.0.1

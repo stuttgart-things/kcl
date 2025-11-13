@@ -15,11 +15,3 @@
     reg = "ghcr.io"
     repo = "kcl-lang/k8s"
     oci_tag = "1.31"
-  [dependencies.xplane-vault-auth-base]
-    name = "xplane-vault-auth-base"
-    full_name = "xplane-vault-auth-base_0.4.0"
-    version = "0.4.0"
-    sum = "xe2M9sNoNx0IkFXfyAX/TjqHTljWfik0Hx+VtESn754="
-    reg = "ghcr.io"
-    repo = "stuttgart-things/xplane-vault-auth-base:0.4.0"
-    oci_tag = "0.4.0"
