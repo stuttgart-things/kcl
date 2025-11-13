@@ -1,11 +1,7 @@
 [package]
 name = "xplane-vault-auth"
-version = "0.3.0"
-description = "KCL module for creating Vault Kubernetes authentication backends using Crossplane and Terraform provider with count-based approach"
-edition = "v0.11.0"
+edition = "v0.11.2"
+version = "0.0.1"
 
 [dependencies]
-crossplane-provider-terraform = { oci = "oci://ghcr.io/stuttgart-things/crossplane-provider-terraform", tag = "0.1.0" }
-
-[profile]
-entries = ["main.k"]
+xplane-vault-auth-base = { oci = "oci://ghcr.io/stuttgart-things/xplane-vault-auth-base:0.4.0", tag = "0.4.0", version = "0.4.0" }
