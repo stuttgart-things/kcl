@@ -1,11 +1,18 @@
 import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
 import crossplane_provider_kubernetes.v1alpha2.kubernetes_crossplane_io_v1alpha2_object as k8s
 
-# --- Get XR spec fields ---
+# --- Get XR spec fields with environment variable style defaults ---
 configName = option("params")?.oxr?.spec?.name or "crossplane-deployment"
 targetNamespace = option("params")?.oxr?.spec?.targetNamespace or "crossplane-system"
 version = option("params")?.oxr?.spec?.version or "1.20.0"
 clusterName = option("params")?.oxr?.spec?.clusterName or "kind"
+
+# Skip flags - explicitly set to True to skip (default: False = install everything)
+_skipCrossplaneDeploymentValue = option("params")?.oxr?.spec?.skipCrossplaneDeployment
+skipCrossplaneDeployment = True if _skipCrossplaneDeploymentValue == True else False
+
+_skipNamespaceCreationValue = option("params")?.oxr?.spec?.skipNamespaceCreation
+skipNamespaceCreation = True if _skipNamespaceCreationValue == True else False
 
 # Crossplane specific configuration
 args = option("params")?.oxr?.spec?.args or [
@@ -14,33 +21,73 @@ args = option("params")?.oxr?.spec?.args or [
     "--enable-external-secret-stores"
 ]
 
-# Provider packages - default list matching helmfile
+# Provider packages with version defaults matching environment variables
+helmProviderVersion = option("params")?.oxr?.spec?.helmProviderVersion or "v0.21.0"
+k8sProviderVersion = option("params")?.oxr?.spec?.k8sProviderVersion or "v0.18.0"
+
 providers = option("params")?.oxr?.spec?.providers or [
-    "xpkg.upbound.io/crossplane-contrib/provider-helm:v0.21.0",
-    "xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v0.18.0"
+    "xpkg.upbound.io/crossplane-contrib/provider-helm:{}".format(helmProviderVersion),
+    "xpkg.upbound.io/crossplane-contrib/provider-kubernetes:{}".format(k8sProviderVersion)
 ]
 
-# Boolean flag for Terraform provider with explicit False checking
+# Deploy Terraform provider by default (set to False to disable)
 _deployTerraformProviderValue = option("params")?.oxr?.spec?.deployTerraformProvider
-deployTerraformProvider = True if _deployTerraformProviderValue == True else False
+deployTerraformProvider = False if _deployTerraformProviderValue == False else True
 
-# Terraform provider configuration
+# Terraform provider configuration with environment variable style defaults
+# NOTE: Using crossplane-contrib package (not upbound) and v1.0.0 version
+terraformProviderVersion = option("params")?.oxr?.spec?.terraformProviderVersion or "v1.0.0"
+terraformProviderImage = option("params")?.oxr?.spec?.terraformProviderImage or "ghcr.io/stuttgart-things/sthings-cptf:1.12.0"
+terraformS3SecretName = option("params")?.oxr?.spec?.terraformS3SecretName or "s3"
+
 terraformConfig = option("params")?.oxr?.spec?.terraformConfig or {
     configName = "terraform-runtime-config"
-    s3SecretName = "terraform-s3-credentials" # pragma: allowlist secret
-    image = "upbound/provider-terraform:v0.17.0"
-    poll = "60s"
+    s3SecretName = terraformS3SecretName
+    image = terraformProviderImage
+    poll = "10m"
     reconcileRate = "10"
-    package = "xpkg.upbound.io/upbound/provider-terraform"
-    version = "v0.17.0"
+    package = "xpkg.upbound.io/crossplane-contrib/provider-terraform"
+    version = terraformProviderVersion
 }
 
-# Secrets for Terraform provider (if needed)
-_secretsProvided = option("params")?.oxr?.spec
-secrets = _secretsProvided.secrets if "secrets" in _secretsProvided else {}
+# Secrets for Terraform provider (if needed) - safe handling
+_secretsProvided = option("params")?.oxr?.spec or {}
+secrets = _secretsProvided.secrets if "secrets" in _secretsProvided and _secretsProvided else {}
 
 # Create a safe resource name from cluster name (replace dots, underscores with dashes)
 safeClusterName = clusterName.replace(".", "-").replace("_", "-")
+
+# Namespace object for Crossplane
+namespace_object = k8s.Object {
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
+    metadata = {
+        name = "namespace-${targetNamespace.replace('_', '-').replace('.', '-')}-${safeClusterName}"
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "crossplane-namespace-${targetNamespace.replace('_', '-').replace('.', '-')}-${safeClusterName}"
+        }
+    }
+    spec = {
+        forProvider = {
+            manifest = {
+                apiVersion = "v1"
+                kind = "Namespace"
+                metadata = {
+                    name = targetNamespace
+                    labels = {
+                        "app.kubernetes.io/managed-by" = "crossplane"
+                        "crossplane.io/config" = configName
+                        "crossplane.io/cluster" = safeClusterName
+                    }
+                }
+            }
+        }
+        managementPolicies = ["*"]
+        providerConfigRef = {
+            name = clusterName
+        }
+    }
+}
 
 # Main Crossplane deployment
 crossplane_release = helm.Release {
@@ -75,14 +122,14 @@ crossplane_release = helm.Release {
     }
 }
 
-# Terraform Provider DeploymentRuntimeConfig
-terraform_runtime_config = k8s.Object {
+# Terraform Provider DeploymentRuntimeConfig - Wrapped in Object
+terraform_deployment_runtime_config = k8s.Object {
     apiVersion = "kubernetes.crossplane.io/v1alpha2"
     kind = "Object"
     metadata = {
         name = "terraform-runtime-config-${safeClusterName}"
         annotations = {
-            "krm.kcl.dev/composition-resource-name" = "terraform-runtime-config-{}-{}".format(configName, safeClusterName)
+            "krm.kcl.dev/composition-resource-name" = "terraform-deployment-runtime-config-{}-{}".format(configName, safeClusterName)
         }
     }
     spec = {
@@ -134,8 +181,8 @@ terraform_runtime_config = k8s.Object {
     }
 }
 
-# Terraform Provider
-terraform_provider = k8s.Object {
+# Terraform Provider - Wrapped in Object
+terraform_provider_resource = k8s.Object {
     apiVersion = "kubernetes.crossplane.io/v1alpha2"
     kind = "Object"
     metadata = {
@@ -206,39 +253,8 @@ secret_objects = [
     for secretName, secretConfig in secrets
 ]
 
-# Namespace object for Crossplane
-namespace_object = k8s.Object {
-    apiVersion = "kubernetes.crossplane.io/v1alpha2"
-    kind = "Object"
-    metadata = {
-        name = "namespace-${targetNamespace.replace('_', '-').replace('.', '-')}-${safeClusterName}"
-        annotations = {
-            "krm.kcl.dev/composition-resource-name" = "crossplane-namespace-${targetNamespace.replace('_', '-').replace('.', '-')}-${safeClusterName}"
-        }
-    }
-    spec = {
-        forProvider = {
-            manifest = {
-                apiVersion = "v1"
-                kind = "Namespace"
-                metadata = {
-                    name = targetNamespace
-                    labels = {
-                        "app.kubernetes.io/managed-by" = "crossplane"
-                        "crossplane.io/config" = configName
-                        "crossplane.io/cluster" = safeClusterName
-                    }
-                }
-            }
-        }
-        managementPolicies = ["*"]
-        providerConfigRef = {
-            name = clusterName
-        }
-    }
-}
-
-# Generate items conditionally - Namespace first, then Crossplane release, then Terraform resources if enabled
-items = [namespace_object, crossplane_release] + (
-    [terraform_runtime_config, terraform_provider] + secret_objects if deployTerraformProvider else []
-)
+# Generate items conditionally
+namespace_items = [namespace_object] if not skipNamespaceCreation else []
+crossplane_items = [crossplane_release] if not skipCrossplaneDeployment else []
+terraform_resources = [terraform_deployment_runtime_config, terraform_provider_resource] + secret_objects if deployTerraformProvider else []
+items = namespace_items + crossplane_items + terraform_resources
