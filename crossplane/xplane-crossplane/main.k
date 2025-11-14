@@ -28,17 +28,17 @@ _deployTerraformProviderValue = option("params")?.oxr?.spec?.deployTerraformProv
 deployTerraformProvider = True if _deployTerraformProviderValue == True else False
 
 # Terraform provider configuration with environment variable style defaults
-terraformProviderVersion = option("params")?.oxr?.spec?.terraformProviderVersion or "v0.21.0"
+terraformProviderVersion = option("params")?.oxr?.spec?.terraformProviderVersion or "v1.0.0"
 terraformProviderImage = option("params")?.oxr?.spec?.terraformProviderImage or "ghcr.io/stuttgart-things/sthings-cptf:1.12.0"
 terraformS3SecretName = option("params")?.oxr?.spec?.terraformS3SecretName or "s3"
 
 terraformConfig = option("params")?.oxr?.spec?.terraformConfig or {
     configName = "terraform-runtime-config"
     s3SecretName = terraformS3SecretName
-    image = terraformProviderImage
+terraformProviderVersion = option("params")?.oxr?.spec?.terraformProviderVersion or "v1.0.0"
     poll = "10m"
     reconcileRate = "10"
-    package = "xpkg.upbound.io/upbound/provider-terraform"
+    package = "xpkg.upbound.io/crossplane-contrib/provider-terraform"
     version = terraformProviderVersion
 }
 
