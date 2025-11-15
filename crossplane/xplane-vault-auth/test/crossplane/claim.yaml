@@ -2,17 +2,17 @@
 apiVersion: vault.crossplane.io/v1alpha1
 kind: VaultK8sAuth
 metadata:
-  name: vault-auth-demo
+  name: demo-vault-auth
   namespace: default
 spec:
   clusterName: default
   vaultAddr: https://vault.demo-infra.sthings-vsphere.labul.sva.de
   vaultTokenSecret: vault # pragma: allowlist secret
   k8sAuths:
-  - name: frontend
+  - name: frontend1
     tokenPolicies:
     - read-secrets
-  - name: backend
+  - name: backend1
     tokenPolicies:
     - read-secrets
     - write-logs
