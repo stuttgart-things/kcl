@@ -1,3 +1,4 @@
+---
 name: Repository Linting
 
 on:
@@ -16,64 +17,14 @@ permissions:
 
 jobs:
   lint-repository:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Install Dagger CLI
-        run: |
-          cd /usr/local
-          curl -L https://dl.dagger.io/dagger/install.sh | sudo sh
-          dagger version
-
-      - name: Run repository linting
-        run: |
-          dagger call \
-            -m github.com/stuttgart-things/blueprints/repository-linting@v1.15.0 \
-            validate-multiple-technologies \
-            --src ./ \
-            export --path /tmp/kcl-repo-findings.txt
-
-      - name: Display linting results
-        if: always()
-        run: |
-          if [ -f /tmp/kcl-repo-findings.txt ]; then
-            echo "==> Repository Linting Results"
-            cat /tmp/kcl-repo-findings.txt
-
-            # Check if there are any findings
-            if [ -s /tmp/kcl-repo-findings.txt ]; then
-              echo ""
-              echo "⚠️  Linting findings detected. Please review the output above."
-            else
-              echo "✅ No linting issues found"
-            fi
-          else
-            echo "❌ Linting output file not found"
-            exit 1
-          fi
-
-      - name: Upload linting results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linting-results
-          path: /tmp/kcl-repo-findings.txt
-          retention-days: 30
-
-      - name: Add results to summary
-        if: always()
-        run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-          ## 🔍 Repository Linting Results
-
-          EOF
-
-          if [ -f /tmp/kcl-repo-findings.txt ]; then
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat /tmp/kcl-repo-findings.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          else
-            echo '❌ No results file generated' >> $GITHUB_STEP_SUMMARY
-          fi
+    uses: stuttgart-things/github-workflow-templates/.github/workflows/call-repository-linting.yaml@main
+    with:
+      runs-on: ubuntu-latest
+      app-directory: "./"
+      output-file: "/tmp/kcl-repo-findings.txt"
+      continue-error: "true"
+      branch-name: main
+      dagger-version: "0.19.3"
+      dagger-module-version: v1.15.0
+      environment-name: linting
+      artifact-retention-days: 30
