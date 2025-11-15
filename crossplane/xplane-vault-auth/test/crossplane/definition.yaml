@@ -21,100 +21,47 @@ spec:
         properties:
           spec:
             type: object
+            x-kubernetes-preserve-unknown-fields: true
             properties:
-              # ✅ ADD THIS FIRST - Crossplane needs this to track managed resources
-              resourceRefs:
-                type: array
-                description: "References to managed resources created by this composition"
-                items:
-                  type: object
-                  properties:
-                    apiVersion:
-                      type: string
-                    kind:
-                      type: string
-                    name:
-                      type: string
-                    namespace:
-                      type: string
-                  required:
-                    - apiVersion
-                    - kind
-                    - name
-              # Your existing fields below
               clusterName:
                 type: string
-                description: "Kubernetes cluster name for Vault auth backend"
-                default: "default"
+                description: "Kubernetes cluster name"
               vaultAddr:
                 type: string
-                description: "Vault server address (e.g., https://vault.example.com)"
+                description: "Vault server address"
               vaultTokenSecret:
                 type: string
                 description: "Name of the secret containing Vault token"
-                default: "vault"
-              vaultTokenSecretNamespace:
-                type: string
-                description: "Namespace of the Vault token secret"
-                default: "crossplane-system"
-              vaultTokenSecretKey:
-                type: string
-                description: "Key in the secret containing terraform.tfvars with Vault token"
-                default: "terraform.tfvars"
               k8sAuths:
                 type: array
                 description: "List of Kubernetes auth backends to create"
                 items:
                   type: object
-                  required:
-                  - name
                   properties:
                     name:
                       type: string
-                      description: "Name of the auth backend and service account"
-                    clusterName:
-                      type: string
-                      description: "Override cluster name for this auth backend"
-                    vaultAddr:
-                      type: string
-                      description: "Override Vault address for this auth backend"
-                    skipTlsVerify:
-                      type: boolean
-                      description: "Skip TLS verification for Vault"
-                      default: false
+                      description: "Authentication backend name"
                     tokenPolicies:
                       type: array
-                      description: "List of Vault policies to attach to tokens"
+                      description: "List of policies for the auth backend"
                       items:
                         type: string
-                      default: []
                     tokenTtl:
                       type: integer
                       description: "Token TTL in seconds"
                       default: 3600
                     boundServiceAccountNamespaces:
                       type: array
-                      description: "Namespaces allowed to authenticate"
+                      description: "List of namespaces allowed to authenticate"
                       items:
                         type: string
                       default:
-                      - "default"
+                      - default
+                  required:
+                  - name
+                  - tokenPolicies
             required:
             - clusterName
             - vaultAddr
+            - vaultTokenSecret
             - k8sAuths
-          status:
-            type: object
-            properties:
-              authBackends:
-                type: array
-                description: "Status of created auth backends"
-                items:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-                    path:
-                      type: string
-                    ready:
-                      type: boolean

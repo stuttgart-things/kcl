@@ -46,5 +46,6 @@ repos:
                 "--exclude-files", "crossplane/xplane-base/README.md",
                 "--exclude-files", "crossplane/xplane-vcluster/README.md",
                 "--exclude-files", "crossplane/xplane-vault-auth/README.md",
-                "--exclude-files", "crossplane/xplane-vault-auth-base/README.md"
+                "--exclude-files", "crossplane/xplane-vault-auth-base/README.md",
+                "--exclude-files", "crossplane/xplane-crossplane/README.md"
         ]
