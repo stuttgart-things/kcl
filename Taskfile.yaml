@@ -5,6 +5,20 @@ includes:
     taskfile: https://raw.githubusercontent.com/stuttgart-things/platform-engineering-showcase/refs/heads/main/taskfiles/git.yaml
 
 tasks:
+  lint-repository:
+    desc: Lint repository using Dagger blueprint function
+    cmds:
+      - |
+        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+        --src {{ .CODE_DIR }} \
+        export --path {{ .EXPORT_PATH }}
+    vars:
+      MODULE: github.com/stuttgart-things/blueprints/repository-linting
+      VERSION: v1.15.0
+      FUNCTION: validate-multiple-technologies
+      CODE_DIR: "./"
+      EXPORT_PATH: /tmp/kcl-repo-findings.txt
+
   create:
     desc: Create new module
     cmds:
