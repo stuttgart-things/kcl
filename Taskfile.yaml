@@ -19,6 +19,38 @@ tasks:
       CODE_DIR: "./"
       EXPORT_PATH: /tmp/kcl-repo-findings.txt
 
+  push-module:
+    desc: Push KCL module using Dagger function
+    cmds:
+      - |
+        MODULE_DIRS=$(find . -maxdepth 3 -type f -name 'kcl.mod' ! -path './tests/*' ! -path './.git/*' ! -path './.task/*' -exec dirname {} \; | sed 's|^\./||' | sort)
+
+        if [ -z "$MODULE_DIRS" ]; then
+          echo "No KCL modules found with kcl.mod files"
+          exit 1
+        fi
+
+        MODULE_DIR=$(echo "$MODULE_DIRS" | gum choose --header "Select module directory:")
+
+        if [ -z "$MODULE_DIR" ]; then
+          echo "No module selected"
+          exit 1
+        fi
+
+        MODULE_NAME=$(yq -p toml -r '.package.name' "${MODULE_DIR}/kcl.mod")
+
+        dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
+        --src "${MODULE_DIR}" \
+        --module-name "${MODULE_NAME}" \
+        --user env:GITHUB_USER \
+        --password env:GITHUB_TOKEN \
+        --address {{ .ADDRESS }}
+    vars:
+      MODULE: github.com/stuttgart-things/dagger/kcl
+      VERSION: v0.42.0
+      FUNCTION: push-module
+      ADDRESS: oci://ghcr.io/stuttgart-things
+
   create:
     desc: Create new module
     cmds:
@@ -54,7 +86,12 @@ tasks:
           export --path={{ .EXPORT_ROOT }}/${MODULE_NAME}
 
         # Add module name to kcl.mod using yq
-        yq -i '.name += ["'"${MODULE_NAME}"'"]' {{ .EXPORT_ROOT }}/${MODULE_NAME}/kcl.mod
+        yq -p toml -i '.package.name = "'"${MODULE_NAME}"'"' {{ .EXPORT_ROOT }}/${MODULE_NAME}/kcl.mod
+
+  default:
+    desc: Default task is select & do (work)
+    cmds:
+      - task do
 
   do:
     desc: Select a task to run
@@ -65,3 +102,13 @@ tasks:
 
         # Run the selected task
         [ -n "$task_name" ] && task "$task_name"
+
+  tag:
+    desc: Tag repo
+    cmds:
+      - task: commit
+      - |
+        echo "Enter to be created (remote) tag on the repository:"
+        read TAG_NAME;
+        git tag -a ${TAG_NAME} -m 'updated for ${TAG_NAME} on {{ .DATE }}'
+        git push origin --tags
