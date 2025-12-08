@@ -1,5 +1,5 @@
 # Default configuration values with ability to override via options
-config = {
+_config = {
     # Basic metadata
     name = option("name") or "flux"
     namespace = option("namespace") or "flux-system"
@@ -7,7 +7,7 @@ config = {
     reconcileEvery = option("reconcileEvery") or "1h"
     reconcileTimeout = option("reconcileTimeout") or "5m"
     # Distribution settings
-    version = option("version") or "2.4"
+    version = str(option("version")) if option("version") else "2.4"
     registry = option("registry") or "ghcr.io/fluxcd"
     artifact = option("artifact") or "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
     # Components - can be overridden as a list
@@ -50,7 +50,7 @@ _sopsPatch = {
   value:
     provider: sops
     secretRef:
-      name: ${config.sopsSecretName}"""
+      name: ${_config.sopsSecretName}"""
     target = {
         group = "kustomize.toolkit.fluxcd.io"
         version = "v1"
@@ -65,88 +65,88 @@ _perfPatch = {
     }
     patch = """- op: add
   path: /spec/template/spec/containers/0/args/-
-  value: --concurrent=${config.concurrent}
+  value: --concurrent=${_config.concurrent}
 - op: add
   path: /spec/template/spec/containers/0/args/-
-  value: --requeue-dependency=${config.requeueDependency}"""
+  value: --requeue-dependency=${_config.requeueDependency}"""
 }
 
 # Combine patches conditionally
-_patches = [_sopsPatch] if config.sopsEnabled else []
+_patches = [_sopsPatch] if _config.sopsEnabled else []
 _patches += [_perfPatch]
 
 # Create optional Kubernetes Secrets
-gitSecret = {
+_gitSecret = {
     apiVersion = "v1"
     kind = "Secret"
     metadata = {
-        name = config.gitPullSecret
-        namespace = config.namespace
+        name = _config.gitPullSecret
+        namespace = _config.namespace
     }
     type = "Opaque"
     stringData = {
-        username = config.gitUsername
-        password = config.gitPassword
+        username = _config.gitUsername
+        password = _config.gitPassword
     }
 }
 
-sopsSecret = {
+_sopsSecret = {
     apiVersion = "v1"
     kind = "Secret"
     metadata = {
-        name = config.sopsSecretName
-        namespace = config.namespace
+        name = _config.sopsSecretName
+        namespace = _config.namespace
     }
     type = "Opaque"
     stringData = {
-        "age.agekey" = config.sopsAgeKey
+        "age.agekey" = _config.sopsAgeKey
     }
 }
 
 # Create the FluxInstance Custom Resource
-fluxInstance = {
+_fluxInstance = {
     apiVersion = "fluxcd.controlplane.io/v1"
     kind = "FluxInstance"
     metadata = {
-        name = config.name
-        namespace = config.namespace
+        name = _config.name
+        namespace = _config.namespace
         annotations = {
-            "fluxcd.controlplane.io/reconcileEvery" = config.reconcileEvery
-            "fluxcd.controlplane.io/reconcileTimeout" = config.reconcileTimeout
+            "fluxcd.controlplane.io/reconcileEvery" = _config.reconcileEvery
+            "fluxcd.controlplane.io/reconcileTimeout" = _config.reconcileTimeout
         }
     }
     spec = {
         distribution = {
-            version = config.version
-            registry = config.registry
-            artifact = config.artifact
+            version = _config.version
+            registry = _config.registry
+            artifact = _config.artifact
         }
-        components = config.components
+        components = _config.components
         cluster = {
-            type = config.clusterType
-            multitenant = config.multitenant
-            networkPolicy = config.networkPolicy
-            domain = config.domain
+            type = _config.clusterType
+            multitenant = _config.multitenant
+            networkPolicy = _config.networkPolicy
+            domain = _config.domain
         }
         kustomize = {
             patches = _patches
         }
         sync = {
             kind = "GitRepository"
-            url = config.gitUrl
-            ref = config.gitRef
-            path = config.gitPath
-            pullSecret = config.gitPullSecret
+            url = _config.gitUrl
+            ref = _config.gitRef
+            path = _config.gitPath
+            pullSecret = _config.gitPullSecret
         }
     }
 }
 
 # Build items array based on configuration
-_items = [fluxInstance]
+_items = [_fluxInstance]
 
 # Conditionally add secrets if renderSecrets is enabled and credentials are provided
-_gitSecretItems = [gitSecret] if (config.renderSecrets and config.gitUsername and config.gitPassword) else []
-_sopsSecretItems = [sopsSecret] if (config.renderSecrets and config.sopsEnabled and config.sopsAgeKey) else []
+_gitSecretItems = [_gitSecret] if (_config.renderSecrets and _config.gitUsername and _config.gitPassword) else []
+_sopsSecretItems = [_sopsSecret] if (_config.renderSecrets and _config.sopsEnabled and _config.sopsAgeKey) else []
 
-# Output
+# Output - only this will be rendered
 items = _items + _gitSecretItems + _sopsSecretItems

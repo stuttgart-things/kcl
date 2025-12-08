@@ -58,7 +58,7 @@ kcl run main.k
 Deploy with ingress enabled:
 
 ```bash
-kcl run main.k -D params='{"oxr":{"spec":{"enableIngress":true}}}'
+kcl run main.k -D params='{"oxr":{"spec":{"enableIngress":true, "clusterName": "hello"}}}' | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}'
 ```
 
 ### Custom Hostname and Domain
@@ -82,7 +82,8 @@ kcl run main.k -D params='{"oxr":{"spec":{"enableIngress":true,"createCertificat
 Deploy with Vault integration:
 
 ```bash
-kcl run main.k -D params='{"oxr":{"spec":{"enableAvp":true,"vaultAddr":"https://vault.example.com","vaultNamespace":"admin","vaultRoleID":"your-role-id","vaultSecretID":"your-secret-id"}}}'
+kcl run main.k \
+-D params='{"oxr":{"spec":{"enableAvp":true,"vaultAddr":"https://vault.example.com","vaultNamespace":"admin","vaultRoleID":"your-role-id","vaultSecretID":"your-secret-id"}}}'
 ```
 
 ### Full Configuration

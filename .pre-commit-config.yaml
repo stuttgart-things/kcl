@@ -1,3 +1,4 @@
+---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -7,7 +8,7 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-symlinks
-      #- id: check-yaml
+      # - id: check-yaml
       - id: detect-private-key
   - repo: https://github.com/jumanjihouse/pre-commit-hooks
     rev: 3.0.0  # or specific git tag
@@ -42,10 +43,20 @@ repos:
         language: python
         # for backward compatibility
         files: .*  # all files
-        args: ["--exclude-files", ".dagger/postgresdb/dagger.json",
-                "--exclude-files", "crossplane/xplane-base/README.md",
-                "--exclude-files", "crossplane/xplane-vcluster/README.md",
-                "--exclude-files", "crossplane/xplane-vault-auth/README.md",
-                "--exclude-files", "crossplane/xplane-vault-auth-base/README.md",
-                "--exclude-files", "crossplane/xplane-crossplane/README.md"
-        ]
+        args:
+          - "--exclude-files"
+          - ".dagger/postgresdb/dagger.json"
+          - "--exclude-files"
+          - "crossplane/xplane-base/README.md"
+          - "--exclude-files"
+          - "crossplane/xplane-vcluster/README.md"
+          - "--exclude-files"
+          - "crossplane/xplane-vault-auth/README.md"
+          - "--exclude-files"
+          - "crossplane/xplane-vault-auth-base/README.md"
+          - "--exclude-files"
+          - "crossplane/xplane-crossplane/README.md"
+          - "--exclude-files"
+          - "kubernetes/argocd/README.md"
+          - "--exclude-files"
+          - "kubernetes/crossplane/README.md"

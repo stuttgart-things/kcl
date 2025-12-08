@@ -1,3 +1,4 @@
+---
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -11,8 +12,8 @@ spec:
     kind: XVaultAuth
   mode: Pipeline
   pipeline:
-  - step: vault-auth
-    functionRef:
+    - step: vault-auth
+      functionRef:
       name: function-kcl
     input:
       apiVersion: krm.kcl.dev/v1alpha1

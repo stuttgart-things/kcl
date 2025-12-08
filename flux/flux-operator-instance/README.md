@@ -200,6 +200,23 @@ kcl run kcl-flux-instance \
   -D networkPolicy=true
 ```
 
+```
+kcl --quiet main.k \
+-D name=my-flux \
+-D namespace=flux-system \
+-D version=2.4 \
+-D gitUrl=https://github.com/my-org/my-repo.git \
+-D gitRef=refs/heads/main \
+-D gitPath=clusters/prod \
+-D gitPullSecret=my-git-token \
+-D renderSecrets=true \
+-D gitUsername=myuser \
+-D gitPassword=ghp_xxxxxxxxxxxxx \
+-D sopsAgeKey="AGE-SECRET-KEY-1XXXXXX" \
+--format yaml | grep -v "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //'
+```
+
+
 ## Prerequisites
 
 - KCL >= v0.11.2
