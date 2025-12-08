@@ -44,3 +44,54 @@ schema CloudConfigSecretConfig:
 
     check:
         len(name) > 0, "name cannot be empty"
+
+schema VirtualMachineConfig:
+    """
+    KubeVirt VirtualMachine configuration for Harvester
+
+    Args:
+        name: str, required - Name of the VM
+        namespace: str, default "default" - Namespace for the VM
+        hostname: str, optional - Hostname for the VM (defaults to name if not set)
+        description: str, default "" - Description annotation
+        osLabel: str, default "linux" - OS label
+        runStrategy: str, default "RerunOnFailure" - Run strategy
+        cpuCores: int, default 8 - Number of CPU cores
+        cpuSockets: int, default 1 - Number of CPU sockets
+        cpuThreads: int, default 1 - Number of CPU threads
+        memory: str, default "12Gi" - Memory allocation
+        pvcName: str, required - Name of the PVC to use for disk
+        secretName: str, required - Name of the cloud-init secret
+        diskName: str, default "disk-0" - Name of the primary disk volume
+        machineType: str, default "q35" - Machine type (q35, pc)
+        networkNamespace: str, optional - Network namespace (defaults to VM namespace)
+        networkName: str, default "vms" - Network name (without namespace prefix)
+        evictionStrategy: str, default "LiveMigrateIfPossible" - Eviction strategy
+        terminationGracePeriod: int, default 120 - Termination grace period in seconds
+    """
+    name: str
+    namespace: str = "default"
+    hostname: str = ""
+    description: str = ""
+    osLabel: str = "linux"
+    runStrategy: str = "RerunOnFailure"
+    cpuCores: int = 8
+    cpuSockets: int = 1
+    cpuThreads: int = 1
+    memory: str = "12Gi"
+    pvcName: str
+    secretName: str
+    diskName: str = "disk-0"
+    machineType: str = "q35"
+    networkNamespace: str = ""
+    networkName: str = "vms"
+    evictionStrategy: str = "LiveMigrateIfPossible"
+    terminationGracePeriod: int = 120
+
+    check:
+        len(name) > 0, "name cannot be empty"
+        len(pvcName) > 0, "pvcName cannot be empty"
+        len(secretName) > 0, "secretName cannot be empty"
+        cpuCores > 0, "cpuCores must be greater than 0"
+        cpuSockets > 0, "cpuSockets must be greater than 0"
+        cpuThreads > 0, "cpuThreads must be greater than 0"
