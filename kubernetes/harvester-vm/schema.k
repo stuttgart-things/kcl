@@ -26,3 +26,21 @@ schema PersistentVolumeClaimConfig:
         len(imageId) > 0, "imageId cannot be empty"
         len(storageClass) > 0, "storageClass cannot be empty"
         volumeMode in ["Block", "Filesystem"], "volumeMode must be Block or Filesystem"
+
+schema CloudConfigSecretConfig:
+    """
+    Cloud-init configuration secret for Harvester VMs
+
+    Args:
+        name: str, required - Name of the secret
+        namespace: str, default "default" - Namespace for the secret
+        userdata: str, default "" - Base64 encoded cloud-init userdata
+        networkdata: str, default "" - Base64 encoded network configuration
+    """
+    name: str
+    namespace: str = "default"
+    userdata: str = ""
+    networkdata: str = ""
+
+    check:
+        len(name) > 0, "name cannot be empty"

@@ -60,3 +60,5 @@ repos:
           - "kubernetes/argocd/README.md"
           - "--exclude-files"
           - "kubernetes/crossplane/README.md"
+          - "--exclude-files"
+          - "kubernetes/harvester-vm/schema.k"
