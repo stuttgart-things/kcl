@@ -4,6 +4,8 @@
 
 ```bash
 kcl run main.k \
+  -D enableVm=false \
+  -D enableCloudConfig=false \
   -D enablePvc=true \
   -D name=dev2-disk-0 \
   -D namespace=default \
@@ -12,7 +14,8 @@ kcl run main.k \
   -D storage=10Gi \
   -D storageClass=longhorn \
   -D volumeMode=Block \
-  -D 'accessModes=["ReadWriteMany"]'
+  -D 'accessModes=["ReadWriteMany"]' \
+  --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}'
 ```
 
 ## CLOUD CONFIG SECRET
@@ -48,7 +51,34 @@ EOF
 
 ```bash
 kcl run main.k \
+  -D enableVm=false \
   -D enablePvc=false \
   -D enableCloudConfig=true \
-  -D userdata=${CLOUDCFG_B64}
+  -D userdata=${CLOUDCFG_B64} \
+  --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}'
+```
+
+## VM
+
+```bash
+kcl run main.k \
+  -D enablePvc=false \
+  -D enableCloudConfig=false \
+  -D enableVm=true \
+  -D vmName=dev2 \
+  -D namespace=default \
+  -D hostname=dev2 \
+  -D description="dev2 vm" \
+  -D osLabel=linux \
+  -D runStrategy=RerunOnFailure \
+  -D cpuCores=8 \
+  -D cpuSockets=1 \
+  -D cpuThreads=1 \
+  -D memory=12Gi \
+  -D pvcName=dev2-disk-0 \
+  -D secretName=dev4 \
+  -D networkName=vms \
+  -D evictionStrategy=LiveMigrateIfPossible \
+  -D terminationGracePeriod=120 \
+--format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}'
 ```
