@@ -2,7 +2,7 @@
 version: 3
 includes:
   git:
-    taskfile: https://raw.githubusercontent.com/stuttgart-things/platform-engineering-showcase/refs/heads/main/taskfiles/git.yaml
+    taskfile: https://raw.githubusercontent.com/stuttgart-things/tasks/refs/heads/main/git/git.yaml
 
 tasks:
   lint-repository:
@@ -23,21 +23,25 @@ tasks:
     desc: Push KCL module using Dagger function
     cmds:
       - |
-        MODULE_DIRS=$(find . -maxdepth 3 -type f -name 'kcl.mod' ! -path './tests/*' ! -path './.git/*' ! -path './.task/*' -exec dirname {} \; | sed 's|^\./||' | sort)
+        MODULE_DIRS=$(find . -maxdepth 3 -type f -name 'kcl.mod' \
+          ! -path './tests/*' ! -path './.git/*' ! -path './.task/*' \
+          -exec dirname {} \; | sed 's|^\./||' | sort)
 
         if [ -z "$MODULE_DIRS" ]; then
           echo "No KCL modules found with kcl.mod files"
           exit 1
         fi
 
-        MODULE_DIR=$(echo "$MODULE_DIRS" | gum choose --header "Select module directory:")
+        MODULE_DIR=$(echo "$MODULE_DIRS" | \
+          gum choose --header "Select module directory:")
 
         if [ -z "$MODULE_DIR" ]; then
           echo "No module selected"
           exit 1
         fi
 
-        MODULE_NAME=$(yq -p toml -r '.package.name' "${MODULE_DIR}/kcl.mod")
+        MODULE_NAME=$(yq -p toml -r '.package.name' \
+          "${MODULE_DIR}/kcl.mod")
 
         dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
         --src "${MODULE_DIR}" \
@@ -59,7 +63,9 @@ tasks:
         mkdir -p "$MODULE_NAME" && cd "$MODULE_NAME"
         kcl mod init
 
-        PROVIDER=$(gum choose "none" "crossplane-provider-kubernetes" "crossplane-provider-aws" "crossplane-provider-azure" --header "Select a provider to add:")
+        PROVIDER=$(gum choose "none" "crossplane-provider-kubernetes" \
+          "crossplane-provider-aws" "crossplane-provider-azure" \
+          --header "Select a provider to add:")
         if [ "$PROVIDER" != "none" ]; then
           kcl mod add "$PROVIDER"
         else
@@ -86,7 +92,8 @@ tasks:
           export --path={{ .EXPORT_ROOT }}/${MODULE_NAME}
 
         # Add module name to kcl.mod using yq
-        yq -p toml -i '.package.name = "'"${MODULE_NAME}"'"' {{ .EXPORT_ROOT }}/${MODULE_NAME}/kcl.mod
+        yq -p toml -i '.package.name = "'"${MODULE_NAME}"'"' \
+          {{ .EXPORT_ROOT }}/${MODULE_NAME}/kcl.mod
 
   default:
     desc: Default task is select & do (work)
@@ -97,8 +104,9 @@ tasks:
     desc: Select a task to run
     cmds:
       - |
-        # Extract task names (keep internal colons, remove only trailing colon)
-        task_name=$(task -l | awk '/^\*/ {print $2}' | sed 's/:$//' | gum choose)
+        # Extract task names (keep internal colons, remove trailing colon)
+        task_name=$(task -l | awk '/^\*/ {print $2}' | \
+          sed 's/:$//' | gum choose)
 
         # Run the selected task
         [ -n "$task_name" ] && task "$task_name"

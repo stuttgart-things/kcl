@@ -1,3 +1,4 @@
+---
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
@@ -11,10 +12,10 @@ spec:
     kind: VaultAuth
     plural: vaultauths
   versions:
-  - name: v1alpha1
-    served: true
-    referenceable: true
-    schema:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
       openAPIV3Schema:
         type: object
         properties:
@@ -57,9 +58,9 @@ spec:
                   type: string
                 description: Annotations for created resources
             required:
-            - name
-            - clusterName
-            - vaultAddr
+              - name
+              - clusterName
+              - vaultAddr
           status:
             type: object
             properties:

@@ -1,3 +1,4 @@
+---
 apiVersion: vault.stuttgart-things.com/v1alpha1
 kind: VaultAuth
 metadata:
