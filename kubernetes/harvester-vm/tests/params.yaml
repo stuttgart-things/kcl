@@ -9,7 +9,7 @@ storage: 20Gi
 storageClass: longhorn
 volumeMode: Block
 accessModes: '["ReadWriteMany"]'
-secretName: dev5-cloud-init
+secretName: dev5-cloud-init # pragma: allowlist secret`
 vmName: dev5
 hostname: dev5
 description: dev5-complete-vm-setup
