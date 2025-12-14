@@ -250,5 +250,14 @@ dagger call -m github.com/stuttgart-things/dagger/kcl run \
     
 </details>
 
+<details>
+  <summary>VM ONLY</summary>
+  
+```bash
+dagger call -m github.com/stuttgart-things/dagger/kcl run \
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+  --parameters "enablePvc=false,enableCloudConfig=false,enableVm=true,secretName=dev5-cloud-init,vmName=dev5,hostname=dev5,description=dev5-complete-vm-setup,osLabel=linux,runStrategy=RerunOnFailure,cpuCores=4,cpuSockets=1,cpuThreads=1,memory=8Gi,pvcName=dev5-disk-0,networkName=vms,evictionStrategy=LiveMigrateIfPossible,terminationGracePeriod=120" \
+  export --path /tmp/harvester-dev5-vm.yaml
+```
 
-
+</details>
