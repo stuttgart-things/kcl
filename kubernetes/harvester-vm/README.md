@@ -214,6 +214,6 @@ kcl run main.k \
 ```bash
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
 --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
---parameters "enablePvc=true,enableCloudConfig=false,enableVm=false,name=dev5-disk-0,namespace=default,imageNamespace=default,imageId=image-t9w92,storage=20Gi,storageClass=longhorn,volumeMode=Block,accessModes=[\"ReadWriteMany\"] \
+--parameters "enablePvc=true,enableCloudConfig=false,enableVm=false,pvcName=dev5-disk-0,namespace=default,imageNamespace=default,imageId=image-t9w92,storage=20Gi,storageClass=longhorn,volumeMode=Block,accessModes=[\"ReadWriteMany\"]" \
 export --path /tmp/harvester-dev5-pvc.yaml
 ```
