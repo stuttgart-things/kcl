@@ -7,7 +7,7 @@ kcl run main.k \
   -D enableVm=false \
   -D enableCloudConfig=false \
   -D enablePvc=true \
-  -D name=dev2-disk-0 \
+  -D pvcName=dev2-disk-0 \
   -D namespace=default \
   -D imageNamespace=default \
   -D imageId=image-t9w92 \
@@ -211,9 +211,44 @@ kcl run main.k \
 
 ### Alternative: Using Dagger directly
 
+<details>
+  <summary>PVC ONLY</summary>
+  
+```bash
+    dagger call -m github.com/stuttgart-things/dagger/kcl run \
+    --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+    --parameters "enablePvc=true,enableCloudConfig=false,enableVm=false,pvcName=dev5-disk-0,namespace=default,imageNamespace=default,imageId=image-t9w92,storage=20Gi,storageClass=longhorn,volumeMode=Block,accessModes=[\"ReadWriteMany\"]" \
+    export --path /tmp/harvester-dev5-pvc.yaml
+```
+    
+</details>
+
+<details>
+  <summary>CLOUD CONFIG SECRET ONLY</summary>
+  
+```bash
+CLOUDCFG_B64=$(cat <<'EOF' | base64 -w0
+#cloud-config
+package_update: true
+packages:
+  - qemu-guest-agent
+runcmd:
+  - - systemctl
+    - enable
+    - --now
+    - qemu-guest-agent.service
+EOF
+)
+```
+
 ```bash
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
---oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
---parameters "enablePvc=true,enableCloudConfig=false,enableVm=false,pvcName=dev5-disk-0,namespace=default,imageNamespace=default,imageId=image-t9w92,storage=20Gi,storageClass=longhorn,volumeMode=Block,accessModes=[\"ReadWriteMany\"]" \
-export --path /tmp/harvester-dev5-pvc.yaml
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+  --parameters "userdata=${CLOUDCFG_B64},enablePvc=false,enableCloudConfig=true,enableVm=false,secretName=dev5-cloud-init" \
+  export --path /tmp/harvester-dev5-cloud.yaml
 ```
+    
+</details>
+
+
+
