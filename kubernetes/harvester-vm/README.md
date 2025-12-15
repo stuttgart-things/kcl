@@ -213,19 +213,19 @@ kcl run main.k \
 
 <details>
   <summary>PVC ONLY</summary>
-  
+
 ```bash
     dagger call -m github.com/stuttgart-things/dagger/kcl run \
     --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
     --parameters "enablePvc=true,enableCloudConfig=false,enableVm=false,pvcName=dev5-disk-0,namespace=default,imageNamespace=default,imageId=image-t9w92,storage=20Gi,storageClass=longhorn,volumeMode=Block,accessModes=[\"ReadWriteMany\"]" \
     export --path /tmp/harvester-dev5-pvc.yaml
 ```
-    
+
 </details>
 
 <details>
   <summary>CLOUD CONFIG SECRET ONLY</summary>
-  
+
 ```bash
 CLOUDCFG_B64=$(cat <<'EOF' | base64 -w0
 #cloud-config
@@ -247,12 +247,12 @@ dagger call -m github.com/stuttgart-things/dagger/kcl run \
   --parameters "userdata=${CLOUDCFG_B64},enablePvc=false,enableCloudConfig=true,enableVm=false,secretName=dev5-cloud-init" \
   export --path /tmp/harvester-dev5-cloud.yaml
 ```
-    
+
 </details>
 
 <details>
   <summary>VM ONLY</summary>
-  
+
 ```bash
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
   --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
