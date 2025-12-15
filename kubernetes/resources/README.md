@@ -4,6 +4,8 @@ Standalone KCL module for rendering basic Kubernetes resources (PersistentVolume
 
 This module is **NOT** designed for Crossplane integration. It renders plain Kubernetes YAML for direct application to clusters.
 
+**Powered by:** KCL Kubernetes library (k8s v1.32.4) for type-safe schema validation
+
 ## Quick Start
 
 ### PVC with -D parameters (fastest)
@@ -40,11 +42,6 @@ kcl run main.k \
   --format yaml
 ```
 
-### Using config file
-
-```bash
-kcl run main.k config.kcl --format yaml
-```
 
 ## Supported Resources
 
@@ -109,10 +106,10 @@ _secret = {
     name = "app-secret"
     namespace = "default"
     type = "Opaque"             # or "kubernetes.io/basic-auth", etc
-    data = {
+    data = {  # pragma: allowlist secret
         username = "admin"
-        password = "secret"
-        api_key = "key123"
+        password = "secret"  # pragma: allowlist secret
+        api_key = "key123"  # pragma: allowlist secret
     }
     labels = {key = "value"}
     annotations = {key = "value"}
@@ -247,7 +244,7 @@ _secret = {
     namespace = "default"
     data = {
         username = "postgres"
-        password = "secret123"
+        password = "secret123"  # pragma: allowlist secret
     }
 }
 
@@ -310,7 +307,23 @@ Single Secret with database credentials:
 kcl run main.k examples/secret-only.kcl --format yaml
 ```
 
-### 3. Multiple Resources (`examples/multi-resources.kcl`)
+### 3. Cloud-Config Secret (`examples/cloud-config-secret.kcl`)
+
+Secret with Base64-encoded cloud-init configuration for Harvester VMs:
+
+```bash
+kcl run main.k examples/cloud-config-secret.kcl --format yaml
+```
+
+### 4. Base64 Secret Guide (`examples/base64-secret-guide.kcl`)
+
+Guide and examples for creating Secrets with Base64-encoded data:
+
+```bash
+kcl run main.k examples/base64-secret-guide.kcl --format yaml
+```
+
+### 5. Multiple Resources (`examples/multi-resources.kcl`)
 
 PostgreSQL stack: PVC + Secret + ConfigMap
 
@@ -318,7 +331,7 @@ PostgreSQL stack: PVC + Secret + ConfigMap
 kcl run main.k examples/multi-resources.kcl --format yaml
 ```
 
-### 4. Full Stack (`examples/full-stack.kcl`)
+### 6. Full Stack (`examples/full-stack.kcl`)
 
 Complete namespace with all resource types:
 
