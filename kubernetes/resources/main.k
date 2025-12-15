@@ -4,6 +4,8 @@ Kubernetes Resources Module
 Standalone module for rendering basic Kubernetes resources (PVC, Secrets, ConfigMaps, etc).
 Resources must be explicitly enabled via configuration (default: all disabled).
 
+Uses official KCL k8s library (v1.32.4) for schema validation and type safety.
+
 Usage with -D parameters:
   kcl run main.k \
     -D enablePvc=True \
@@ -50,6 +52,9 @@ Usage with config file:
   namespaceLabels=<map>
   namespaceAnnotations=<map>
 """
+
+# === IMPORT K8S LIBRARY ===
+import k8s.api.core.v1 as k8sv1
 
 # === CONFIGURATION SCHEMAS ===
 
@@ -101,9 +106,9 @@ _parseList = lambda value: str -> [str] {
 _enablePvcValue = option("enablePvc")
 _enablePvc = True if _enablePvcValue == True or _enablePvcValue == "true" else False
 
-# Secret Enable
+# Secret Enable  # pragma: allowlist secret
 _enableSecretValue = option("enableSecret")
-_enableSecret = True if _enableSecretValue == True or _enableSecretValue == "true" else False
+_enableSecret = True if _enableSecretValue == True or _enableSecretValue == "true" else False  # pragma: allowlist secret
 
 # ConfigMap Enable
 _enableConfigMapValue = option("enableConfigMap")
