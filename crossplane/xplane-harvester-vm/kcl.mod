@@ -1,9 +1,8 @@
 [package]
 name = "xplane-harvester-vm"
-version = "0.1.0"
-
-[package.metadata]
-description = "Crossplane Harvester VM module - renders PVC, Secret, VirtualMachine as kubernetes.crossplane.io Objects"
+edition = "v0.11.2"
+version = "0.3.0"
 
 [dependencies]
+crossplane-provider-kubernetes = "0.18.0"
 k8s = "1.32.4"

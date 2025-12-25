@@ -1,0 +1,67 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xharvestervms.harvester.crossplane.io
+spec:
+  group: harvester.crossplane.io
+  names:
+    kind: XHarvesterVM
+    plural: xharvestervms
+  claimNames:
+    kind: HarvesterVM
+    plural: harvestervms
+  connectionSecretKeys:
+    - username
+    - password
+    - hostname
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                cloudInitHostname:
+                  type: string
+                  description: Hostname for the VM
+                  example: myvm
+                cloudInitUsername:
+                  type: string
+                  description: Username for cloud-init
+                  example: admin
+                cloudInitPassword:
+                  type: string
+                  description: Password for the user
+                  example: MySecurePass123
+                cloudInitSshKey:
+                  type: string
+                  description: SSH public key for the user
+                enablePvc:
+                  type: boolean
+                  description: Enable PVC for storage
+                  default: false
+                enableCloudConfig:
+                  type: boolean
+                  description: Enable cloud-config
+                  default: true
+                enableVm:
+                  type: boolean
+                  description: Enable VM creation
+                  default: false
+              required:
+                - cloudInitHostname
+                - cloudInitUsername
+                - cloudInitPassword
+            status:
+              type: object
+              properties:
+                secretName:
+                  type: string
+                  description: Name of the generated secret
+                cloudConfigReady:
+                  type: boolean
+                  description: Whether cloud-config is ready

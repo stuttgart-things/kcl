@@ -22,11 +22,45 @@ _pvcConfig = schema.PersistentVolumeClaimConfig {
     accessModes = option("accessModes") or ["ReadWriteMany"]
 }
 
+# Cloud-init user configuration
+_cloudInitHostname = option("cloudInitHostname") or option("vmName") or "dev4"
+_cloudInitUsername = option("cloudInitUsername") or "sthings"
+_cloudInitPassword = option("cloudInitPassword") or "Atlan7is"
+_cloudInitSshKey = option("cloudInitSshKey") or "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+_cloudInitPackages = option("cloudInitPackages") or ["qemu-guest-agent"]
+_cloudInitSshPwauth = option("cloudInitSshPwauth") or "true"
+
+# Build cloud-config userdata
+_userdata = """#cloud-config
+hostname: ${_cloudInitHostname}
+ssh_pwauth: ${_cloudInitSshPwauth}
+users:
+  - name: ${_cloudInitUsername}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${_cloudInitSshKey}
+# Set password for user
+chpasswd:
+  list: |
+    ${_cloudInitUsername}:${_cloudInitPassword}
+  expire: false
+package_update: true
+packages:
+  - ${"\n  - ".join(_cloudInitPackages)}
+runcmd:
+  - - systemctl
+    - enable
+    - --now
+    - qemu-guest-agent.service
+"""
+
 # Cloud Config Secret Configuration
 _secretConfig = schema.CloudConfigSecretConfig {
     name = option("secretName") or "dev4"
     namespace = option("namespace") or "default"
-    userdata = option("userdata") or ""
+    userdata = option("userdata") or _userdata
     networkdata = option("networkdata") or ""
 }
 
@@ -78,7 +112,7 @@ _pvc = {
     }
 }
 
-# Define the Cloud Config Secret resource
+# Define the Cloud Config Secret resource using stringData
 _secret = {
     apiVersion = "v1"
     kind = "Secret"
@@ -86,10 +120,10 @@ _secret = {
         name = _secretConfig.name
         namespace = _secretConfig.namespace
     }
-    type = "secret"
-    data = {
-        userdata = _secretConfig.userdata
+    type = "Secret"
+    stringData = {
         networkdata = _secretConfig.networkdata
+        userdata = _secretConfig.userdata
     }
 }
 
