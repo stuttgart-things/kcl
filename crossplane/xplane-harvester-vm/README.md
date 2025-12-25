@@ -20,8 +20,8 @@ kcl run main.k -D params='{
       "storageClass": "longhorn",
       "volumeMode": "Block",
       "accessModes": ["ReadWriteMany"],
-      "secretName": "dev2-cloud-init",
-      "userdata": "I2Nsb3VkLWNvbmZpZwp3cml0ZV9maWxlczoKICAvZXRjL2hvc3RuYW1lOgogICAgY29udGVudDogZGV2Mgo=",
+      "secretName": "dev2-cloud-init", # pragma: allowlist secret
+      "userdata": "I2Nsb3VkLWNvbmZpZwp3cml0ZV9maWxlczoKICAvZXRjL2hvc3RuYW1lOgogICAgY29udGVudDogZGV2Mgo=", # pragma: allowlist secret
       "networkdata": "",
       "osLabel": "ubuntu",
       "runStrategy": "RerunOnFailure",
@@ -48,7 +48,7 @@ kcl run main.k -D params='{
 Run the module with VM only (no persistent volume or cloud-init secret):
 
 ```bash
-kcl run main.k -D params='{
+kcl run oci://ghcr.io/stuttgart-things/xplane-harvester-vm --tag 0.3.0 -D params='{
   "oxr": {
     "spec": {
       "name": "dev2",
@@ -64,8 +64,8 @@ kcl run main.k -D params='{
       "memory": "8Gi",
       "diskName": "disk-0",
       "machineType": "q35",
-      "networkNamespace": "vms",
-      "networkName": "vms",
+      "networkNamespace": "default",
+      "networkName": "default",
       "evictionStrategy": "LiveMigrateIfPossible",
       "terminationGracePeriod": 120
     }

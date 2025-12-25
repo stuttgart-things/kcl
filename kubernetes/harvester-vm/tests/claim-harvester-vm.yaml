@@ -6,7 +6,7 @@ metadata:
 spec:
   cloudInitHostname: myvm
   cloudInitUsername: admin
-  cloudInitPassword: MySecurePass123
+  cloudInitPassword: MySecurePass123 # pragma: allowlist secret
   cloudInitSshKey: ssh-rsa AAAAB3... your-key-here
   enablePvc: false
   enableCloudConfig: true
