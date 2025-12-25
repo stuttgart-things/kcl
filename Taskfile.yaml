@@ -20,9 +20,12 @@ tasks:
       EXPORT_PATH: /tmp/kcl-repo-findings.txt
 
   push-module:
-    desc: Push KCL module using Dagger function
+    desc: Push KCL module with version checking and kcl.mod update
     cmds:
       - |
+        set -e
+
+        # Find all KCL modules
         MODULE_DIRS=$(find . -maxdepth 3 -type f -name 'kcl.mod' \
           ! -path './tests/*' ! -path './.git/*' ! -path './.task/*' \
           -exec dirname {} \; | sed 's|^\./||' | sort)
@@ -40,20 +43,88 @@ tasks:
           exit 1
         fi
 
-        MODULE_NAME=$(yq -p toml -r '.package.name' \
-          "${MODULE_DIR}/kcl.mod")
+        # Get module name and current version
+        MODULE_NAME=$(grep '^name' "${MODULE_DIR}/kcl.mod" | head -1 | cut -d'"' -f2)
+        CURRENT_VERSION=$(grep '^version' "${MODULE_DIR}/kcl.mod" | head -1 | cut -d'"' -f2)
+
+        echo "📦 Module: ${MODULE_NAME}"
+        echo "   Current version in kcl.mod: ${CURRENT_VERSION}"
+        echo
+
+        # Check OCI registry for existing versions
+        IMAGE="ghcr.io/stuttgart-things/${MODULE_NAME}"
+        echo "🔍 Checking existing versions in ${IMAGE}..."
+
+        TAGS=$(oras repo tags "${IMAGE}" 2>/dev/null || true)
+        SEMVER_TAGS=$(echo "$TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+
+        if [ -z "$SEMVER_TAGS" ]; then
+          echo "⚠️  No released versions found in registry"
+
+          # If no registry versions, use local version and increment minor
+          if [ "${CURRENT_VERSION}" != "0.0.0" ]; then
+            SUGGESTED_TAG=$(echo "v${CURRENT_VERSION}" | awk -F. '{
+              sub(/^v/,"",$1);
+              printf("v%d.%d.0\n",$1,$2+1)
+            }')
+            echo "   Using local version ${CURRENT_VERSION} → next minor: ${SUGGESTED_TAG}"
+          else
+            SUGGESTED_TAG="v0.1.0"
+          fi
+        else
+          echo "📦 Released versions:"
+          echo "$SEMVER_TAGS" | sort -V | sed 's/^/  - /'
+
+          LATEST=$(echo "$SEMVER_TAGS" | sort -V | tail -n1)
+          echo
+          echo "✅ Latest released version: ${LATEST}"
+
+          SUGGESTED_TAG=$(echo "$LATEST" | awk -F. '{
+            sub(/^v/,"",$1);
+            printf("v%d.%d.0\n",$1,$2+1)
+          }')
+        fi
+
+        echo
+        NEW_VERSION=$(gum input \
+          --prompt "New version: " \
+          --value "${SUGGESTED_TAG#v}")
+
+        if [ -z "$NEW_VERSION" ]; then
+          echo "❌ No version provided, exiting"
+          exit 1
+        fi
+
+        NEW_TAG="v${NEW_VERSION}"
+        echo
+        echo "📝 Updating kcl.mod version from ${CURRENT_VERSION} to ${NEW_VERSION}..."
+        sed -i "s/^version = .*/version = \"${NEW_VERSION}\"/" \
+          "${MODULE_DIR}/kcl.mod"
+
+        echo "✅ kcl.mod updated"
+        echo
+
+        # Push the module
+        echo "🚀 Pushing KCL module:"
+        echo "  Module : ${MODULE_DIR}"
+        echo "  Name   : ${MODULE_NAME}"
+        echo "  Tag    : ${NEW_TAG}"
+        echo
 
         dagger call -m {{ .MODULE }}@{{ .VERSION }} {{ .FUNCTION }} \
         --src "${MODULE_DIR}" \
         --module-name "${MODULE_NAME}" \
         --user env:GITHUB_USER \
         --password env:GITHUB_TOKEN \
-        --address {{ .ADDRESS }}
+        --address "oci://${IMAGE%/*}" \
+        --progress plain
+
+        echo
+        echo "✅ Push complete!"
     vars:
       MODULE: github.com/stuttgart-things/dagger/kcl
       VERSION: v0.42.0
       FUNCTION: push-module
-      ADDRESS: oci://ghcr.io/stuttgart-things
 
   create:
     desc: Create new module

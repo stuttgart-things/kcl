@@ -1,0 +1,13 @@
+apiVersion: harvester.crossplane.io/v1alpha1
+kind: HarvesterVM
+metadata:
+  name: myvm
+  namespace: default
+spec:
+  cloudInitHostname: myvm
+  cloudInitUsername: admin
+  cloudInitPassword: MySecurePass123
+  cloudInitSshKey: ssh-rsa AAAAB3... your-key-here
+  enablePvc: false
+  enableCloudConfig: true
+  enableVm: false

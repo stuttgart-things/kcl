@@ -1,0 +1,23 @@
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: cloud-init-kcl
+  labels:
+    crossplane.io/xrd: xcloudinits.cloudinit.stuttgart-things.com
+spec:
+  compositeTypeRef:
+    apiVersion: cloudinit.stuttgart-things.com/v1alpha1
+    kind: XcloudInit
+  mode: Pipeline
+  pipeline:
+  - step: cloud-init
+    functionRef:
+      name: function-kcl
+    input:
+      apiVersion: krm.kcl.dev/v1alpha1
+      kind: KCLInput
+      metadata:
+        name: cloud-init
+      spec:
+        source: oci://ghcr.io/stuttgart-things/harvester-vm:0.2.0
