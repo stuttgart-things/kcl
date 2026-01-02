@@ -16,6 +16,13 @@ _merged_params = _flat_params | _cli_options
 # --- Validate and apply defaults using schema ---
 _config: schema.ProviderConfigParams = _merged_params
 
+# --- Determine provider type ---
+_providerType = option("providerType") or "helm"
+
+# --- Determine apiVersion based on provider type ---
+_apiVersion = "kubernetes.crossplane.io/v1alpha1" if _providerType == "kubernetes" else "helm.m.crossplane.io/v1beta1"
+
+
 # --- Boolean flag to control output - check explicitly for False ---
 _createProviderConfigValue = _flat_params?.createProviderConfig or option("createProviderConfig")
 createProviderConfig = False if _createProviderConfigValue == False else True
@@ -25,7 +32,7 @@ _kind = "ClusterProviderConfig" if _config.useClusterProviderConfig else "Provid
 
 # --- Build ProviderConfig or ClusterProviderConfig ---
 _providerConfigObj = {
-    apiVersion = "helm.m.crossplane.io/v1beta1"
+    apiVersion = _apiVersion
     kind = _kind
     metadata = { name = _config.clusterName }
     spec = {

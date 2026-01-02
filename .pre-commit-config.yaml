@@ -64,3 +64,5 @@ repos:
           - "kubernetes/harvester-vm/schema.k"
           - "--exclude-files"
           - "crossplane/xplane-harvester-vm/README.md"
+          - "--exclude-files"
+          - "crossplane/xplane-cluster-resources/README.md"

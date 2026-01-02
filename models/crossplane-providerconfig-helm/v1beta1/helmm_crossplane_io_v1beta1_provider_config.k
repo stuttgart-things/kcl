@@ -273,5 +273,3 @@ schema HelmmCrossplaneIoV1beta1ProviderConfigStatusConditionsItems0:
     status: str
 
     $type: str
-
-
