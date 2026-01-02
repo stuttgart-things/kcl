@@ -20,8 +20,7 @@ _config: schema.ProviderConfigParams = _merged_params
 _providerType = option("providerType") or "helm"
 
 # --- Determine apiVersion based on provider type ---
-_apiVersion = "kubernetes.crossplane.io/v1alpha1" if _providerType == "kubernetes" else "helm.m.crossplane.io/v1beta1"
-
+_apiVersion = "kubernetes.m.crossplane.io/v1alpha1" if _providerType == "kubernetes" else "helm.m.crossplane.io/v1beta1"
 
 # --- Boolean flag to control output - check explicitly for False ---
 _createProviderConfigValue = _flat_params?.createProviderConfig or option("createProviderConfig")
