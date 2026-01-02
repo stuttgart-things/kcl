@@ -1,0 +1,16 @@
+[dependencies]
+  [dependencies.crossplane-providerconfig-helm]
+    name = "crossplane-providerconfig-helm"
+    full_name = "crossplane-providerconfig-helm_0.1.0"
+    version = "0.1.0"
+    sum = "1J/Fc09+h1xEiI1UCf+UKzzsRyj4opqVkDdMBV7poxE="
+    reg = "ghcr.io"
+    repo = "stuttgart-things/crossplane-providerconfig-helm"
+    oci_tag = "0.1.0"
+  [dependencies.k8s]
+    name = "k8s"
+    full_name = "k8s_1.28"
+    version = "1.28"
+    reg = "ghcr.io"
+    repo = "kcl-lang/k8s"
+    oci_tag = "1.28"
