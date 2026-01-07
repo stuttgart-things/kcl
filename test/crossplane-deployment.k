@@ -42,7 +42,7 @@ _deployment = {
                         image = _image
                         ports = [
                             {
-                                containerPort = _port
+                                "containerPort" = _port
                             }
                         ]
                         resources = {
