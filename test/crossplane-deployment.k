@@ -71,10 +71,10 @@ _crossplaneObject = {
         namespace = "default"
     }
     spec = {
-        forProvider = {
+        "forProvider" = {
             manifest = _deployment
         }
-        providerConfigRef = {
+        "providerConfigRef" = {
             name = _providerConfig
         }
     }
