@@ -19,7 +19,7 @@ _deployment = {
         namespace = _namespace
         labels = {
             app = _deploymentName
-            managed-by = "kcl"
+            "managed-by" = "kcl"
         }
     }
     spec = {
