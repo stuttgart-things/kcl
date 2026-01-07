@@ -4,7 +4,9 @@ This KCL module creates a Kubernetes Deployment that is compatible with both Cro
 
 ## Files
 
-- `crossplane-deployment.k` - Main KCL module for deployment
+- `kcl.mod` - Module metadata
+- `main.k` - KCL module (Deployment + Crossplane wrapper)
+- `CROSSPLANE-DEPLOYMENT.md` - Detailed documentation
 
 ## Features
 
@@ -20,7 +22,7 @@ This KCL module creates a Kubernetes Deployment that is compatible with both Cro
 Render a deployment directly:
 
 ```bash
-kcl run crossplane-deployment.k \
+kcl run main.k \
   -D deploymentName="my-app" \
   -D namespace="production" \
   -D image="nginx:1.21" \
@@ -31,7 +33,7 @@ kcl run crossplane-deployment.k \
 ### 2. Render and Apply to Cluster
 
 ```bash
-kcl run crossplane-deployment.k \
+kcl run main.k \
   -D deploymentName="my-app" \
   -D namespace="production" \
   -D image="myapp:v1.0" | kubectl apply -f -
@@ -42,7 +44,7 @@ kcl run crossplane-deployment.k \
 When used in a Crossplane Composition, the module receives parameters in this format:
 
 ```bash
-kcl run crossplane-deployment.k -D params='{
+kcl run main.k -D params='{
   "oxr": {
     "spec": {
       "deploymentName": "my-app",
@@ -133,14 +135,14 @@ spec:
 
 ```bash
 # Test with defaults
-kcl run crossplane-deployment.k
+kcl run main.k
 
 # Test with custom values
-kcl run crossplane-deployment.k \
+kcl run main.k \
   -D deploymentName="test-app" \
   -D image="busybox:latest" \
   -D replicas=2
 
 # Render as YAML for inspection
-kcl run crossplane-deployment.k -D deploymentName="test" -o yaml
+kcl run main.k -D deploymentName="test" -o yaml
 ```

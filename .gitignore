@@ -4,6 +4,7 @@ logs
 TODO
 *.log
 
+*.task*
 ### Node ###
 # Logs
 logs
