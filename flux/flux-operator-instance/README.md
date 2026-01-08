@@ -36,13 +36,13 @@ cd kcl/kcl-flux-instance
 ### Basic Installation with Default Values
 
 ```bash
-kcl run kcl-flux-instance
+kcl run main.k
 ```
 
 ### With Custom Values
 
 ```bash
-kcl run kcl-flux-instance \
+kcl run main.k \
   -D name=my-flux \
   -D namespace=flux-system \
   -D version=2.4 \

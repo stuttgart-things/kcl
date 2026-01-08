@@ -1,11 +1,8 @@
-
-import flux_kustomization as flux
-
 """
 Example usage of Flux Kustomization resources in KCL
 """
 
-import flux_kustomization.v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
+import ..v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
 
 # Basic Kustomization example
 basic_kustomization = flux.Kustomization {

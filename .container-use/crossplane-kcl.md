@@ -169,9 +169,9 @@ else:
 
 ```bash
 kcl run main.k \
-  -D secretName="db-credentials" \
+  -D secretName="db-credentials" \ # pragma: allowlist secret
   -D namespace="production" \
-  -D 'stringData={"username": "admin", "password": "secret123"}'
+  -D 'stringData={"username": "admin", "password": "secret123"}' # pragma: allowlist secret
 ```
 
 ### Usage: Direct - Unwrapped
@@ -179,7 +179,7 @@ kcl run main.k \
 ```bash
 kcl run main.k \
   -D wrapInCrossplane=false \
-  -D secretName="db-credentials" \
+  -D secretName="db-credentials" \ # pragma: allowlist secret
   -D 'stringData={"username": "admin"}'
 ```
 
@@ -189,11 +189,11 @@ kcl run main.k \
 kcl run main.k -D params='{
   "oxr": {
     "spec": {
-      "secretName": "db-credentials",
+      "secretName": "db-credentials", # pragma: allowlist secret
       "namespace": "production",
       "stringData": {
         "username": "admin",
-        "password": "secret123"
+        "password": "secret123" # pragma: allowlist secret
       }
     }
   }
