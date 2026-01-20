@@ -1,0 +1,70 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: harborproject
+  title: Crossplane Harbor Project
+  description: Creates a Harbor project via Crossplane using OpenTofu
+  tags:
+    - harbor
+    - registry
+    - crossplane
+    - terraform
+spec:
+  type: harborproject
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-harborproject
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: demo
+      enum:
+        - demo
+        - production
+        - insecure
+      description: "Template type: demo (unlimited quota), production (100GB quota), insecure (self-signed certs)"
+
+    # Metadata
+    - name: name
+      title: Claim Name
+      type: string
+      default: demo-project
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the HarborProject claim resource"
+
+    # Harbor specific
+    - name: projectName
+      title: Harbor Project Name
+      type: string
+      required: true
+      default: demo-project1
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Harbor project to create"
+
+    - name: harborURL
+      title: Harbor URL
+      type: string
+      required: true
+      default: https://harbor.idp.kubermatic.sva.dev
+      pattern: "^https?://.+"
+      description: "Base URL of the Harbor instance"
+
+    - name: storageQuota
+      title: Storage Quota
+      type: integer
+      default: -1
+      description: "Storage quota in bytes (-1 = unlimited, 107374182400 = 100GB)"
+
+    - name: harborInsecure
+      title: Skip TLS Verification
+      type: boolean
+      default: false
+      description: "Skip TLS verification for self-signed certificates"
+
+    - name: providerConfigRef
+      title: Provider Config
+      type: string
+      default: default
+      description: "OpenTofu ClusterProviderConfig name"
