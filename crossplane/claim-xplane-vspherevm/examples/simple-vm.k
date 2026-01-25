@@ -23,8 +23,8 @@ vm = v1alpha1.VsphereVM {
             template = "ubuntu-22.04-template"
         }
         tfvars = {
-            secretName = "vsphere-tfvars"
-            secretNamespace = "crossplane-system"
+            secretName = "vsphere-tfvars" # pragma: allowlist secret
+            secretNamespace = "crossplane-system" # pragma: allowlist secret
         }
         connectionSecret = {
             name = "my-test-vm-connection"

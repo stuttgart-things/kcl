@@ -13,7 +13,7 @@ metadata:
 spec:
   type: vspherevm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-vspherevm
-  tag: 0.1.0
+  tag: 0.2.0
   parameters:
     # Template selector
     - name: templateName
