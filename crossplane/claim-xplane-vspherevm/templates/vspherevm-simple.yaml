@@ -1,0 +1,167 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: vspherevm
+  title: Crossplane vSphere VM
+  description: Creates a vSphere VM via Crossplane using Terraform provider
+  tags:
+    - vsphere
+    - vm
+    - crossplane
+    - terraform
+spec:
+  type: vspherevm
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-vspherevm
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: demo
+      enum:
+        - demo
+        - production
+        - minimal
+      description: "Template type: demo (4GB/64GB/4CPU), production (16GB/256GB/8CPU/EFI), minimal (bare minimum)"
+
+    # T-Shirt Size (overrides ram/disk/cpu)
+    - name: size
+      title: T-Shirt Size
+      type: string
+      enum:
+        - S
+        - M
+        - L
+        - XL
+        - XXL
+      description: "VM size preset: S (2GB/32GB/2CPU), M (4GB/64GB/4CPU), L (8GB/128GB/8CPU), XL (16GB/256GB/16CPU), XXL (32GB/512GB/32CPU). Overrides ram/disk/cpu if set."
+
+    # Metadata
+    - name: name
+      title: VM Name
+      type: string
+      required: true
+      default: demo-vm
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the VM and claim resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: default
+      description: "Kubernetes namespace for the claim"
+
+    # VM Resources
+    - name: ram
+      title: RAM (MB)
+      type: integer
+      default: 4096
+      description: "Memory in MB (e.g., 4096, 8192, 16384)"
+
+    - name: disk
+      title: Disk (GB)
+      type: integer
+      default: 64
+      description: "Disk size in GB"
+
+    - name: cpu
+      title: CPU Count
+      type: integer
+      default: 4
+      description: "Number of virtual CPUs"
+
+    - name: count
+      title: VM Count
+      type: integer
+      default: 1
+      description: "Number of VMs to create"
+
+    - name: firmware
+      title: Firmware
+      type: string
+      default: bios
+      enum:
+        - bios
+        - efi
+      description: "VM firmware type"
+
+    # vSphere Infrastructure
+    - name: folderPath
+      title: Folder Path
+      type: string
+      required: true
+      default: /Datacenter/vm/test
+      description: "vSphere folder path for the VM"
+
+    - name: datacenter
+      title: Datacenter
+      type: string
+      required: true
+      default: Datacenter
+      description: "vSphere datacenter name"
+
+    - name: datastore
+      title: Datastore
+      type: string
+      required: true
+      default: datastore1
+      description: "vSphere datastore name"
+
+    - name: resourcePool
+      title: Resource Pool
+      type: string
+      required: true
+      default: Resources
+      description: "vSphere resource pool"
+
+    - name: network
+      title: Network
+      type: string
+      required: true
+      default: VM Network
+      description: "vSphere network name"
+
+    - name: template
+      title: VM Template
+      type: string
+      required: true
+      default: ubuntu-22.04-template
+      description: "vSphere VM template to clone"
+
+    # Terraform Variables Secret
+    - name: tfvarsSecretName
+      title: TFVars Secret Name
+      type: string
+      required: true
+      default: vsphere-tfvars
+      description: "Name of the secret containing Terraform variables"
+
+    - name: tfvarsSecretNamespace
+      title: TFVars Secret Namespace
+      type: string
+      default: crossplane-system
+      description: "Namespace of the Terraform variables secret"
+
+    - name: tfvarsSecretKey
+      title: TFVars Secret Key
+      type: string
+      default: terraform.tfvars
+      description: "Key in the secret containing Terraform variables"
+
+    # Provider Reference
+    - name: providerRefName
+      title: Provider Config Name
+      type: string
+      default: default
+      description: "Terraform provider config name"
+
+    - name: providerRefKind
+      title: Provider Config Kind
+      type: string
+      default: ClusterProviderConfig
+      enum:
+        - ProviderConfig
+        - ClusterProviderConfig
+      description: "Terraform provider config kind"
