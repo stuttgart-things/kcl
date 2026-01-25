@@ -1,0 +1,145 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: labul
+  title: vSphere VM - LabUL
+  description: Creates a vSphere VM in the LabUL lab environment
+  tags:
+    - vsphere
+    - vm
+    - crossplane
+    - terraform
+    - labul
+spec:
+  type: vspherevm
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-vspherevm
+  tag: 0.2.0
+  parameters:
+    - name: count
+      title: VM Count
+      type: integer
+      default: 1
+      description: "Number of VMs to create"
+
+    # T-Shirt Size (overrides ram/disk/cpu)
+    - name: size
+      title: T-Shirt Size
+      type: string
+      enum:
+        - S
+        - M
+        - L
+        - XL
+        - XXL
+      description: "VM size preset: S (2GB/32GB/2CPU), M (4GB/64GB/4CPU), L (8GB/128GB/8CPU), XL (16GB/256GB/16CPU), XXL (32GB/512GB/32CPU). Overrides ram/disk/cpu if set."
+
+    # Metadata
+    - name: name
+      title: VM Name
+      type: string
+      required: true
+      default: app-server
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the VM and claim resource"
+
+    # LabUL vSphere Infrastructure (pre-configured, hidden from users)
+    - name: folderPath
+      title: Folder Path
+      type: string
+      required: true
+      default: /LabUL/vm/intc
+      description: "vSphere folder path for the VM"
+      hidden: true  # Won't be prompted, always uses default
+
+    - name: datacenter
+      title: Datacenter
+      type: string
+      required: true
+      default: /LabUL/
+      hidden: true
+      description: "vSphere datacenter (LabUL)"
+
+    - name: datastore
+      title: Datastore
+      type: string
+      required: true
+      default: /LabUL/datastore/UL-ESX-SAS-01
+      hidden: true
+      description: "vSphere datastore"
+
+    - name: resourcePool
+      title: Resource Pool
+      type: string
+      required: true
+      default: /LabUL/host/Cluster-V6.7/Resources
+      hidden: true
+      description: "vSphere resource pool"
+
+    - name: network
+      title: Network
+      type: string
+      required: true
+      default: /LabUL/network/MGMT-10.31.101
+      enum:
+        - /LabUL/network/MGMT-10.31.101
+        - /LabUL/network/LAB-10.31.102
+        - /LabUL/network/LAB-10.31.103
+        - /LabUL/network/LAB-10.31.104
+      description: "vSphere network in LabUL"
+      allowRandom: true
+
+    - name: template
+      title: VM Template
+      type: string
+      required: true
+      default: sthings-u24
+      enum:
+        - sthings-u22
+        - sthings-u24
+      description: "vSphere VM template (Ubuntu 22.04 or 24.04)"
+
+    # Terraform Variables Secret (platform-defined, hidden)
+    - name: tfvarsSecretName
+      title: TFVars Secret Name
+      type: string
+      required: true
+      default: vsphere-tfvars-labul
+      hidden: true
+      description: "Name of the secret containing Terraform variables for LabUL"
+
+    - name: tfvarsSecretNamespace
+      title: TFVars Secret Namespace
+      type: string
+      default: crossplane-system
+      hidden: true
+      description: "Namespace of the Terraform variables secret"
+
+    - name: tfvarsSecretKey
+      title: TFVars Secret Key
+      type: string
+      default: terraform.tfvars
+      hidden: true
+      description: "Key in the secret containing Terraform variables"
+
+    # Provider Reference (platform-defined, hidden)
+    - name: providerRefName
+      title: Provider Config Name
+      type: string
+      default: default
+      hidden: true
+      description: "Terraform provider config name"
+
+    - name: providerRefKind
+      title: Provider Config Kind
+      type: string
+      default: ClusterProviderConfig
+      hidden: true
+      description: "Terraform provider config kind"
+
+    # User-configurable
+    - name: namespace
+      title: Namespace
+      type: string
+      default: default
+      description: "Kubernetes namespace for the claim"
