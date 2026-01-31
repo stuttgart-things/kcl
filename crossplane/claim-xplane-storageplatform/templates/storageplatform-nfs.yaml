@@ -3,69 +3,90 @@ apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
   name: storageplatform-nfs
+  title: Crossplane StoragePlatform NFS
+  description: Deploys NFS CSI driver with StorageClass via Crossplane
+  tags:
+    - storage
+    - crossplane
+    - nfs
 spec:
-  source:
-    oci: oci://ghcr.io/stuttgart-things/claim-xplane-storageplatform:0.1.1
+  type: storageplatform
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-storageplatform
+  tag: 0.1.1
   parameters:
     - name: templateName
+      title: Template
       type: string
-      default: "nfs"
-      description: "Template selector (must be 'nfs' for this ClaimTemplate)"
+      default: nfs
+
     - name: name
+      title: Resource Name
       type: string
-      default: "nfs-storage"
-      description: "Name of the StoragePlatform resource"
-      validation:
-        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      default: nfs-storage
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
     - name: namespace
+      title: Namespace
       type: string
       required: true
-      description: "Target namespace for the claim"
-      validation:
-        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
     - name: targetClusterName
+      title: Target Cluster
       type: string
-      default: "in-cluster"
-      description: "Name of the ProviderConfig or ClusterProviderConfig"
+      default: in-cluster
+
     - name: targetClusterScope
+      title: Target Cluster Scope
       type: string
-      default: "Cluster"
-      description: "Scope: Cluster or Namespaced"
+      default: Cluster
       enum:
         - Cluster
         - Namespaced
+
     - name: serverFQDN
+      title: NFS Server
       type: string
       required: true
-      description: "NFS server DNS name or IP address"
+
     - name: sharePath
+      title: NFS Share Path
       type: string
       required: true
-      description: "NFS share path"
+
     - name: storageClass
+      title: StorageClass Name
       type: string
-      default: "nfs-client"
-      description: "Name of the StorageClass to create"
+      default: nfs-client
+
     - name: nfsVersion
+      title: NFS CSI Driver Version
       type: string
-      default: "v4.11.0"
-      description: "NFS CSI driver version"
+      default: v4.11.0
+
     - name: nfsNamespace
+      title: NFS CSI Namespace
       type: string
-      default: "kube-system"
-      description: "Namespace for NFS CSI driver deployment"
+      default: kube-system
+
     - name: reclaimPolicy
+      title: Reclaim Policy
       type: string
-      default: "Delete"
+      default: Delete
       enum:
         - Delete
         - Retain
+
     - name: volumeBindingMode
+      title: Volume Binding Mode
       type: string
-      default: "Immediate"
+      default: Immediate
       enum:
         - Immediate
         - WaitForFirstConsumer
+
     - name: mountOptions
+      title: Mount Options
       type: string
       description: "Comma-separated list of mount options (e.g., vers=4.1,rsize=1048576)"

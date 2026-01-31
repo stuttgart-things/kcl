@@ -3,62 +3,80 @@ apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
   name: storageplatform-openebs
+  title: Crossplane StoragePlatform OpenEBS
+  description: Deploys OpenEBS storage platform via Crossplane
+  tags:
+    - storage
+    - crossplane
+    - openebs
 spec:
-  source:
-    oci: oci://ghcr.io/stuttgart-things/claim-xplane-storageplatform:0.1.1
+  type: storageplatform
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-storageplatform
+  tag: 0.1.1
   parameters:
     - name: templateName
+      title: Template
       type: string
-      default: "openebs"
-      description: "Template selector (must be 'openebs' for this ClaimTemplate)"
+      default: openebs
+
     - name: name
+      title: Resource Name
       type: string
-      default: "openebs-local"
-      description: "Name of the StoragePlatform resource"
-      validation:
-        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      default: openebs-local
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
     - name: namespace
+      title: Namespace
       type: string
       required: true
-      description: "Target namespace for the claim"
-      validation:
-        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
     - name: targetClusterName
+      title: Target Cluster
       type: string
-      default: "in-cluster"
-      description: "Name of the ProviderConfig or ClusterProviderConfig"
+      default: in-cluster
+
     - name: targetClusterScope
+      title: Target Cluster Scope
       type: string
-      default: "Cluster"
-      description: "Scope: Cluster or Namespaced"
+      default: Cluster
       enum:
         - Cluster
         - Namespaced
+
     - name: openebsVersion
+      title: OpenEBS Version
       type: string
       default: "4.2.0"
-      description: "OpenEBS version"
+
     - name: openebsNamespace
+      title: OpenEBS Namespace
       type: string
-      default: "openebs-system"
-      description: "Namespace for OpenEBS deployment"
+      default: openebs-system
+
     - name: enableLvm
+      title: Enable LVM
       type: boolean
       default: false
-      description: "Enable LVM local provisioner"
+
     - name: enableZfs
+      title: Enable ZFS
       type: boolean
       default: false
-      description: "Enable ZFS local provisioner"
+
     - name: enableMayastor
+      title: Enable Mayastor
       type: boolean
       default: false
-      description: "Enable Mayastor replicated storage"
+
     - name: enableVolumeSnapshots
+      title: Enable Volume Snapshots
       type: boolean
       default: false
-      description: "Enable volume snapshot support"
+
     - name: enableCsiNodeInitContainers
+      title: Enable CSI Node Init Containers
       type: boolean
       default: false
-      description: "Enable CSI node init containers (required for Mayastor)"
+      description: "Required for Mayastor"
