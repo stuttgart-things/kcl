@@ -1,0 +1,71 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: storageplatform-nfs
+spec:
+  source:
+    oci: oci://ghcr.io/stuttgart-things/claim-xplane-storageplatform:0.1.1
+  parameters:
+    - name: templateName
+      type: string
+      default: "nfs"
+      description: "Template selector (must be 'nfs' for this ClaimTemplate)"
+    - name: name
+      type: string
+      default: "nfs-storage"
+      description: "Name of the StoragePlatform resource"
+      validation:
+        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    - name: namespace
+      type: string
+      required: true
+      description: "Target namespace for the claim"
+      validation:
+        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    - name: targetClusterName
+      type: string
+      default: "in-cluster"
+      description: "Name of the ProviderConfig or ClusterProviderConfig"
+    - name: targetClusterScope
+      type: string
+      default: "Cluster"
+      description: "Scope: Cluster or Namespaced"
+      enum:
+        - Cluster
+        - Namespaced
+    - name: serverFQDN
+      type: string
+      required: true
+      description: "NFS server DNS name or IP address"
+    - name: sharePath
+      type: string
+      required: true
+      description: "NFS share path"
+    - name: storageClass
+      type: string
+      default: "nfs-client"
+      description: "Name of the StorageClass to create"
+    - name: nfsVersion
+      type: string
+      default: "v4.11.0"
+      description: "NFS CSI driver version"
+    - name: nfsNamespace
+      type: string
+      default: "kube-system"
+      description: "Namespace for NFS CSI driver deployment"
+    - name: reclaimPolicy
+      type: string
+      default: "Delete"
+      enum:
+        - Delete
+        - Retain
+    - name: volumeBindingMode
+      type: string
+      default: "Immediate"
+      enum:
+        - Immediate
+        - WaitForFirstConsumer
+    - name: mountOptions
+      type: string
+      description: "Comma-separated list of mount options (e.g., vers=4.1,rsize=1048576)"
