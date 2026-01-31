@@ -11,7 +11,18 @@ This KCL module creates a FluxInstance Custom Resource for installing and config
 - Git repository synchronization
 - Flexible component selection
 
-## Installation
+## RENDER
+
+helmfile apply -f git::https://github.com/stuttgart-things/helm.git@cicd/flux-operator.yaml.gotmpl --state-values-set version=0.28.0
+
+```bash
+# CREATE INSTANCE w/ SECRETS
+dagger call -m github.com/stuttgart-things/dagger/kcl run \
+--oci-source ghcr.io/stuttgart-things/kcl-flux-instance:0.3.3 \
+--parameters "name=flux,namespace=flux-system,version=2.x,gitUrl=https://github.com/stuttgart-things/stuttgart-things.git,gitRef=refs/heads/main,gitPath=clusters/labda/vsphere/sthings-runner,pullSecret=git-token-auth,renderSecrets=true,gitUsername=patrick-hermann-sva,gitPassword=ghp_4L...,sopsAgeKey=AGE-SECRET-KEY-1Q...,version=2.4" \
+export --path /tmp/flux.yaml
+```
+
 
 ### From OCI Registry
 
@@ -199,6 +210,21 @@ kcl run kcl-flux-instance \
   -D multitenant=true \
   -D networkPolicy=true
 ```
+
+
+```bash
+dagger call -m github.com/stuttgart-things/dagger/kcl run \
+--oci-source ghcr.io/stuttgart-things/kcl-flux-instance:0.3.3 \
+--parameters "name=flux-prod,namespace=flux-system,version=2.4,gitUrl=https://github.com/stuttgart-things/stuttgart-things.git,gitRef=refs/heads/main" \
+export --path /tmp/flux.yaml
+
+
+
+```
+
+
+
+
 
 ```
 kcl --quiet main.k \

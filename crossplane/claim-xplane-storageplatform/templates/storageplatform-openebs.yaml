@@ -1,0 +1,64 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: storageplatform-openebs
+spec:
+  source:
+    oci: oci://ghcr.io/stuttgart-things/claim-xplane-storageplatform:0.1.1
+  parameters:
+    - name: templateName
+      type: string
+      default: "openebs"
+      description: "Template selector (must be 'openebs' for this ClaimTemplate)"
+    - name: name
+      type: string
+      default: "openebs-local"
+      description: "Name of the StoragePlatform resource"
+      validation:
+        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    - name: namespace
+      type: string
+      required: true
+      description: "Target namespace for the claim"
+      validation:
+        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    - name: targetClusterName
+      type: string
+      default: "in-cluster"
+      description: "Name of the ProviderConfig or ClusterProviderConfig"
+    - name: targetClusterScope
+      type: string
+      default: "Cluster"
+      description: "Scope: Cluster or Namespaced"
+      enum:
+        - Cluster
+        - Namespaced
+    - name: openebsVersion
+      type: string
+      default: "4.2.0"
+      description: "OpenEBS version"
+    - name: openebsNamespace
+      type: string
+      default: "openebs-system"
+      description: "Namespace for OpenEBS deployment"
+    - name: enableLvm
+      type: boolean
+      default: false
+      description: "Enable LVM local provisioner"
+    - name: enableZfs
+      type: boolean
+      default: false
+      description: "Enable ZFS local provisioner"
+    - name: enableMayastor
+      type: boolean
+      default: false
+      description: "Enable Mayastor replicated storage"
+    - name: enableVolumeSnapshots
+      type: boolean
+      default: false
+      description: "Enable volume snapshot support"
+    - name: enableCsiNodeInitContainers
+      type: boolean
+      default: false
+      description: "Enable CSI node init containers (required for Mayastor)"
