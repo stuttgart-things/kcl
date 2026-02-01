@@ -1,0 +1,9 @@
+site_name: KCL Modules
+site_description: Collection of KCL modules for Kubernetes, Crossplane, and Flux resources
+
+nav:
+  - Home: index.md
+  - Creating Claim Modules: creating-claim-modules.md
+
+plugins:
+  - techdocs-core

@@ -1,4 +1,4 @@
-# KCL Crossplane Claim Modules
+# Creating Crossplane Claim Modules
 
 Guide for converting Crossplane CompositeResourceDefinitions (XRDs) to KCL modules.
 
@@ -349,6 +349,12 @@ kcl run main.k -D name=my-resource -D param=value
 
 \`\`\`bash
 kcl run oci://ghcr.io/stuttgart-things/claim-xplane-<resource> --tag 0.1.0 -D name=my-resource
+\`\`\`
+
+### Push to OCI Registry
+
+\`\`\`bash
+kcl mod push oci://ghcr.io/stuttgart-things/claim-xplane-<resource>
 \`\`\`
 
 ## Available Parameters

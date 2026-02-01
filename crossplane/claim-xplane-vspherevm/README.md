@@ -86,6 +86,12 @@ kcl run oci://ghcr.io/stuttgart-things/claim-xplane-vspherevm --tag 0.1.0 \
   -D name=my-prod-vm
 ```
 
+### Push to OCI Registry
+
+```bash
+kcl mod push oci://ghcr.io/stuttgart-things/claim-xplane-vspherevm
+```
+
 ## Available Parameters
 
 | Parameter | Description | Default |

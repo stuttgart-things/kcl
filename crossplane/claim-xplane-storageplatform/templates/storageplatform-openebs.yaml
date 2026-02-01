@@ -18,6 +18,7 @@ spec:
       title: Template
       type: string
       default: openebs
+      hidden: true  # Won't be prompted, always uses default
 
     - name: name
       title: Resource Name
