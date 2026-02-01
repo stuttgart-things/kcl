@@ -1,0 +1,136 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: pipelineintegration
+  title: Crossplane Pipeline Integration
+  description: Creates a pipeline engine integration via Crossplane
+  tags:
+    - pipeline
+    - tekton
+    - crossplane
+    - cicd
+spec:
+  type: pipelineintegration
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-pipelineintegration
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: tekton-basic
+      enum:
+        - tekton-basic
+        - tekton-full
+        - minimal
+      description: "Template type: tekton-basic (standard setup), tekton-full (all components), minimal (bare minimum)"
+
+    # Metadata
+    - name: name
+      title: Resource Name
+      type: string
+      required: true
+      default: tekton-pipelines
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the PipelineIntegration resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: default
+      description: "Kubernetes namespace for the claim"
+
+    # Engine configuration
+    - name: engineType
+      title: Pipeline Engine
+      type: string
+      required: true
+      default: tekton
+      enum:
+        - tekton
+        - argo-workflows
+        - jenkins
+      description: "Selected pipeline engine type"
+
+    # Target cluster configuration
+    - name: targetClusterName
+      title: Target Cluster Name
+      type: string
+      required: true
+      default: in-cluster
+      description: "Name of the ProviderConfig / ClusterProviderConfig"
+
+    - name: targetClusterScope
+      title: Target Cluster Scope
+      type: string
+      default: Cluster
+      enum:
+        - Namespaced
+        - Cluster
+      description: "Whether to use ProviderConfig (Namespaced) or ClusterProviderConfig (Cluster)"
+
+    # Tekton configuration
+    - name: tektonNamespace
+      title: Tekton Operator Namespace
+      type: string
+      default: tekton-operator
+      description: "Namespace for Tekton operator"
+
+    - name: pipelineNamespace
+      title: Pipeline Namespace
+      type: string
+      default: tekton-pipelines
+      description: "Default namespace for Tekton pipelines"
+
+    - name: version
+      title: Tekton Version
+      type: string
+      default: "0.77.5"
+      description: "Tekton chart version"
+
+    - name: autoInstallComponents
+      title: Auto Install Components
+      type: boolean
+      default: false
+      description: "Automatically install Tekton components"
+
+    - name: imagePullPolicy
+      title: Image Pull Policy
+      type: string
+      default: Always
+      enum:
+        - Always
+        - IfNotPresent
+        - Never
+      description: "Image pull policy for Tekton components"
+
+    - name: enableTektonPipeline
+      title: Enable Tekton Pipeline
+      type: boolean
+      default: true
+      description: "Enable Tekton Pipeline component"
+
+    - name: enableTektonTriggers
+      title: Enable Tekton Triggers
+      type: boolean
+      default: false
+      description: "Enable Tekton Triggers component"
+
+    - name: enableTektonDashboard
+      title: Enable Tekton Dashboard
+      type: boolean
+      default: false
+      description: "Enable Tekton Dashboard component"
+
+    - name: enableTektonPruner
+      title: Enable Tekton Pruner
+      type: boolean
+      default: false
+      description: "Enable automatic pruning of old pipeline runs"
+
+    - name: chartRepository
+      title: Chart Repository
+      type: string
+      default: "oci://ghcr.io/stuttgart-things/tekton"
+      description: "OCI Helm chart repository for Tekton"

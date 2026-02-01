@@ -1,0 +1,171 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: kustomization-crossplane
+  title: Flux Kustomization Crossplane
+  description: Deploys Crossplane with Terraform, Helm, and K8s providers via Flux
+  tags:
+    - flux
+    - kustomization
+    - crossplane
+    - infrastructure
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.1.0
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: crossplane
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: crossplane
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefKind
+      title: Source Reference Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefNamespace
+      title: Source Reference Namespace
+      type: string
+      description: "Namespace of the source, defaults to Kustomization namespace"
+
+    - name: path
+      title: Path
+      type: string
+      default: "./cicd/crossplane"
+      description: "Path to the directory containing the kustomization.yaml"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+      description: "Interval at which to reconcile (e.g., 5m, 1h)"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+      description: "Interval at which to retry failed reconciliations"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+      description: "Timeout for apply and health checking"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+      description: "Enable garbage collection of resources"
+
+    - name: force
+      title: Force Recreation
+      type: boolean
+      default: false
+      description: "Recreate resources when patching fails"
+
+    - name: suspend
+      title: Suspend Reconciliation
+      type: boolean
+      default: false
+
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+
+    - name: dependsOnNamespace
+      title: Dependencies Namespace
+      type: string
+      description: "Namespace of dependencies, defaults to Kustomization namespace"
+
+    - name: crossplaneNamespace
+      title: Crossplane Namespace
+      type: string
+      default: crossplane-system
+      description: "Namespace where Crossplane will be installed"
+
+    - name: crossplaneVersion
+      title: Crossplane Version
+      type: string
+      default: "2.1.3"
+
+    - name: terraformConfigName
+      title: Terraform Runtime Config Name
+      type: string
+      default: terraform-runtime-config
+
+    - name: terraformPoll
+      title: Terraform Poll Interval
+      type: string
+      default: "30s"
+
+    - name: terraformProviderImage
+      title: Terraform Provider Image
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-cptf:1.14.3"
+
+    - name: terraformProviderVersion
+      title: Terraform Provider Version
+      type: string
+      default: "v1.0.5"
+
+    - name: terraformReconcileRate
+      title: Terraform Reconcile Rate
+      type: string
+      default: "10"
+
+    - name: terraformS3SecretName
+      title: Terraform S3 Secret Name
+      type: string
+      default: terraform-s3
+
+    - name: helmProviderVersion
+      title: Helm Provider Version
+      type: string
+      default: "v1.0.6"
+
+    - name: k8sProviderVersion
+      title: K8s Provider Version
+      type: string
+      default: "v1.2.0"
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+      description: "Secret containing kubeconfig for remote cluster deployment"
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+      description: "Key in the kubeconfig secret"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
+      description: "Service account to impersonate during reconciliation"
