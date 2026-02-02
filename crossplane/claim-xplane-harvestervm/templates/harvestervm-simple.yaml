@@ -1,0 +1,152 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: harvestervm
+  title: Crossplane Harvester VM
+  description: Creates a Harvester VM via Crossplane with Volume and CloudInit
+  tags:
+    - harvester
+    - vm
+    - crossplane
+    - kubevirt
+spec:
+  type: harvestervm
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: demo
+      enum:
+        - demo
+        - production
+        - minimal
+      description: "Template type: demo (4 cores/8Gi), production (8 cores/16Gi/100Gi), minimal (bare minimum)"
+
+    # T-Shirt Size (overrides memory/storage/cpu)
+    - name: size
+      title: T-Shirt Size
+      type: string
+      enum:
+        - S
+        - M
+        - L
+        - XL
+        - XXL
+      description: "VM size preset: S (2Gi/20Gi/2CPU), M (4Gi/40Gi/4CPU), L (8Gi/80Gi/8CPU), XL (16Gi/160Gi/16CPU), XXL (32Gi/320Gi/32CPU). Overrides memory/storage/cpu if set."
+
+    # Metadata
+    - name: name
+      title: VM Name
+      type: string
+      required: true
+      default: demo-harvester-vm
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the VM and claim resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: default
+      description: "Kubernetes namespace for the claim"
+
+    - name: providerConfigRef
+      title: Provider Config
+      type: string
+      required: true
+      default: dev
+      description: "Name of the ProviderConfig for Kubernetes operations"
+
+    # Volume Configuration
+    - name: pvcName
+      title: PVC Name
+      type: string
+      description: "Name of the PVC (defaults to <name>-root)"
+
+    - name: storageClassName
+      title: Storage Class
+      type: string
+      required: true
+      default: harvester-longhorn
+      description: "Storage class name for the PVC"
+
+    - name: storage
+      title: Storage Size
+      type: string
+      default: 20Gi
+      description: "Storage size (e.g., 20Gi, 100Gi)"
+
+    # CloudInit Configuration
+    - name: hostname
+      title: Hostname
+      type: string
+      description: "VM hostname (defaults to first part of name)"
+
+    - name: domain
+      title: Domain
+      type: string
+      default: stuttgart-things.local
+      description: "Domain name for the VM"
+
+    - name: timezone
+      title: Timezone
+      type: string
+      default: Europe/Berlin
+      description: "Timezone (e.g., Europe/Berlin, UTC)"
+
+    # VM Resources
+    - name: cores
+      title: CPU Cores
+      type: integer
+      default: 4
+      description: "Number of CPU cores"
+
+    - name: memory
+      title: Memory
+      type: string
+      default: 8Gi
+      description: "Memory size (e.g., 4Gi, 8Gi, 16Gi)"
+
+    - name: cpuResource
+      title: CPU Resource
+      type: string
+      default: "4"
+      description: "CPU resource limit"
+
+    # VM Settings
+    - name: os
+      title: Operating System
+      type: string
+      default: ubuntu
+      description: "OS type for the VM"
+
+    - name: runStrategy
+      title: Run Strategy
+      type: string
+      default: RerunOnFailure
+      enum:
+        - Always
+        - RerunOnFailure
+        - Manual
+        - Halted
+      description: "VM run strategy"
+
+    - name: evictionStrategy
+      title: Eviction Strategy
+      type: string
+      default: LiveMigrateIfPossible
+      enum:
+        - LiveMigrateIfPossible
+        - LiveMigrate
+        - None
+      description: "VM eviction strategy"
+
+    # Network
+    - name: networkName
+      title: Network Name
+      type: string
+      default: default/default
+      description: "Network name (namespace/name format)"
