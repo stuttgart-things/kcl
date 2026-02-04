@@ -1,0 +1,109 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: ansiblerun-simple
+  title: Crossplane Ansible Run (Simple)
+  description: Run Ansible playbooks via Crossplane with minimal input
+  tags:
+    - ansible
+    - crossplane
+    - tekton
+    - simple
+spec:
+  type: ansiblerun
+  source: oci://ghcr.io/stuttgart-things/claim-xplane-ansiblerun
+  tag: 0.1.0
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: simple-run
+      description: "KCL template to use"
+      hidden: true
+
+    - name: name
+      title: Run Name
+      type: string
+      required: true
+      default: run-ansible
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Ansible run"
+
+    - name: playbooks
+      title: Playbooks
+      type: string
+      required: true
+      default: sthings.baseos.setup
+      description: "Ansible playbooks to execute (comma-separated, e.g. sthings.baseos.setup,sthings.baseos.network)"
+
+    - name: hosts
+      title: Target Hosts
+      type: string
+      required: true
+      default: "10.100.136.150"
+      description: "Target host IPs (comma-separated, e.g. 10.100.136.150,10.100.136.151)"
+
+    - name: ansibleCredentialsSecretName
+      title: Credentials Secret
+      type: string
+      required: true
+      default: ansible-credentials
+      description: "Name of the Kubernetes secret containing Ansible credentials"
+
+    - name: crossplaneProviderConfig
+      title: Provider Config
+      type: string
+      required: true
+      default: dev
+      description: "Crossplane provider config to use"
+
+    # Hidden parameters with defaults
+    - name: hostGroup
+      title: Host Group
+      type: string
+      default: all
+      description: "Ansible inventory host group"
+      hidden: true
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: default
+      description: "Kubernetes namespace for the claim"
+      hidden: true
+
+    - name: pipelineNamespace
+      title: Pipeline Namespace
+      type: string
+      default: tekton-ci
+      description: "Namespace where the Tekton pipeline runs"
+      hidden: true
+
+    - name: gitRepoUrl
+      title: Git Repository
+      type: string
+      default: https://github.com/stuttgart-things/stage-time.git
+      description: "Git repository URL for the pipeline definition"
+      hidden: true
+
+    - name: gitRevision
+      title: Git Revision
+      type: string
+      default: main
+      description: "Git branch or revision"
+      hidden: true
+
+    - name: gitPath
+      title: Git Path
+      type: string
+      default: pipelines/execute-ansible-playbooks.yaml
+      description: "Path to the pipeline file in the Git repository"
+      hidden: true
+
+    - name: crossplaneNamespace
+      title: Crossplane Namespace
+      type: string
+      default: default
+      description: "Namespace for the Crossplane object"
+      hidden: true

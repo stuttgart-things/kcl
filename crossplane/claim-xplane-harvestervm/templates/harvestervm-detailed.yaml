@@ -2,15 +2,15 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: harvestervm-simple
-  title: Crossplane Harvester VM (Simple)
-  description: Creates a Harvester VM with minimal input - just pick a name and size
+  name: harvestervm-detailed
+  title: Crossplane Harvester VM (Detailed)
+  description: Creates a Harvester VM with control over environment, networking, and sizing
   tags:
     - harvester
     - vm
     - crossplane
     - kubevirt
-    - simple
+    - detailed
 spec:
   type: harvestervm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
@@ -20,8 +20,11 @@ spec:
       title: Template
       type: string
       default: demo
-      description: "KCL template to use"
-      hidden: true
+      enum:
+        - demo
+        - production
+        - minimal
+      description: "KCL template: demo (standard), production (hardened settings), minimal (bare minimum)"
 
     - name: name
       title: VM Name
@@ -48,7 +51,6 @@ spec:
       type: string
       default: default
       description: "Kubernetes namespace for the claim"
-      hidden: true
 
     - name: providerConfigRef
       title: Provider Config
@@ -56,7 +58,35 @@ spec:
       required: true
       default: dev
       description: "Name of the ProviderConfig for Kubernetes operations"
-      hidden: true
+
+    - name: os
+      title: Operating System
+      type: string
+      default: ubuntu
+      description: "OS type for the VM"
+
+    - name: domain
+      title: Domain
+      type: string
+      default: stuttgart-things.local
+      description: "Domain name for the VM"
+
+    - name: networkName
+      title: Network Name
+      type: string
+      default: default/default
+      description: "Network name (namespace/name format)"
+
+    - name: runStrategy
+      title: Run Strategy
+      type: string
+      default: RerunOnFailure
+      enum:
+        - Always
+        - RerunOnFailure
+        - Manual
+        - Halted
+      description: "VM run strategy"
 
     - name: storageClassName
       title: Storage Class
@@ -66,13 +96,6 @@ spec:
       description: "Storage class name for the PVC"
       hidden: true
 
-    - name: domain
-      title: Domain
-      type: string
-      default: stuttgart-things.local
-      description: "Domain name for the VM"
-      hidden: true
-
     - name: timezone
       title: Timezone
       type: string
@@ -80,30 +103,9 @@ spec:
       description: "Timezone"
       hidden: true
 
-    - name: os
-      title: Operating System
-      type: string
-      default: ubuntu
-      description: "OS type for the VM"
-      hidden: true
-
-    - name: runStrategy
-      title: Run Strategy
-      type: string
-      default: RerunOnFailure
-      description: "VM run strategy"
-      hidden: true
-
     - name: evictionStrategy
       title: Eviction Strategy
       type: string
       default: LiveMigrateIfPossible
       description: "VM eviction strategy"
-      hidden: true
-
-    - name: networkName
-      title: Network Name
-      type: string
-      default: default/default
-      description: "Network name (namespace/name format)"
       hidden: true

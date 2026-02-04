@@ -2,15 +2,15 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: harvestervm-simple
-  title: Crossplane Harvester VM (Simple)
-  description: Creates a Harvester VM with minimal input - just pick a name and size
+  name: harvestervm-expert
+  title: Crossplane Harvester VM (Expert)
+  description: Creates a Harvester VM with full control over all parameters
   tags:
     - harvester
     - vm
     - crossplane
     - kubevirt
-    - simple
+    - expert
 spec:
   type: harvestervm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
@@ -20,8 +20,11 @@ spec:
       title: Template
       type: string
       default: demo
-      description: "KCL template to use"
-      hidden: true
+      enum:
+        - demo
+        - production
+        - minimal
+      description: "KCL template: demo (standard), production (hardened settings), minimal (bare minimum)"
 
     - name: name
       title: VM Name
@@ -29,26 +32,13 @@ spec:
       required: true
       default: demo-harvester-vm
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
-      description: "Name of the VM"
-
-    - name: size
-      title: T-Shirt Size
-      type: string
-      default: M
-      enum:
-        - S
-        - M
-        - L
-        - XL
-        - XXL
-      description: "VM size: S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
+      description: "Name of the VM and claim resource"
 
     - name: namespace
       title: Namespace
       type: string
       default: default
       description: "Kubernetes namespace for the claim"
-      hidden: true
 
     - name: providerConfigRef
       title: Provider Config
@@ -56,7 +46,31 @@ spec:
       required: true
       default: dev
       description: "Name of the ProviderConfig for Kubernetes operations"
-      hidden: true
+
+    # VM Resources - direct control, no t-shirt size
+    - name: cores
+      title: CPU Cores
+      type: integer
+      default: 4
+      description: "Number of CPU cores"
+
+    - name: memory
+      title: Memory
+      type: string
+      default: 8Gi
+      description: "Memory size (e.g., 4Gi, 8Gi, 16Gi)"
+
+    - name: cpuResource
+      title: CPU Resource Limit
+      type: string
+      default: "4"
+      description: "CPU resource limit"
+
+    # Volume Configuration
+    - name: pvcName
+      title: PVC Name
+      type: string
+      description: "Name of the PVC (defaults to <name>-root)"
 
     - name: storageClassName
       title: Storage Class
@@ -64,46 +78,62 @@ spec:
       required: true
       default: harvester-longhorn
       description: "Storage class name for the PVC"
-      hidden: true
+
+    - name: storage
+      title: Storage Size
+      type: string
+      default: 20Gi
+      description: "Storage size (e.g., 20Gi, 100Gi)"
+
+    # CloudInit Configuration
+    - name: hostname
+      title: Hostname
+      type: string
+      description: "VM hostname (defaults to first part of name)"
 
     - name: domain
       title: Domain
       type: string
       default: stuttgart-things.local
       description: "Domain name for the VM"
-      hidden: true
 
     - name: timezone
       title: Timezone
       type: string
       default: Europe/Berlin
-      description: "Timezone"
-      hidden: true
+      description: "Timezone (e.g., Europe/Berlin, UTC)"
 
+    # VM Settings
     - name: os
       title: Operating System
       type: string
       default: ubuntu
       description: "OS type for the VM"
-      hidden: true
 
     - name: runStrategy
       title: Run Strategy
       type: string
       default: RerunOnFailure
+      enum:
+        - Always
+        - RerunOnFailure
+        - Manual
+        - Halted
       description: "VM run strategy"
-      hidden: true
 
     - name: evictionStrategy
       title: Eviction Strategy
       type: string
       default: LiveMigrateIfPossible
+      enum:
+        - LiveMigrateIfPossible
+        - LiveMigrate
+        - None
       description: "VM eviction strategy"
-      hidden: true
 
+    # Network
     - name: networkName
       title: Network Name
       type: string
       default: default/default
       description: "Network name (namespace/name format)"
-      hidden: true
