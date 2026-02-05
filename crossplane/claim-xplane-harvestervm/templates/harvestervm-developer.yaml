@@ -29,8 +29,12 @@ spec:
       title: Number of VMs
       type: integer
       default: 1
-      minimum: 1
-      maximum: 10
+      enum:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
       description: "Number of VMs to create"
 
     - name: size
@@ -98,7 +102,7 @@ spec:
       title: Provider Config
       type: string
       required: true
-      default: dev
+      default: harvester
       description: "Name of the ProviderConfig for Kubernetes operations"
       hidden: true
 
