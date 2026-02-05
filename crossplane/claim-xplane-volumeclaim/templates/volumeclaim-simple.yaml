@@ -66,16 +66,11 @@ spec:
     - name: storageClassName
       title: Storage Class
       type: string
-      default: standard
-
-    - name: storageClassName
-      title: Storage Class
-      type: string
       default: harvester-longhorn
       enum:
         - harvester-longhorn
-        - longhorn
-        - openebs
+        - local-path
+        - openebs-hostpath
 
     - name: accessModes
       title: Access Modes
