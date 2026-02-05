@@ -45,14 +45,14 @@ spec:
         - XXL
       description: "VM size: S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
 
-    - name: packages
-      title: Packages
-      type: array
-      items:
-        type: string
-      default:
-        - curl
-      description: "List of packages to install via cloud-init"
+    # - name: packages
+    #   title: Packages
+    #   type: array
+    #   items:
+    #     type: string
+    #   default:
+    #     - curl
+    #   description: "List of packages to install via cloud-init"
 
     - name: image
       title: VM Image
