@@ -150,10 +150,3 @@ spec:
       default: LiveMigrateIfPossible
       description: "VM eviction strategy"
       hidden: true
-
-    - name: networkName
-      title: Network Name
-      type: string
-      default: default/default
-      description: "Network name (namespace/name format)"
-      hidden: true

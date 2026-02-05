@@ -4,7 +4,7 @@ kind: ClaimTemplate
 metadata:
   name: harvestervm-detailed
   title: Crossplane Harvester VM (Detailed)
-  description: Creates a Harvester VM with control over environment, networking, and sizing
+  description: Creates Harvester VMs with environment-level controls and T-shirt sizing
   tags:
     - harvester
     - vm
@@ -14,18 +14,9 @@ metadata:
 spec:
   type: harvestervm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
-  tag: 0.1.3
+  tag: 0.1.4
   parameters:
-    - name: templateName
-      title: Template
-      type: string
-      default: demo
-      enum:
-        - demo
-        - production
-        - minimal
-      description: "KCL template: demo (standard), production (hardened settings), minimal (bare minimum)"
-
+    # User-facing parameters
     - name: name
       title: VM Name
       type: string
@@ -33,6 +24,14 @@ spec:
       default: demo-harvester-vm
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
       description: "Name of the VM"
+
+    - name: count
+      title: Number of VMs
+      type: integer
+      default: 1
+      minimum: 1
+      maximum: 10
+      description: "Number of VMs to create"
 
     - name: size
       title: T-Shirt Size
@@ -46,6 +45,26 @@ spec:
         - XXL
       description: "VM size: S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
 
+    - name: image
+      title: VM Image
+      type: string
+      required: true
+      default: ubuntu25
+      enum:
+        - ubuntu25
+        - opensuse-micro
+      description: "VM operating system image"
+
+    - name: packages
+      title: Packages
+      type: array
+      items:
+        type: string
+      default:
+        - curl
+      description: "List of packages to install via cloud-init"
+
+    # Environment configuration
     - name: namespace
       title: Namespace
       type: string
@@ -56,13 +75,18 @@ spec:
       title: Provider Config
       type: string
       required: true
-      default: dev
+      default: harvester
       description: "Name of the ProviderConfig for Kubernetes operations"
 
     - name: os
       title: Operating System
       type: string
       default: ubuntu
+      enum:
+        - ubuntu
+        - opensuse
+        - rocky
+        - debian
       description: "OS type for the VM"
 
     - name: domain
@@ -74,8 +98,8 @@ spec:
     - name: networkName
       title: Network Name
       type: string
-      default: default/default
-      description: "Network name (namespace/name format)"
+      default: default/vms
+      description: "Network name in namespace/name format (e.g. default/vms)"
 
     - name: runStrategy
       title: Run Strategy
@@ -88,12 +112,36 @@ spec:
         - Halted
       description: "VM run strategy"
 
+    - name: templateName
+      title: KCL Template
+      type: string
+      default: minimal
+      enum:
+        - demo
+        - production
+        - minimal
+      description: "KCL template: demo (standard), production (hardened settings), minimal (bare minimum)"
+
+    # Hidden parameters (pre-configured, not prompted to users)
+    - name: imageId
+      title: VM Image ID (Override)
+      type: string
+      required: false
+      description: "Direct Harvester image ID (overrides image alias if set)"
+      hidden: true
+
+    - name: imageNamespace
+      title: Image Namespace
+      type: string
+      default: default
+      description: "Namespace where the Harvester image is located"
+      hidden: true
+
     - name: storageClassName
       title: Storage Class
       type: string
-      required: true
-      default: harvester-longhorn
-      description: "Storage class name for the PVC"
+      required: false
+      description: "Storage class name for the PVC (auto-generated as longhorn-{imageId} if not specified)"
       hidden: true
 
     - name: timezone
