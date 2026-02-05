@@ -14,7 +14,7 @@ metadata:
 spec:
   type: harvestervm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
-  tag: 0.1.3
+  tag: 0.1.4
   parameters:
     # User-facing parameters
     - name: name
@@ -29,12 +29,8 @@ spec:
       title: Number of VMs
       type: integer
       default: 1
-      enum:
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
+      minimum: 1
+      maximum: 10
       description: "Number of VMs to create"
 
     - name: size
@@ -49,14 +45,14 @@ spec:
         - XXL
       description: "VM size: S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
 
-    # - name: packages
-    #   title: Packages
-    #   type: array
-    #   items:
-    #     type: string
-    #   default:
-    #     - curl
-    #   description: "List of packages to install via cloud-init"
+    - name: packages
+      title: Packages
+      type: array
+      items:
+        type: string
+      default:
+        - curl
+      description: "List of packages to install via cloud-init"
 
     - name: image
       title: VM Image
@@ -96,6 +92,13 @@ spec:
       type: string
       default: default
       description: "Kubernetes namespace for the claim"
+      hidden: true
+
+    - name: networkName
+      title: Network name
+      type: string
+      default: "default/vms"
+      description: "Network name in namespace/name format (e.g. default/vms)"
       hidden: true
 
     - name: providerConfigRef

@@ -93,7 +93,7 @@ _memory = _sizeConfig?.memory or option("memory") or _vmSpec?.resources?.memory 
 _cpu = _sizeConfig?.cpu or option("cpuResource") or _vmSpec?.resources?.cpu or "4"
 
 # Network configuration
-_networkName = option("networkName") or "default/default"
+_networkName = option("networkName") or "default/vms"
 
 # Demo Template - Basic VM for testing
 if _templateName == "demo":
