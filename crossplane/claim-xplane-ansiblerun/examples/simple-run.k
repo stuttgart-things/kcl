@@ -20,7 +20,7 @@ ansiblerun.AnsibleRun {
         pipelineRunName = "run-ansible-baseos"
         namespace = "tekton-ci"
 
-        ansibleCredentialsSecretName = "ansible-credentials"
+        ansibleCredentialsSecretName = "ansible-credentials" # pragma: allowlist secret
         ansiblePlaybooks = [
             "sthings.baseos.setup"
         ]

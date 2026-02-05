@@ -11,27 +11,39 @@ metadata:
 spec:
   type: volumeclaim
   source: oci://ghcr.io/stuttgart-things/claim-xplane-volumeclaim
-  tag: 0.1.1
+  tag: 0.1.3
   parameters:
     # Template selector
     - name: templateName
       title: Template
       type: string
       default: simple
-      enum:
-        - demo
-        - database
-        - simple
+      hidden: true
 
     # Metadata
-    - name: name
+    - name: simpleName
       title: Resource Name
       type: string
-      default: simple-storage
+      default: app-data
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: providerConfig
+      title: Target cluster
+      type: string
+      default: harvester
+      enum:
+        - in-cluster
+        - harvester
+
     - name: namespace
-      title: Namespace
+      title: Target Namespace
       type: string
       required: true
       default: default
@@ -56,6 +68,15 @@ spec:
       type: string
       default: standard
 
+    - name: storageClassName
+      title: Storage Class
+      type: string
+      default: harvester-longhorn
+      enum:
+        - harvester-longhorn
+        - longhorn
+        - openebs
+
     - name: accessModes
       title: Access Modes
       type: array
@@ -63,19 +84,15 @@ spec:
         type: string
       default:
         - ReadWriteOnce
+      hidden: true
 
-    - name: volumeMode
-      title: Volume Mode
-      type: string
-      default: Filesystem
-      enum:
-        - Filesystem
-        - Block
-
-    - name: providerConfigRef
-      title: Provider Config
-      type: string
-      default: default-k8s
+    # - name: volumeMode
+    #   title: Volume Mode
+    #   type: string
+    #   default: Filesystem
+    #   enum:
+    #     - Filesystem
+    #     - Block
 
     - name: description
       title: Description

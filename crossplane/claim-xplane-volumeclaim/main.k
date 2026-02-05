@@ -16,7 +16,8 @@ _useDbTemplate = option("useDbTemplate") or _params?.useDbTemplate or False  # B
 
 # Common parameters
 _name = _spec?.pvcName or option("pvcName") or "demo-pvc"
-_namespace = _spec?.namespace or option("namespace") or "default"
+_namespace = _spec?.namespace or option("namespace") or _params?.namespace or "default"
+_claimNamespace = _spec?.claimNamespace or option("claimNamespace") or _params?.claimNamespace or _namespace
 _storage = _spec?.storage or option("storage") or "20Gi"
 _storageClass = _spec?.storageClassName or option("storageClassName") or "standard"
 _accessModes = _spec?.accessModes or option("accessModes") or ["ReadWriteOnce"]
@@ -33,7 +34,7 @@ if _selectedTemplate == "demo":
     vc.VolumeClaim {
         metadata = v1.ObjectMeta {
             name = _name
-            namespace = _namespace
+            namespace = _claimNamespace
             annotations = {
                 "example.com/managed-by": "kcl-test"
             }
@@ -55,7 +56,7 @@ if _selectedTemplate == "database":
     vc.VolumeClaim {
         metadata = v1.ObjectMeta {
             name = "db-pvc"
-            namespace = _namespace
+            namespace = _claimNamespace
             annotations = {
                 "example.com/managed-by": "kcl-test",
                 "backup.velero.io/backup-volumes": "db-data"
@@ -95,7 +96,7 @@ if _selectedTemplate == "simple":
     vc.VolumeClaim {
         metadata = v1.ObjectMeta {
             name = option("simpleName") or "simple-storage"
-            namespace = _namespace
+            namespace = _claimNamespace
         }
 
         spec = vc.ResourcesStuttgartThingsComV1alpha1VolumeClaimSpec {
