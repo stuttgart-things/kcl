@@ -173,8 +173,8 @@ schema ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInit:
 
     Attributes
     ----------
-    vmName : str, default is Undefined, required
-        Name of the VM for cloud-init
+    vmName : str, default is Undefined, optional
+        Name of the VM for cloud-init (defaults to hostname if not set)
     namespace : str, default is "vms", optional
         Namespace for cloud-init secret
     hostname : str, default is Undefined, required
@@ -205,7 +205,7 @@ schema ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInit:
         Network configuration (cloud-init network-config format)
     """
 
-    vmName: str
+    vmName?: str
 
     namespace?: str = "vms"
 

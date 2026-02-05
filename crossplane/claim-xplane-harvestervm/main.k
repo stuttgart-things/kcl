@@ -26,6 +26,21 @@ _sizeConfigs = {
 _size = option("size") or _params?.size or ""
 _sizeConfig = _sizeConfigs[_size] if _size in _sizeConfigs else {}
 
+# VM Image alias mapping (friendly name -> Harvester imageId)
+_imageAliases = {
+    "ubuntu25": "image-t9w92"
+    "ubuntu22": "image-lg5qf"
+    "rocky9": "image-k7m2x"
+    "rocky8": "image-r4n9p"
+    "debian12": "image-d3b7k"
+    "opensuse15": "image-s5v2m"
+    "opensuse-micro": "image-m5bh6"
+}
+
+# Image selector (resolves alias to imageId)
+_image = option("image") or _params?.image or ""
+_resolvedImageId = _imageAliases[_image] if _image in _imageAliases else ""
+
 # Common parameters
 _name = option("name") or _params?.name or "demo-harvester-vm"
 _namespace = option("namespace") or _params?.namespace or "default"
@@ -35,14 +50,20 @@ _providerConfigRef = option("providerConfigRef") or _params?.providerConfigRef o
 _volumeSpec = _spec?.volume or {}
 _pvcName = option("pvcName") or _volumeSpec?.pvcName or "${_name}-root"
 _volumeNamespace = option("volumeNamespace") or _volumeSpec?.namespace or _namespace
-_storageClassName = option("storageClassName") or _volumeSpec?.storageClassName or "harvester-longhorn"
 _storage = _sizeConfig?.storage or option("storage") or _volumeSpec?.storage or "20Gi"
-_accessModes = _volumeSpec?.accessModes or ["ReadWriteOnce"]
-_volumeMode = option("volumeMode") or _volumeSpec?.volumeMode or "Filesystem"
+_accessModes = option("accessModes") or _volumeSpec?.accessModes or ["ReadWriteMany"]
+_volumeMode = option("volumeMode") or _volumeSpec?.volumeMode or "Block"
+
+# Harvester Image parameters (uses annotation harvesterhci.io/imageId)
+# Priority: resolved alias > direct imageId option > from volumeSpec annotation
+_imageId = _resolvedImageId or option("imageId") or (_volumeSpec?.annotations?["harvesterhci.io/imageId"]?.split("/")[1] if _volumeSpec?.annotations?["harvesterhci.io/imageId"] else "")
+_imageNamespace = option("imageNamespace") or "default"
+# StorageClassName for Harvester: longhorn-{imageId}
+_storageClassName = option("storageClassName") or _volumeSpec?.storageClassName or ("longhorn-${_imageId}" if _imageId else "harvester-longhorn")
 
 # CloudInit parameters
 _cloudInitSpec = _spec?.cloudInit or {}
-_vmName = option("vmName") or _cloudInitSpec?.vmName or _name
+_vmName = option("vmName") or _cloudInitSpec?.vmName or _cloudInitSpec?.hostname or _name
 _cloudInitNamespace = option("cloudInitNamespace") or _cloudInitSpec?.namespace or _namespace
 _hostname = option("hostname") or _cloudInitSpec?.hostname or _name.split("-")[0]
 _domain = option("domain") or _cloudInitSpec?.domain or "stuttgart-things.local"
@@ -51,6 +72,7 @@ _packageUpdate = _cloudInitSpec?.packageUpdate if _cloudInitSpec?.packageUpdate 
 _packageUpgrade = _cloudInitSpec?.packageUpgrade if _cloudInitSpec?.packageUpgrade != None else False
 _sshPasswordAuth = _cloudInitSpec?.sshPasswordAuth if _cloudInitSpec?.sshPasswordAuth != None else False
 _disableRoot = _cloudInitSpec?.disableRoot if _cloudInitSpec?.disableRoot != None else True
+_packages = option("packages") or _params?.packages or _cloudInitSpec?.packages or []
 
 # VM parameters
 _vmSpec = _spec?.vm or {}
@@ -283,12 +305,28 @@ if _templateName == "minimal":
 
             volume = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVolume {
                 pvcName = _pvcName
+                namespace = _volumeNamespace
                 storageClassName = _storageClassName
+                storage = _storage
+                accessModes = _accessModes
+                volumeMode = _volumeMode
+                if _imageId:
+                    annotations = {
+                        "harvesterhci.io/imageId" = "${_imageNamespace}/${_imageId}"
+                    }
             }
 
             cloudInit = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInit {
                 vmName = _vmName
+                namespace = _cloudInitNamespace
                 hostname = _hostname
+                domain = _domain
+                timezone = _timezone
+                packages = _packages
+                packageUpdate = _packageUpdate
+                packageUpgrade = _packageUpgrade
+                sshPasswordAuth = _sshPasswordAuth
+                disableRoot = _disableRoot
             }
 
             vm = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVm {
