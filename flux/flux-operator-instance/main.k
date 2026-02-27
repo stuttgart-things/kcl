@@ -7,7 +7,7 @@ _config = {
     reconcileEvery = option("reconcileEvery") or "1h"
     reconcileTimeout = option("reconcileTimeout") or "5m"
     # Distribution settings
-    version = str(option("version")) if option("version") else "2.4"
+    version = str(option("version")) if option("version") else "2.8"
     registry = option("registry") or "ghcr.io/fluxcd"
     artifact = option("artifact") or "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests"
     # Components - can be overridden as a list

@@ -13,14 +13,27 @@ This KCL module creates a FluxInstance Custom Resource for installing and config
 
 ## RENDER
 
-helmfile apply -f git::https://github.com/stuttgart-things/helm.git@cicd/flux-operator.yaml.gotmpl --state-values-set version=0.28.0
+helmfile apply -f git::https://github.com/stuttgart-things/helm.git@cicd/flux-operator.yaml.gotmpl --state-values-set version=0.42.1
 
 ```bash
 # CREATE INSTANCE w/ SECRETS
-dagger call -m github.com/stuttgart-things/dagger/kcl run \
---oci-source ghcr.io/stuttgart-things/kcl-flux-instance:0.3.3 \
---parameters "name=flux,namespace=flux-system,version=2.x,gitUrl=https://github.com/stuttgart-things/stuttgart-things.git,gitRef=refs/heads/main,gitPath=clusters/labda/vsphere/sthings-runner,pullSecret=git-token-auth,renderSecrets=true,gitUsername=patrick-hermann-sva,gitPassword=ghp_4L...,sopsAgeKey=AGE-SECRET-KEY-1Q...,version=2.4" \
-export --path /tmp/flux.yaml
+dagger call \
+  -m github.com/stuttgart-things/dagger/kcl run \
+  --oci-source ghcr.io/stuttgart-things/kcl-flux-instance:0.3.3 \
+  --parameters "\
+name=flux,\
+namespace=flux-system,\
+version=2.8,\
+renderSecrets=true,\
+gitUsername=patrick-hermann-sva,\
+gitPassword=$GITHUB_TOKEN,\
+sopsAgeKey=$SOPS_AGE_KEY,\
+gitUrl=https://github.com/stuttgart-things/stuttgart-things.git,\
+gitRef=refs/heads/main,\
+gitPath=clusters/labul/vsphere/k3s-infra,\
+pullSecret=git-token-auth "\
+  export \
+  --path /tmp/flux.yaml
 ```
 
 
@@ -56,7 +69,7 @@ kcl run main.k
 kcl run main.k \
   -D name=my-flux \
   -D namespace=flux-system \
-  -D version=2.4 \
+  -D version=2.8 \
   -D gitUrl=https://github.com/my-org/my-repo.git \
   -D gitRef=refs/heads/main \
   -D gitPath=clusters/prod \
@@ -146,7 +159,7 @@ kcl run kcl-flux-instance \
 | `namespace` | string | `flux-system` | Namespace for Flux |
 | `reconcileEvery` | string | `1h` | Reconciliation interval |
 | `reconcileTimeout` | string | `5m` | Reconciliation timeout |
-| `version` | string | `2.4` | Flux version |
+| `version` | string | `2.8` | Flux version |
 | `registry` | string | `ghcr.io/fluxcd` | Container registry |
 | `artifact` | string | `oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests` | OCI artifact |
 | `components` | list | `[source-controller, kustomize-controller, ...]` | Flux components |
@@ -198,7 +211,7 @@ kcl run kcl-flux-instance \
 kcl run kcl-flux-instance \
   -D name=flux-prod \
   -D namespace=flux-system \
-  -D version=2.4 \
+  -D version=2.8 \
   -D gitUrl=https://github.com/my-org/prod-configs.git \
   -D gitRef=refs/heads/production \
   -D gitPath=clusters/prod/apps \
@@ -215,7 +228,7 @@ kcl run kcl-flux-instance \
 ```bash
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
 --oci-source ghcr.io/stuttgart-things/kcl-flux-instance:0.3.3 \
---parameters "name=flux-prod,namespace=flux-system,version=2.4,gitUrl=https://github.com/stuttgart-things/stuttgart-things.git,gitRef=refs/heads/main" \
+--parameters "name=flux-prod,namespace=flux-system,version=2.8,gitUrl=https://github.com/stuttgart-things/stuttgart-things.git,gitRef=refs/heads/main" \
 export --path /tmp/flux.yaml
 
 
@@ -230,7 +243,7 @@ export --path /tmp/flux.yaml
 kcl --quiet main.k \
 -D name=my-flux \
 -D namespace=flux-system \
--D version=2.4 \
+-D version=2.8 \
 -D gitUrl=https://github.com/my-org/my-repo.git \
 -D gitRef=refs/heads/main \
 -D gitPath=clusters/prod \

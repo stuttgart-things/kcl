@@ -49,7 +49,7 @@ test_sops_patches = lambda {
 # Test 4: Component list validation
 test_components = lambda {
     """Test default component list"""
-    config = flux.config
+    config = flux._config
 
     expected_components = [
         "source-controller"
@@ -77,7 +77,7 @@ test_distribution = lambda {
     instance = flux.items[0]
     dist = instance.spec.distribution
 
-    assert dist.version == "2.4", "Should have correct version"
+    assert dist.version == "2.8", "Should have correct version"
     assert dist.registry == "ghcr.io/fluxcd", "Should have correct registry"
     assert "ghcr.io/controlplaneio-fluxcd/flux-operator-manifests" in dist.artifact, "Should have correct artifact"
 
