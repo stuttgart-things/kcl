@@ -1,0 +1,88 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: cert-manager
+  title: Flux Infra Cert Manager
+  description: Deploys cert-manager via Flux Kustomization
+  tags:
+    - flux
+    - cert-manager
+    - tls
+    - infrastructure
+spec:
+  type: flux-infra-cert-manager
+  source: oci://ghcr.io/stuttgart-things/flux-infra-cert-manager
+  tag: 0.1.0
+  parameters:
+    - name: name
+      title: Kustomization Name
+      type: string
+      default: cert-manager
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Flux Kustomization resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      description: "Namespace for the Flux Kustomization"
+      hidden: true
+
+    - name: sourceRefName
+      title: Source Repository
+      type: string
+      required: true
+      default: flux-infra
+      description: "Name of the Flux GitRepository source"
+
+    - name: sourceRefKind
+      title: Source Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+      description: "Kind of the Flux source"
+      hidden: true
+
+    - name: path
+      title: Kustomization Path
+      type: string
+      default: "./infra/cert-manager/components/install"
+      description: "Path to the kustomization in the source repository"
+
+    - name: cert_manager_namespace
+      title: Cert Manager Namespace
+      type: string
+      default: cert-manager
+      description: "Namespace where cert-manager will be installed"
+
+    - name: cert_manager_version
+      title: Cert Manager Version
+      type: string
+      required: true
+      default: v1.18.2
+      description: "Version of cert-manager to deploy"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+      description: "Interval at which to reconcile the Kustomization"
+      hidden: true
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+      description: "Interval at which to retry a failed reconciliation"
+      hidden: true
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+      description: "Timeout for the reconciliation"
+      hidden: true

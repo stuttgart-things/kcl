@@ -1,0 +1,111 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: cilium-gateway
+  title: Flux Infra Cilium Gateway
+  description: Deploys Cilium Gateway API resources via Flux Kustomization
+  tags:
+    - flux
+    - cilium
+    - gateway-api
+    - ingress
+    - infrastructure
+spec:
+  type: flux-infra-cilium-gateway
+  source: oci://ghcr.io/stuttgart-things/flux-infra-cilium-gateway
+  tag: 0.1.0
+  parameters:
+    - name: name
+      title: Kustomization Name
+      type: string
+      default: cilium-gateway
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Flux Kustomization resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      description: "Namespace for the Flux Kustomization"
+      hidden: true
+
+    - name: sourceRefName
+      title: Source Repository
+      type: string
+      required: true
+      default: flux-infra
+      description: "Name of the Flux GitRepository source"
+
+    - name: sourceRefKind
+      title: Source Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+      description: "Kind of the Flux source"
+      hidden: true
+
+    - name: path
+      title: Kustomization Path
+      type: string
+      default: "./infra/cilium/components/gateway"
+      description: "Path to the kustomization in the source repository"
+
+    - name: cilium_gateway_name
+      title: Gateway Name
+      type: string
+      required: true
+      default: k3s-infra-gateway
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Cilium Gateway resource"
+
+    - name: cilium_gateway_namespace
+      title: Gateway Namespace
+      type: string
+      default: default
+      description: "Namespace for the Cilium Gateway"
+
+    - name: cilium_gateway_domain
+      title: Gateway Domain
+      type: string
+      required: true
+      default: "k3s-infra.sthings-vsphere.labul.sva.de"
+      description: "Domain for the Gateway listeners"
+
+    - name: cilium_gateway_tls_secret
+      title: TLS Secret Name
+      type: string
+      required: true
+      default: wildcard-k3s-infra-tls
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the TLS secret for Gateway HTTPS listeners"
+
+    - name: dependsOnNames
+      title: Depends On
+      type: string
+      default: "cilium-lb,cert-manager-selfsigned"
+      description: "Comma-separated names of Kustomizations this depends on"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+      description: "Interval at which to reconcile the Kustomization"
+      hidden: true
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+      description: "Interval at which to retry a failed reconciliation"
+      hidden: true
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+      description: "Timeout for the reconciliation"
+      hidden: true

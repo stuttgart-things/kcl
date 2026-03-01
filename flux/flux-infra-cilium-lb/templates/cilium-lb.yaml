@@ -1,0 +1,91 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: cilium-lb
+  title: Flux Infra Cilium LB
+  description: Deploys Cilium LoadBalancer IP pool via Flux Kustomization
+  tags:
+    - flux
+    - cilium
+    - loadbalancer
+    - infrastructure
+spec:
+  type: flux-infra-cilium-lb
+  source: oci://ghcr.io/stuttgart-things/flux-infra-cilium-lb
+  tag: 0.1.0
+  parameters:
+    - name: name
+      title: Kustomization Name
+      type: string
+      default: cilium-lb
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Flux Kustomization resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      description: "Namespace for the Flux Kustomization"
+      hidden: true
+
+    - name: sourceRefName
+      title: Source Repository
+      type: string
+      required: true
+      default: flux-infra
+      description: "Name of the Flux GitRepository source"
+
+    - name: sourceRefKind
+      title: Source Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+      description: "Kind of the Flux source"
+      hidden: true
+
+    - name: path
+      title: Kustomization Path
+      type: string
+      default: "./infra/cilium/components/lb"
+      description: "Path to the kustomization in the source repository"
+
+    - name: cilium_lb_ip_start
+      title: LB IP Range Start
+      type: string
+      required: true
+      default: "10.31.103.12"
+      pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"
+      description: "Start IP address of the Cilium LoadBalancer pool"
+
+    - name: cilium_lb_ip_stop
+      title: LB IP Range Stop
+      type: string
+      required: true
+      default: "10.31.103.13"
+      pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"
+      description: "End IP address of the Cilium LoadBalancer pool"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+      description: "Interval at which to reconcile the Kustomization"
+      hidden: true
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+      description: "Interval at which to retry a failed reconciliation"
+      hidden: true
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+      description: "Timeout for the reconciliation"
+      hidden: true

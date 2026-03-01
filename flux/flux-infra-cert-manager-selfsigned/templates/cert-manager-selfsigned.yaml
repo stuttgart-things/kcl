@@ -1,0 +1,123 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: cert-manager-selfsigned
+  title: Flux Infra Cert Manager Self-Signed
+  description: Deploys cert-manager self-signed certificate issuer and wildcard certificate via Flux Kustomization
+  tags:
+    - flux
+    - cert-manager
+    - tls
+    - certificate
+    - infrastructure
+spec:
+  type: flux-infra-cert-manager-selfsigned
+  source: oci://ghcr.io/stuttgart-things/flux-infra-cert-manager-selfsigned
+  tag: 0.1.0
+  parameters:
+    - name: name
+      title: Kustomization Name
+      type: string
+      default: cert-manager-selfsigned
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Flux Kustomization resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      description: "Namespace for the Flux Kustomization"
+      hidden: true
+
+    - name: sourceRefName
+      title: Source Repository
+      type: string
+      required: true
+      default: flux-infra
+      description: "Name of the Flux GitRepository source"
+
+    - name: sourceRefKind
+      title: Source Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+      description: "Kind of the Flux source"
+      hidden: true
+
+    - name: path
+      title: Kustomization Path
+      type: string
+      default: "./infra/cert-manager/components/selfsigned"
+      description: "Path to the kustomization in the source repository"
+
+    - name: cert_manager_namespace
+      title: Cert Manager Namespace
+      type: string
+      default: cert-manager
+      description: "Namespace where cert-manager is installed"
+
+    - name: cert_manager_selfsigned_domain
+      title: Certificate Domain
+      type: string
+      required: true
+      default: "k3s-infra.sthings-vsphere.labul.sva.de"
+      description: "Domain for the wildcard certificate"
+
+    - name: cert_manager_selfsigned_secret_name
+      title: TLS Secret Name
+      type: string
+      required: true
+      default: wildcard-k3s-infra-tls
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Kubernetes TLS secret"
+
+    - name: cert_manager_selfsigned_cert_name
+      title: Certificate Name
+      type: string
+      default: wildcard-k3s-infra-tls
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Certificate resource"
+
+    - name: cert_manager_selfsigned_cert_namespace
+      title: Certificate Namespace
+      type: string
+      default: default
+      description: "Namespace for the Certificate resource"
+
+    - name: cert_manager_selfsigned_issuer
+      title: Certificate Issuer
+      type: string
+      required: true
+      default: vault-pki
+      description: "Name of the ClusterIssuer or Issuer to use"
+
+    - name: dependsOnName
+      title: Depends On
+      type: string
+      default: cert-manager
+      description: "Name of the Kustomization this depends on"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+      description: "Interval at which to reconcile the Kustomization"
+      hidden: true
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+      description: "Interval at which to retry a failed reconciliation"
+      hidden: true
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+      description: "Timeout for the reconciliation"
+      hidden: true

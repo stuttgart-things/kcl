@@ -1,0 +1,128 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: vault
+  title: Flux Infra Vault
+  description: Deploys HashiCorp Vault via Flux Kustomization with Cilium Gateway integration
+  tags:
+    - flux
+    - vault
+    - hashicorp
+    - secrets
+    - infrastructure
+spec:
+  type: flux-infra-vault
+  source: oci://ghcr.io/stuttgart-things/flux-infra-vault
+  tag: 0.1.0
+  parameters:
+    - name: name
+      title: Kustomization Name
+      type: string
+      default: vault
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Flux Kustomization resource"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      description: "Namespace for the Flux Kustomization"
+      hidden: true
+
+    - name: sourceRefName
+      title: Source Repository
+      type: string
+      required: true
+      default: flux-infra
+      description: "Name of the Flux GitRepository source"
+
+    - name: sourceRefKind
+      title: Source Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+      description: "Kind of the Flux source"
+      hidden: true
+
+    - name: path
+      title: Kustomization Path
+      type: string
+      default: "./infra/vault"
+      description: "Path to the kustomization in the source repository"
+
+    - name: vault_namespace
+      title: Vault Namespace
+      type: string
+      default: vault
+      description: "Namespace where Vault will be installed"
+
+    - name: vault_version
+      title: Vault Chart Version
+      type: string
+      required: true
+      default: "1.9.0"
+      description: "Version of the Vault Helm chart"
+
+    - name: storage_class
+      title: Storage Class
+      type: string
+      default: local-path
+      description: "Storage class for Vault persistent volumes"
+
+    - name: gateway_name
+      title: Gateway Name
+      type: string
+      required: true
+      default: k3s-infra-gateway
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Cilium Gateway for Vault HTTPRoute"
+
+    - name: gateway_namespace
+      title: Gateway Namespace
+      type: string
+      default: default
+      description: "Namespace of the Cilium Gateway"
+
+    - name: vault_hostname
+      title: Vault Hostname
+      type: string
+      required: true
+      default: vault
+      description: "Hostname prefix for Vault (will be combined with domain)"
+
+    - name: vault_domain
+      title: Vault Domain
+      type: string
+      required: true
+      default: "k3s-infra.sthings-vsphere.labul.sva.de"
+      description: "Domain for Vault access (full FQDN: hostname.domain)"
+
+    - name: dependsOnName
+      title: Depends On
+      type: string
+      default: cilium-gateway
+      description: "Name of the Kustomization this depends on"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+      description: "Interval at which to reconcile the Kustomization"
+      hidden: true
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+      description: "Interval at which to retry a failed reconciliation"
+      hidden: true
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "10m"
+      description: "Timeout for the reconciliation (longer due to Vault init)"
