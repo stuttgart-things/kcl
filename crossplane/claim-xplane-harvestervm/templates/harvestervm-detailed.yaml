@@ -49,10 +49,12 @@ spec:
       title: VM Image
       type: string
       required: true
-      default: ubuntu25
+      default: u25-dev
       enum:
-        - ubuntu25
-        - opensuse-micro
+        - u25-dev
+        - opensuse-dev
+        - rocky9-dev
+        - upstream
       description: "VM operating system image"
 
     - name: packages
@@ -86,7 +88,6 @@ spec:
         - ubuntu
         - opensuse
         - rocky
-        - debian
       description: "OS type for the VM"
 
     - name: domain
