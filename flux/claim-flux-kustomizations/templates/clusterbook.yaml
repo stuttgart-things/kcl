@@ -12,7 +12,7 @@ metadata:
 spec:
   type: kustomization
   source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
-  tag: "0.1.0"
+  tag: "0.3.2"
   parameters:
     - name: templateName
       title: Template
@@ -35,7 +35,7 @@ spec:
     - name: sourceRefName
       title: Source Reference Name
       type: string
-      default: stuttgart-things-flux
+      default: flux-apps
 
     - name: path
       title: Path

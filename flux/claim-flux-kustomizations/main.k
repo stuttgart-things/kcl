@@ -225,7 +225,7 @@ if _templateName == "clusterbook":
 
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
-                name = _sourceRefName if _sourceRefName else "stuttgart-things-flux"
+                name = _sourceRefName if _sourceRefName else "flux-apps"
             }
 
             path = _path if _path != "./" else "./apps/clusterbook"
