@@ -232,15 +232,15 @@ if _templateName == "clusterbook":
 
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
-                    CLUSTERBOOK_NAMESPACE = _clusterbookNamespace
-                    CLUSTERBOOK_VERSION = _clusterbookVersion
-                    CLUSTERBOOK_HOSTNAME = _clusterbookHostname
-                    GATEWAY_NAME = _gatewayName
-                    GATEWAY_NAMESPACE = _gatewayNamespace
-                    DOMAIN = _domain
-                    PDNS_ENABLED = _pdnsEnabled
-                    PDNS_URL = _pdnsUrl
-                    PDNS_ZONE = _pdnsZone
+                    CLUSTERBOOK_NAMESPACE = str(_clusterbookNamespace)
+                    CLUSTERBOOK_VERSION = str(_clusterbookVersion)
+                    CLUSTERBOOK_HOSTNAME = str(_clusterbookHostname)
+                    GATEWAY_NAME = str(_gatewayName)
+                    GATEWAY_NAMESPACE = str(_gatewayNamespace)
+                    DOMAIN = str(_domain)
+                    PDNS_ENABLED = str(_pdnsEnabled)
+                    PDNS_URL = str(_pdnsUrl)
+                    PDNS_ZONE = str(_pdnsZone)
                 }
                 substituteFrom = [
                     flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
