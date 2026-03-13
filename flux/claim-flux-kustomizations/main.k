@@ -13,6 +13,7 @@ Usage via main.k:
     kcl run . -D templateName=gitops -D name=my-app -D sourceRefName=my-repo -D path=./manifests
     kcl run . -D templateName=infrastructure -D name=infra -D sourceRefName=infra-repo -D dependsOnNames="cert-manager,ingress-nginx"
     kcl run . -D templateName=crossplane -D sourceRefName=flux-apps -D crossplaneVersion=2.1.3
+    kcl run . -D templateName=clusterbook -D name=clusterbook -D CLUSTERBOOK_VERSION=v1.11.0
 
 Usage via standalone templates:
     kcl run templates/gitops.k -D name=my-app -D sourceRefName=my-repo
@@ -185,6 +186,69 @@ if _templateName == "gitops":
                     if _commonAnnotations:
                         annotations = _commonAnnotations
                 }
+        }
+    }
+
+# Template: Clusterbook (app deployment with postBuild substitutions and substituteFrom secret)
+if _templateName == "clusterbook":
+    # Clusterbook-specific parameters
+    _clusterbookNamespace = option("CLUSTERBOOK_NAMESPACE") or "clusterbook"
+    _clusterbookVersion = option("CLUSTERBOOK_VERSION") or "v1.11.0"
+    _clusterbookHostname = option("CLUSTERBOOK_HOSTNAME") or "clusterbook"
+    _gatewayName = option("GATEWAY_NAME") or "movie-scripts2-gateway"
+    _gatewayNamespace = option("GATEWAY_NAMESPACE") or "default"
+    _domain = option("DOMAIN") or "movie-scripts2.sthings-vsphere.labul.sva.de"
+    _pdnsEnabled = option("PDNS_ENABLED") or "true"
+    _pdnsUrl = option("PDNS_URL") or "https://pdns.sthings-vsphere.labul.sva.de"
+    _pdnsZone = option("PDNS_ZONE") or "sthings.io"
+    _secretName = option("secretName") or "clusterbook-pdns-vars"
+
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "clusterbook"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "stuttgart-things-flux"
+            }
+
+            path = _path if _path != "./" else "./apps/clusterbook"
+
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    CLUSTERBOOK_NAMESPACE = _clusterbookNamespace
+                    CLUSTERBOOK_VERSION = _clusterbookVersion
+                    CLUSTERBOOK_HOSTNAME = _clusterbookHostname
+                    GATEWAY_NAME = _gatewayName
+                    GATEWAY_NAMESPACE = _gatewayNamespace
+                    DOMAIN = _domain
+                    PDNS_ENABLED = _pdnsEnabled
+                    PDNS_URL = _pdnsUrl
+                    PDNS_ZONE = _pdnsZone
+                }
+                substituteFrom = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
+                        kind = "Secret"
+                        name = _secretName
+                    }
+                ]
+            }
         }
     }
 
