@@ -1,0 +1,114 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: clusterbook
+  title: Clusterbook App Deployment
+  description: Deploys Clusterbook via Flux Kustomization with optional PowerDNS SOPS-encrypted secret
+  tags:
+    - flux
+    - app
+    - clusterbook
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: clusterbook
+      hidden: true
+
+    - name: name
+      title: Kustomization Name
+      type: string
+      default: clusterbook
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Kustomization Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: stuttgart-things-flux
+
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/clusterbook"
+
+    - name: CLUSTERBOOK_NAMESPACE
+      title: Clusterbook Namespace
+      type: string
+      default: clusterbook
+      required: true
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: CLUSTERBOOK_VERSION
+      title: Clusterbook Version
+      type: string
+      default: v1.11.0
+      required: true
+
+    - name: CLUSTERBOOK_HOSTNAME
+      title: Hostname
+      type: string
+      default: clusterbook
+
+    - name: GATEWAY_NAME
+      title: Gateway Name
+      type: string
+      default: movie-scripts2-gateway
+
+    - name: GATEWAY_NAMESPACE
+      title: Gateway Namespace
+      type: string
+      default: default
+
+    - name: DOMAIN
+      title: Domain
+      type: string
+      default: movie-scripts2.sthings-vsphere.labul.sva.de
+
+    - name: PDNS_ENABLED
+      title: PowerDNS Enabled
+      type: string
+      default: "true"
+      enum:
+        - "true"
+        - "false"
+
+    - name: PDNS_URL
+      title: PowerDNS URL
+      type: string
+      default: https://pdns.sthings-vsphere.labul.sva.de
+
+    - name: PDNS_ZONE
+      title: PowerDNS Zone
+      type: string
+      default: sthings.io
+
+    - name: secretName
+      title: Secret Name
+      type: string
+      default: clusterbook-pdns-vars
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: secretNamespace
+      title: Secret Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+  secrets:
+    - name: "{{.secretName}}"
+      namespace: "{{.secretNamespace}}"
+      parameters:
+        - name: PDNS_TOKEN
+          title: PowerDNS API Token
+          type: string
+          required: true
