@@ -75,6 +75,14 @@ spec:
       type: string
       default: movie-scripts2.sthings-vsphere.labul.sva.de
 
+    - name: FLUX_SOURCE_API_VERSION
+      title: Flux Source API Version
+      type: string
+      default: v1beta2
+      enum:
+        - v1beta2
+        - v1
+
     - name: PDNS_ENABLED
       title: PowerDNS Enabled
       type: string

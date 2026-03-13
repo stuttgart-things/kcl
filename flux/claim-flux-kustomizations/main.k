@@ -198,6 +198,7 @@ if _templateName == "clusterbook":
     _gatewayName = option("GATEWAY_NAME") or "movie-scripts2-gateway"
     _gatewayNamespace = option("GATEWAY_NAMESPACE") or "default"
     _domain = option("DOMAIN") or "movie-scripts2.sthings-vsphere.labul.sva.de"
+    _fluxSourceApiVersion = option("FLUX_SOURCE_API_VERSION") or "v1beta2"
     _pdnsEnabled = option("PDNS_ENABLED") or "true"
     _pdnsUrl = option("PDNS_URL") or "https://pdns.sthings-vsphere.labul.sva.de"
     _pdnsZone = option("PDNS_ZONE") or "sthings.io"
@@ -241,6 +242,7 @@ if _templateName == "clusterbook":
                     PDNS_ENABLED = str(_pdnsEnabled)
                     PDNS_URL = str(_pdnsUrl)
                     PDNS_ZONE = str(_pdnsZone)
+                    FLUX_SOURCE_API_VERSION = str(_fluxSourceApiVersion)
                 }
                 substituteFrom = [
                     flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
