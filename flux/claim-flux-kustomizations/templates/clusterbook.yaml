@@ -12,6 +12,7 @@ metadata:
 spec:
   type: kustomization
   source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: "0.1.0"
   parameters:
     - name: templateName
       title: Template
