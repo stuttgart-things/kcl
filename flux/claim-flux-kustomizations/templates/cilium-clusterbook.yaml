@@ -1,0 +1,93 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: cilium-clusterbook
+  title: Cilium LB with Clusterbook IPAM
+  description: Deploys Cilium LoadBalancer Flux Kustomization with IP addresses reserved from Clusterbook
+  tags:
+    - flux
+    - cilium
+    - clusterbook
+    - infrastructure
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: "0.3.10"
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: infrastructure
+      hidden: true
+
+    - name: name
+      title: Kustomization Name
+      type: string
+      default: cilium-lb
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Kustomization Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-infra
+
+    - name: path
+      title: Path
+      type: string
+      default: "./infra/cilium/components/lb"
+
+    - name: clusterName
+      title: Cluster Name
+      type: string
+      required: true
+      description: "Cluster name used for IP reservation in Clusterbook"
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: networkKey
+      title: Network Key
+      type: string
+      required: true
+      description: "Clusterbook network key (e.g. 10.31.103)"
+      pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+
+    - name: registerDns
+      title: Register DNS
+      type: string
+      default: "false"
+      description: "Register a wildcard DNS record for the start IP in PowerDNS via Clusterbook"
+      enum:
+        - "true"
+        - "false"
+
+    - name: CILIUM_LB_IP_START
+      title: Cilium LB IP Start
+      type: string
+      required: true
+      description: "Start IP for Cilium LB pool, reserved from Clusterbook (DNS registered if enabled)"
+      valueFrom:
+        function: clusterbook-assign-ip
+        args:
+          networkKey: "{{.networkKey}}"
+          cluster: "{{.clusterName}}"
+          status: "ASSIGNED"
+          createDns: "{{.registerDns}}"
+
+    - name: CILIUM_LB_IP_STOP
+      title: Cilium LB IP Stop
+      type: string
+      required: true
+      description: "Stop IP for Cilium LB pool (same as start = single IP)"
+      default: "{{.CILIUM_LB_IP_START}}"
+
+    - name: substitute
+      title: PostBuild Substitutions
+      type: string
+      hidden: true
+      default: "CILIUM_LB_IP_START={{.CILIUM_LB_IP_START}},CILIUM_LB_IP_STOP={{.CILIUM_LB_IP_STOP}}"
