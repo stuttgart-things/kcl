@@ -1,11 +1,17 @@
 """
 Clusterbook Kustomization Template
 
-Generates a Flux Kustomization for deploying Clusterbook with postBuild substitutions
-and an optional substituteFrom Secret reference for sensitive variables.
+Generates a Flux Kustomization for deploying Clusterbook with postBuild substitutions.
+PowerDNS integration is optional — when PDNS_ENABLED is "true", PDNS vars and a
+substituteFrom Secret reference are included; otherwise they are omitted.
+
+Optionally generates a NetworkConfig CR for seeding IP address data into Clusterbook.
+The NetworkConfig is annotated with prune/reconcile disabled so Flux seeds it once
+but never overwrites runtime changes.
 
 Usage:
-    kcl run templates/clusterbook.k -D name=clusterbook -D CLUSTERBOOK_VERSION=v1.11.0
+    kcl run templates/clusterbook.k -D name=clusterbook -D CLUSTERBOOK_VERSION=v1.20.2
+    kcl run templates/clusterbook.k -D PDNS_ENABLED=false
 """
 
 import k8s.apimachinery.pkg.apis.meta.v1 as v1
@@ -18,43 +24,58 @@ _spec = _params?.ks?.spec or {}
 # Common parameters
 _name = _spec?.name or option("name") or "clusterbook"
 _namespace = _spec?.namespace or option("namespace") or "flux-system"
-_interval = _spec?.interval or option("interval") or "1h"
+_interval = _spec?.interval or option("interval") or "5m"
 _retryInterval = _spec?.retryInterval or option("retryInterval") or "1m"
 _timeout = _spec?.timeout or option("timeout") or "5m"
 _prune = _spec?.prune or option("prune") or True
 _wait = True
+_force = _spec?.force or option("force") or False
 
 # Source reference parameters
 _sourceRefKind = _spec?.sourceRefKind or option("sourceRefKind") or "GitRepository"
-_sourceRefName = _spec?.sourceRefName or option("sourceRefName") or "stuttgart-things-flux"
+_sourceRefName = _spec?.sourceRefName or option("sourceRefName") or "flux-apps"
 _path = _spec?.path or option("path") or "./apps/clusterbook"
 
 # Clusterbook-specific parameters
 _clusterbookNamespace = _spec?.CLUSTERBOOK_NAMESPACE or option("CLUSTERBOOK_NAMESPACE") or "clusterbook"
-_clusterbookVersion = _spec?.CLUSTERBOOK_VERSION or option("CLUSTERBOOK_VERSION") or "v1.11.0"
+_clusterbookVersion = _spec?.CLUSTERBOOK_VERSION or option("CLUSTERBOOK_VERSION") or "v1.20.2"
 _clusterbookHostname = _spec?.CLUSTERBOOK_HOSTNAME or option("CLUSTERBOOK_HOSTNAME") or "clusterbook"
-_gatewayName = _spec?.GATEWAY_NAME or option("GATEWAY_NAME") or "movie-scripts2-gateway"
+_gatewayName = _spec?.GATEWAY_NAME or option("GATEWAY_NAME") or ""
 _gatewayNamespace = _spec?.GATEWAY_NAMESPACE or option("GATEWAY_NAMESPACE") or "default"
-_domain = _spec?.DOMAIN or option("DOMAIN") or "movie-scripts2.sthings-vsphere.labul.sva.de"
-_pdnsEnabled = _spec?.PDNS_ENABLED or option("PDNS_ENABLED") or "true"
-_pdnsUrl = _spec?.PDNS_URL or option("PDNS_URL") or "https://pdns.sthings-vsphere.labul.sva.de"
-_pdnsZone = _spec?.PDNS_ZONE or option("PDNS_ZONE") or "sthings.io"
+_domain = _spec?.DOMAIN or option("DOMAIN") or ""
+_fluxSourceApiVersion = "v1"
 
-# substituteFrom secret name
+# PowerDNS parameters (optional)
+_pdnsEnabled = str(_spec?.PDNS_ENABLED or option("PDNS_ENABLED") or "false").lower()
+_pdnsUrl = _spec?.PDNS_URL or option("PDNS_URL") or ""
+_pdnsZone = _spec?.PDNS_ZONE or option("PDNS_ZONE") or ""
+
+# substituteFrom secret name (only used when PDNS is enabled)
 _secretName = _spec?.secretName or option("secretName") or "clusterbook-pdns-vars"
 
-# Build substitutions map
-_substitute = {
+# NetworkConfig parameters (optional)
+_networkConfigName = _spec?.networkConfigName or option("networkConfigName") or ""
+_networks = _spec?.networks or option("networks") or {}
+
+# Build base substitutions map
+_baseSubstitute = {
     CLUSTERBOOK_NAMESPACE = _clusterbookNamespace
     CLUSTERBOOK_VERSION = _clusterbookVersion
     CLUSTERBOOK_HOSTNAME = _clusterbookHostname
     GATEWAY_NAME = _gatewayName
     GATEWAY_NAMESPACE = _gatewayNamespace
     DOMAIN = _domain
+    FLUX_SOURCE_API_VERSION = _fluxSourceApiVersion
+}
+
+# Conditionally add PDNS vars
+_pdnsSubstitute = {
     PDNS_ENABLED = _pdnsEnabled
     PDNS_URL = _pdnsUrl
     PDNS_ZONE = _pdnsZone
-}
+} if _pdnsEnabled == "true" else {}
+
+_substitute = _baseSubstitute | _pdnsSubstitute
 
 # Clusterbook Kustomization
 flux.Kustomization {
@@ -76,6 +97,7 @@ flux.Kustomization {
         timeout = _timeout
         prune = _prune
         wait = _wait
+        force = _force
 
         sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
             kind = _sourceRefKind
@@ -86,12 +108,32 @@ flux.Kustomization {
 
         postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
             substitute = _substitute
-            substituteFrom = [
-                flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
-                    kind = "Secret"
-                    name = _secretName
-                }
-            ]
+            if _pdnsEnabled == "true":
+                substituteFrom = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
+                        kind = "Secret"
+                        name = _secretName
+                        optional = False
+                    }
+                ]
         }
     }
 }
+
+# Optional NetworkConfig CR — only rendered when networks data is provided
+if _networks and _networkConfigName:
+    {
+        apiVersion = "github.stuttgart-things.com/v1"
+        kind = "NetworkConfig"
+        metadata = {
+            name = _networkConfigName
+            namespace = _clusterbookNamespace
+            annotations = {
+                "kustomize.toolkit.fluxcd.io/prune": "disabled"
+                "kustomize.toolkit.fluxcd.io/reconcile": "disabled"
+            }
+        }
+        spec = {
+            networks = _networks
+        }
+    }

@@ -4,7 +4,7 @@ kind: ClaimTemplate
 metadata:
   name: clusterbook
   title: Clusterbook App Deployment
-  description: Deploys Clusterbook via Flux Kustomization with optional PowerDNS SOPS-encrypted secret
+  description: Deploys Clusterbook via Flux Kustomization with optional PowerDNS integration and NetworkConfig seed
   tags:
     - flux
     - app
@@ -12,7 +12,7 @@ metadata:
 spec:
   type: kustomization
   source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
-  tag: "0.3.3"
+  tag: "0.3.9"
   parameters:
     - name: templateName
       title: Template
@@ -52,7 +52,7 @@ spec:
     - name: CLUSTERBOOK_VERSION
       title: Clusterbook Version
       type: string
-      default: v1.11.0
+      default: v1.20.2
       required: true
 
     - name: CLUSTERBOOK_HOSTNAME
@@ -63,7 +63,8 @@ spec:
     - name: GATEWAY_NAME
       title: Gateway Name
       type: string
-      default: movie-scripts2-gateway
+      required: true
+      description: Name of the gateway resource (e.g. my-cluster-gateway)
 
     - name: GATEWAY_NAMESPACE
       title: Gateway Namespace
@@ -73,20 +74,13 @@ spec:
     - name: DOMAIN
       title: Domain
       type: string
-      default: movie-scripts2.sthings-vsphere.labul.sva.de
-
-    - name: FLUX_SOURCE_API_VERSION
-      title: Flux Source API Version
-      type: string
-      default: v1beta2
-      enum:
-        - v1beta2
-        - v1
+      required: true
+      description: Ingress domain (e.g. my-cluster.sthings-vsphere.labul.sva.de)
 
     - name: PDNS_ENABLED
       title: PowerDNS Enabled
       type: string
-      default: "true"
+      default: "false"
       enum:
         - "true"
         - "false"
@@ -94,17 +88,20 @@ spec:
     - name: PDNS_URL
       title: PowerDNS URL
       type: string
-      default: https://pdns.sthings-vsphere.labul.sva.de
+      default: ""
+      description: Only required when PDNS_ENABLED is true
 
     - name: PDNS_ZONE
       title: PowerDNS Zone
       type: string
-      default: sthings.io
+      default: ""
+      description: Only required when PDNS_ENABLED is true
 
     - name: secretName
-      title: Secret Name
+      title: Secret Name (PDNS)
       type: string
       default: clusterbook-pdns-vars
+      description: Only used when PDNS_ENABLED is true
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 
     - name: secretNamespace
@@ -113,11 +110,29 @@ spec:
       default: flux-system
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 
+    - name: networkConfigName
+      title: NetworkConfig CR Name
+      type: string
+      default: ""
+      description: Name for the NetworkConfig CR. Leave empty to skip NetworkConfig generation.
+      pattern: "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$"
+
+    - name: networks
+      title: Networks
+      type: object
+      default: {}
+      description: >
+        Network IP data for the NetworkConfig CR (only used when networkConfigName is set).
+        Map of network prefixes to lists of IP entries, e.g.
+        {"10.31.101": ["5:ASSIGNED:rancher-mgmt", "6", "7"], "10.31.103": ["3", "4:ASSIGNED:sandiego"]}
+
   secrets:
     - name: "{{.secretName}}"
       namespace: "{{.secretNamespace}}"
+      optional: true
+      description: Only required when PDNS_ENABLED is true
       parameters:
         - name: PDNS_TOKEN
           title: PowerDNS API Token
           type: string
-          required: true
+          required: false
