@@ -90,6 +90,13 @@ _gitRepoSemver = _spec?.semver or option("semver") or ""
 _gitRepoCommit = _spec?.commit or option("commit") or ""
 _gitRepoSecretRefName = _spec?.secretRefName or option("secretRefName") or ""
 
+# Vault Autounseal specific parameters (for vault-autounseal template)
+_vaultAutounsealNamespace = _spec?.vaultAutounsealNamespace or option("vaultAutounsealNamespace") or "vault"
+_unsealHelmRepoUrl = _spec?.unsealHelmRepoUrl or option("unsealHelmRepoUrl") or "https://pytoshka.github.io/vault-autounseal"
+_vaultAutounsealVersion = _spec?.vaultAutounsealVersion or option("vaultAutounsealVersion") or "0.5.3"
+_vaultAutounsealUrl = _spec?.vaultAutounsealUrl or option("vaultAutounsealUrl") or "http://vault-server.vault.svc:8200"
+_vaultAutounsealLabelSelector = _spec?.vaultAutounsealLabelSelector or option("vaultAutounsealLabelSelector") or "app.kubernetes.io/component=server"
+
 # Vault specific parameters (for vault template)
 _vaultVersion = _spec?.vaultVersion or option("vaultVersion") or "1.9.0"
 _vaultNamespace = _spec?.vaultNamespace or option("vaultNamespace") or "vault"
@@ -314,6 +321,81 @@ if _templateName == "clusterbook":
         }
     }
 
+
+# Template: Vault Autounseal (app deployment with autounseal config)
+if _templateName == "vault-autounseal":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "vault-autounseal"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "vault-autounseal"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+
+            path = _path if _path != "./" else "./apps/vault/autounseal"
+
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "VAULT_NAMESPACE": str(_vaultAutounsealNamespace)
+                    "UNSEAL_HELM_REPO_URL": str(_unsealHelmRepoUrl)
+                    "VAULT_AUTOUNSEAL_VERSION": str(_vaultAutounsealVersion)
+                    "VAULT_AUTOUNSEAL_URL": str(_vaultAutounsealUrl)
+                    "VAULT_AUTOUNSEAL_LABEL_SELECTOR": str(_vaultAutounsealLabelSelector)
+                }
+            }
+
+            if _decryptionProvider == "sops" and _decryptionSecretRef:
+                decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
+                    provider = "sops"
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryptionSecretRef {
+                        name = _decryptionSecretRef
+                    }
+                }
+
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
 
 # Template: Vault (app deployment with image and ingress substitutions)
 if _templateName == "vault":

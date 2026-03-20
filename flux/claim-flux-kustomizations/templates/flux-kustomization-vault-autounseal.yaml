@@ -1,0 +1,122 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-vault-autounseal
+  title: Flux Kustomization Vault Autounseal
+  description: Deploys a Flux Kustomization for Vault auto-unseal with Helm repo and connection substitutions
+  tags:
+    - flux
+    - kustomization
+    - vault
+    - autounseal
+    - app
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.26
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: vault-autounseal
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: vault-autounseal
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/vault/autounseal"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      default: "vault"
+      description: "Comma-separated list of Kustomization names this depends on"
+
+    - name: vaultAutounsealNamespace
+      title: Vault Namespace
+      type: string
+      default: vault
+      description: "Namespace where Vault is installed (VAULT_NAMESPACE)"
+
+    - name: unsealHelmRepoUrl
+      title: Autounseal Helm Repo URL
+      type: string
+      default: "https://pytoshka.github.io/vault-autounseal"
+      description: "Helm repository URL for vault-autounseal chart (UNSEAL_HELM_REPO_URL)"
+
+    - name: vaultAutounsealVersion
+      title: Autounseal Chart Version
+      type: string
+      default: "0.5.3"
+      description: "Vault autounseal Helm chart version (VAULT_AUTOUNSEAL_VERSION)"
+
+    - name: vaultAutounsealUrl
+      title: Vault URL
+      type: string
+      default: "http://vault-server.vault.svc:8200"
+      description: "Vault server URL for autounseal (VAULT_AUTOUNSEAL_URL)"
+
+    - name: vaultAutounsealLabelSelector
+      title: Label Selector
+      type: string
+      default: "app.kubernetes.io/component=server"
+      description: "Label selector for Vault pods (VAULT_AUTOUNSEAL_LABEL_SELECTOR)"
+
+    - name: decryptionProvider
+      title: Decryption Provider
+      type: string
+      enum:
+        - sops
+
+    - name: decryptionSecretRef
+      title: Decryption Secret
+      type: string
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
