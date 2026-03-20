@@ -2,13 +2,13 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: kustomization-gitops
-  title: Flux Kustomization GitOps
-  description: Deploys a Flux Kustomization for GitOps application deployments
+  name: flux-kustomization-infrastructure
+  title: Flux Kustomization Infrastructure
+  description: Deploys a Flux Kustomization for infrastructure with wait, health checks, and dependencies
   tags:
     - flux
     - kustomization
-    - gitops
+    - infrastructure
 spec:
   type: kustomization
   source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
@@ -17,7 +17,7 @@ spec:
     - name: templateName
       title: Template
       type: string
-      default: gitops
+      default: infrastructure
 
     - name: name
       title: Resource Name
@@ -60,17 +60,19 @@ spec:
     - name: interval
       title: Reconciliation Interval
       type: string
-      default: "5m"
+      default: "10m"
       description: "Interval at which to reconcile (e.g., 5m, 1h)"
 
     - name: retryInterval
       title: Retry Interval
       type: string
+      default: "2m"
       description: "Interval at which to retry failed reconciliations"
 
     - name: timeout
       title: Timeout
       type: string
+      default: "5m"
       description: "Timeout for apply and health checking"
 
     - name: prune
@@ -78,12 +80,6 @@ spec:
       type: boolean
       default: true
       description: "Enable garbage collection of resources"
-
-    - name: wait
-      title: Wait for Readiness
-      type: boolean
-      default: false
-      description: "Wait for resources to become ready"
 
     - name: force
       title: Force Recreation

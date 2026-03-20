@@ -102,7 +102,26 @@ tekton_config = tekton.items({
 1. Develop according to team standards (`.container-use/decisions.md`)
 2. Syntax and resource tests (`kcl run ...`)
 3. Versioning and commit conventions
-4. Release as OCI artifact (`kcl mod push ...`)
+4. Release as OCI artifact
+
+### Push Module
+
+**Interactive (gum-based):**
+```bash
+task push-module
+```
+
+**Non-interactive:**
+```bash
+task push-module MODULE_DIR=flux/claim-flux-kustomizations NEW_VERSION=0.3.4
+```
+
+| Variable | Description |
+|---|---|
+| `MODULE_DIR` | Path to the KCL module directory (relative to repo root) |
+| `NEW_VERSION` | Semver version without `v` prefix (e.g. `0.3.4`) |
+
+When both variables are provided, `gum` prompts are skipped. Registry version check still runs for feedback.
 
 ---
 

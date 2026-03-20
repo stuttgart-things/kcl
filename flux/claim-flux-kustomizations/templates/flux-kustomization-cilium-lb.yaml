@@ -2,7 +2,7 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: cilium-clusterbook
+  name: flux-kustomization-cilium-lb
   title: Cilium LB with Clusterbook IPAM
   description: Deploys Cilium LoadBalancer Flux Kustomization with IP addresses reserved from Clusterbook
   tags:

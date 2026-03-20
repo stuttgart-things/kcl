@@ -118,7 +118,7 @@ EOF
 
 # Render all resources using parameters file
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
-  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.2.0 \
   --parameters-file params.yaml \
   --parameters "userdata=${CLOUDCFG_B64}" \
   export --path /tmp/harvester-dev5.yaml

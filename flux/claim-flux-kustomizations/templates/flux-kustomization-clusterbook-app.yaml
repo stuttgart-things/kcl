@@ -2,7 +2,7 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: clusterbook
+  name: flux-kustomization-clusterbook-app
   title: Clusterbook App Deployment
   description: Deploys Clusterbook via Flux Kustomization with optional PowerDNS integration and NetworkConfig seed
   tags:

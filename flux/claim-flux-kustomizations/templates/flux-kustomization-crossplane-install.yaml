@@ -2,12 +2,13 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: kustomization-infrastructure
-  title: Flux Kustomization Infrastructure
-  description: Deploys a Flux Kustomization for infrastructure with wait, health checks, and dependencies
+  name: flux-kustomization-crossplane-install
+  title: Flux Kustomization Crossplane
+  description: Deploys Crossplane with Terraform, Helm, and K8s providers via Flux
   tags:
     - flux
     - kustomization
+    - crossplane
     - infrastructure
 spec:
   type: kustomization
@@ -17,12 +18,12 @@ spec:
     - name: templateName
       title: Template
       type: string
-      default: infrastructure
+      default: crossplane
 
     - name: name
       title: Resource Name
       type: string
-      required: true
+      default: crossplane
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 
     - name: namespace
@@ -43,7 +44,7 @@ spec:
     - name: sourceRefName
       title: Source Reference Name
       type: string
-      required: true
+      default: flux-apps
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 
     - name: sourceRefNamespace
@@ -54,19 +55,19 @@ spec:
     - name: path
       title: Path
       type: string
-      default: "./"
+      default: "./cicd/crossplane"
       description: "Path to the directory containing the kustomization.yaml"
 
     - name: interval
       title: Reconciliation Interval
       type: string
-      default: "10m"
+      default: "1h"
       description: "Interval at which to reconcile (e.g., 5m, 1h)"
 
     - name: retryInterval
       title: Retry Interval
       type: string
-      default: "2m"
+      default: "1m"
       description: "Interval at which to retry failed reconciliations"
 
     - name: timeout
@@ -92,21 +93,6 @@ spec:
       type: boolean
       default: false
 
-    - name: targetNamespace
-      title: Target Namespace
-      type: string
-      description: "Override namespace for all resources"
-
-    - name: namePrefix
-      title: Name Prefix
-      type: string
-      description: "Prefix for all resource names"
-
-    - name: nameSuffix
-      title: Name Suffix
-      type: string
-      description: "Suffix for all resource names"
-
     - name: dependsOnNames
       title: Dependency Names
       type: string
@@ -117,22 +103,56 @@ spec:
       type: string
       description: "Namespace of dependencies, defaults to Kustomization namespace"
 
-    - name: substitute
-      title: Post-Build Substitutions
+    - name: crossplaneNamespace
+      title: Crossplane Namespace
       type: string
-      description: "Comma-separated key=value pairs for variable substitution"
+      default: crossplane-system
+      description: "Namespace where Crossplane will be installed"
 
-    - name: decryptionProvider
-      title: Decryption Provider
+    - name: crossplaneVersion
+      title: Crossplane Version
       type: string
-      enum:
-        - sops
-      description: "Enable SOPS decryption"
+      default: "2.1.3"
 
-    - name: decryptionSecretRef
-      title: Decryption Secret
+    - name: terraformConfigName
+      title: Terraform Runtime Config Name
       type: string
-      description: "Secret containing decryption keys"
+      default: terraform-runtime-config
+
+    - name: terraformPoll
+      title: Terraform Poll Interval
+      type: string
+      default: "30s"
+
+    - name: terraformProviderImage
+      title: Terraform Provider Image
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-cptf:1.14.3"
+
+    - name: terraformProviderVersion
+      title: Terraform Provider Version
+      type: string
+      default: "v1.0.5"
+
+    - name: terraformReconcileRate
+      title: Terraform Reconcile Rate
+      type: string
+      default: "10"
+
+    - name: terraformS3SecretName
+      title: Terraform S3 Secret Name
+      type: string
+      default: terraform-s3
+
+    - name: helmProviderVersion
+      title: Helm Provider Version
+      type: string
+      default: "v1.0.6"
+
+    - name: k8sProviderVersion
+      title: K8s Provider Version
+      type: string
+      default: "v1.2.0"
 
     - name: kubeConfigSecretRef
       title: KubeConfig Secret
@@ -149,13 +169,3 @@ spec:
       title: Service Account
       type: string
       description: "Service account to impersonate during reconciliation"
-
-    - name: commonLabels
-      title: Common Labels
-      type: string
-      description: "Comma-separated key=value pairs for labels on all resources"
-
-    - name: commonAnnotations
-      title: Common Annotations
-      type: string
-      description: "Comma-separated key=value pairs for annotations on all resources"
