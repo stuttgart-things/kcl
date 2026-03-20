@@ -90,6 +90,29 @@ _gitRepoSemver = _spec?.semver or option("semver") or ""
 _gitRepoCommit = _spec?.commit or option("commit") or ""
 _gitRepoSecretRefName = _spec?.secretRefName or option("secretRefName") or ""
 
+# Vault specific parameters (for vault template)
+_vaultVersion = _spec?.vaultVersion or option("vaultVersion") or "1.9.0"
+_vaultNamespace = _spec?.vaultNamespace or option("vaultNamespace") or "vault"
+_vaultRegistry = _spec?.vaultRegistry or option("vaultRegistry") or "ghcr.io"
+_vaultRepository = _spec?.vaultRepository or option("vaultRepository") or "stuttgart-things/vault"
+_vaultTag = _spec?.vaultTag or option("vaultTag") or "1.20.2-debian-12-r2"
+_vaultPullPolicy = _spec?.vaultPullPolicy or option("vaultPullPolicy") or "Always"
+_vaultIngressEnabled = _spec?.vaultIngressEnabled or option("vaultIngressEnabled") or "false"
+_vaultIngressClassName = _spec?.vaultIngressClassName or option("vaultIngressClassName") or "nginx"
+_vaultStorageClass = _spec?.vaultStorageClass or option("vaultStorageClass") or "local-path"
+_vaultInjectorEnabled = _spec?.vaultInjectorEnabled or option("vaultInjectorEnabled") or "true"
+_vaultInjectorRepository = _spec?.vaultInjectorRepository or option("vaultInjectorRepository") or "stuttgart-things/vault-k8s"
+_vaultInjectorTag = _spec?.vaultInjectorTag or option("vaultInjectorTag") or "1.7.0-debian-12-r4"
+_vaultInjectorPullPolicy = _spec?.vaultInjectorPullPolicy or option("vaultInjectorPullPolicy") or "Always"
+_vaultEnableVolumePermissions = _spec?.vaultEnableVolumePermissions or option("vaultEnableVolumePermissions") or "true"
+_vaultOsShellRepository = _spec?.vaultOsShellRepository or option("vaultOsShellRepository") or "stuttgart-things/os-shell"
+_vaultOsShellTag = _spec?.vaultOsShellTag or option("vaultOsShellTag") or "12-debian-12-r50"
+_vaultOsShellPullPolicy = _spec?.vaultOsShellPullPolicy or option("vaultOsShellPullPolicy") or "Always"
+_vaultIngressHostname = _spec?.vaultIngressHostname or option("vaultIngressHostname") or "vault"
+_vaultIngressDomain = _spec?.vaultIngressDomain or option("vaultIngressDomain") or ""
+_vaultIssuerName = _spec?.vaultIssuerName or option("vaultIssuerName") or "vault-pki"
+_vaultIssuerKind = _spec?.vaultIssuerKind or option("vaultIssuerKind") or "ClusterIssuer"
+
 # OpenEBS specific parameters (for openebs template)
 _openebsVersion = _spec?.openebsVersion or option("openebsVersion") or "4.2.0"
 _openebsVolumesnapshotsEnabled = _spec?.openebsVolumesnapshotsEnabled or option("openebsVolumesnapshotsEnabled") or "false"
@@ -291,6 +314,97 @@ if _templateName == "clusterbook":
         }
     }
 
+
+# Template: Vault (app deployment with image and ingress substitutions)
+if _templateName == "vault":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "vault"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "vault"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+
+            path = _path if _path != "./" else "./apps/vault"
+
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "VAULT_VERSION": str(_vaultVersion)
+                    "VAULT_NAMESPACE": str(_vaultNamespace)
+                    "REGISTRY": str(_vaultRegistry)
+                    "REPOSITORY": str(_vaultRepository)
+                    "TAG": str(_vaultTag)
+                    "PULL_POLICY": str(_vaultPullPolicy)
+                    "INGRESS_ENABLED": str(_vaultIngressEnabled)
+                    "INGRESS_CLASS_NAME": str(_vaultIngressClassName)
+                    "STORAGE_CLASS": str(_vaultStorageClass)
+                    "INJECTOR_ENABLED": str(_vaultInjectorEnabled)
+                    "INJECTOR_REPOSITORY": str(_vaultInjectorRepository)
+                    "INJECTOR_TAG": str(_vaultInjectorTag)
+                    "INJECTOR_PULL_POLICY": str(_vaultInjectorPullPolicy)
+                    "ENABLE_VOLUME_PERMISSIONS": str(_vaultEnableVolumePermissions)
+                    "OS_SHELL_REPOSITORY": str(_vaultOsShellRepository)
+                    "OS_SHELL_TAG": str(_vaultOsShellTag)
+                    "OS_SHELL_PULL_POLICY": str(_vaultOsShellPullPolicy)
+                    "VAULT_INGRESS_HOSTNAME": str(_vaultIngressHostname)
+                    "VAULT_INGRESS_DOMAIN": str(_vaultIngressDomain)
+                    "ISSUER_NAME": str(_vaultIssuerName)
+                    "ISSUER_KIND": str(_vaultIssuerKind)
+                }
+            }
+
+            if _decryptionProvider == "sops" and _decryptionSecretRef:
+                decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
+                    provider = "sops"
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryptionSecretRef {
+                        name = _decryptionSecretRef
+                    }
+                }
+
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
 
 # Template: OpenEBS (infrastructure with openebs substitutions)
 if _templateName == "openebs":

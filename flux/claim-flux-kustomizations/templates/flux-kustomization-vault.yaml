@@ -1,0 +1,245 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-vault
+  title: Flux Kustomization Vault
+  description: Deploys a Flux Kustomization for HashiCorp Vault with image, injector, and ingress substitutions
+  tags:
+    - flux
+    - kustomization
+    - vault
+    - app
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.25
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: vault
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: vault
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+
+    - name: sourceRefKind
+      title: Source Reference Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/vault"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+
+    - name: force
+      title: Force Recreation
+      type: boolean
+      default: false
+
+    - name: suspend
+      title: Suspend Reconciliation
+      type: boolean
+      default: false
+
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+
+    - name: vaultVersion
+      title: Vault Chart Version
+      type: string
+      default: "1.9.0"
+      description: "Vault Helm chart version (VAULT_VERSION)"
+
+    - name: vaultNamespace
+      title: Vault Namespace
+      type: string
+      default: vault
+      description: "Namespace for Vault installation (VAULT_NAMESPACE)"
+
+    - name: vaultRegistry
+      title: Registry
+      type: string
+      default: ghcr.io
+      description: "Container registry (REGISTRY)"
+
+    - name: vaultRepository
+      title: Vault Image Repository
+      type: string
+      default: stuttgart-things/vault
+      description: "Vault image repository (REPOSITORY)"
+
+    - name: vaultTag
+      title: Vault Image Tag
+      type: string
+      default: 1.20.2-debian-12-r2
+      description: "Vault image tag (TAG)"
+
+    - name: vaultPullPolicy
+      title: Pull Policy
+      type: string
+      default: Always
+      enum:
+        - Always
+        - IfNotPresent
+        - Never
+
+    - name: vaultIngressEnabled
+      title: Ingress Enabled
+      type: string
+      default: "false"
+      enum:
+        - "true"
+        - "false"
+
+    - name: vaultIngressClassName
+      title: Ingress Class Name
+      type: string
+      default: nginx
+
+    - name: vaultStorageClass
+      title: Storage Class
+      type: string
+      default: local-path
+
+    - name: vaultInjectorEnabled
+      title: Injector Enabled
+      type: string
+      default: "true"
+      enum:
+        - "true"
+        - "false"
+
+    - name: vaultInjectorRepository
+      title: Injector Image Repository
+      type: string
+      default: stuttgart-things/vault-k8s
+
+    - name: vaultInjectorTag
+      title: Injector Image Tag
+      type: string
+      default: 1.7.0-debian-12-r4
+
+    - name: vaultInjectorPullPolicy
+      title: Injector Pull Policy
+      type: string
+      default: Always
+      enum:
+        - Always
+        - IfNotPresent
+        - Never
+
+    - name: vaultEnableVolumePermissions
+      title: Enable Volume Permissions
+      type: string
+      default: "true"
+      enum:
+        - "true"
+        - "false"
+
+    - name: vaultOsShellRepository
+      title: OS Shell Image Repository
+      type: string
+      default: stuttgart-things/os-shell
+
+    - name: vaultOsShellTag
+      title: OS Shell Image Tag
+      type: string
+      default: 12-debian-12-r50
+
+    - name: vaultOsShellPullPolicy
+      title: OS Shell Pull Policy
+      type: string
+      default: Always
+      enum:
+        - Always
+        - IfNotPresent
+        - Never
+
+    - name: vaultIngressHostname
+      title: Ingress Hostname
+      type: string
+      default: vault
+      description: "Hostname for Vault ingress (VAULT_INGRESS_HOSTNAME)"
+
+    - name: vaultIngressDomain
+      title: Ingress Domain
+      type: string
+      description: "Domain for Vault ingress (VAULT_INGRESS_DOMAIN)"
+
+    - name: vaultIssuerName
+      title: Certificate Issuer Name
+      type: string
+      default: vault-pki
+      description: "Cert-manager issuer name (ISSUER_NAME)"
+
+    - name: vaultIssuerKind
+      title: Certificate Issuer Kind
+      type: string
+      default: ClusterIssuer
+      enum:
+        - ClusterIssuer
+        - Issuer
+
+    - name: decryptionProvider
+      title: Decryption Provider
+      type: string
+      enum:
+        - sops
+
+    - name: decryptionSecretRef
+      title: Decryption Secret
+      type: string
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
