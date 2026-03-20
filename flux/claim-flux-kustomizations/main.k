@@ -90,6 +90,12 @@ _gitRepoSemver = _spec?.semver or option("semver") or ""
 _gitRepoCommit = _spec?.commit or option("commit") or ""
 _gitRepoSecretRefName = _spec?.secretRefName or option("secretRefName") or ""
 
+# Cilium Gateway specific parameters (for cilium-gateway template)
+_ciliumGatewayName = _spec?.ciliumGatewayName or option("ciliumGatewayName") or "gateway"
+_ciliumGatewayNamespace = _spec?.ciliumGatewayNamespace or option("ciliumGatewayNamespace") or "default"
+_ciliumGatewayDomain = _spec?.ciliumGatewayDomain or option("ciliumGatewayDomain") or ""
+_ciliumGatewayTlsSecret = _spec?.ciliumGatewayTlsSecret or option("ciliumGatewayTlsSecret") or ""
+
 # Cert-manager specific parameters (for cert-manager template)
 _certManagerNamespace = _spec?.certManagerNamespace or option("certManagerNamespace") or "cert-manager"
 _certManagerVersion = _spec?.certManagerVersion or option("certManagerVersion") or "v1.19.1"
@@ -270,6 +276,80 @@ if _templateName == "clusterbook":
         }
     }
 
+
+# Template: Cilium Gateway (infrastructure with gateway substitutions)
+if _templateName == "cilium-gateway":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "cilium-gateway"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "cilium-gateway"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "infrastructure"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-infra"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+
+            path = _path if _path != "./" else "./infra/cilium/components/gateway"
+
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "CILIUM_GATEWAY_NAME": str(_ciliumGatewayName)
+                    "CILIUM_GATEWAY_NAMESPACE": str(_ciliumGatewayNamespace)
+                    "CILIUM_GATEWAY_DOMAIN": str(_ciliumGatewayDomain)
+                    "CILIUM_GATEWAY_TLS_SECRET": str(_ciliumGatewayTlsSecret)
+                }
+            }
+
+            if _decryptionProvider == "sops" and _decryptionSecretRef:
+                decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
+                    provider = "sops"
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryptionSecretRef {
+                        name = _decryptionSecretRef
+                    }
+                }
+
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
 
 # Template: Cert-Manager (infrastructure with cert-manager substitutions)
 if _templateName == "cert-manager":
