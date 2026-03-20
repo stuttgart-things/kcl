@@ -275,7 +275,7 @@ if _templateName == "clusterbook":
 if _templateName == "cert-manager":
     flux.Kustomization {
         metadata = v1.ObjectMeta {
-            name = _name if _name != "flux-kustomization" else "cert-manager"
+            name = _name if _name != "flux-kustomization" else "cert-manager-install"
             namespace = _namespace
             annotations = {
                 "managed-by": "kcl-flux-kustomizations"
