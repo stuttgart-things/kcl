@@ -222,26 +222,6 @@ if _templateName == "clusterbook":
     _pdnsZone = option("PDNS_ZONE") or ""
     _secretName = option("secretName") or "clusterbook-pdns-vars"
 
-    # Build base substitutions map
-    _baseSubstitute = {
-        CLUSTERBOOK_NAMESPACE = str(_clusterbookNamespace)
-        CLUSTERBOOK_VERSION = str(_clusterbookVersion)
-        CLUSTERBOOK_HOSTNAME = str(_clusterbookHostname)
-        GATEWAY_NAME = str(_gatewayName)
-        GATEWAY_NAMESPACE = str(_gatewayNamespace)
-        DOMAIN = str(_domain)
-        FLUX_SOURCE_API_VERSION = _fluxSourceApiVersion
-    }
-
-    # Conditionally add PDNS vars
-    _pdnsSubstitute = {
-        PDNS_ENABLED = _pdnsEnabled
-        PDNS_URL = _pdnsUrl
-        PDNS_ZONE = _pdnsZone
-    } if _pdnsEnabled == "true" else {}
-
-    _clusterbookSubstitute: {str:str} = _baseSubstitute | _pdnsSubstitute
-
     flux.Kustomization {
         metadata = v1.ObjectMeta {
             name = _name
@@ -270,7 +250,15 @@ if _templateName == "clusterbook":
             path = _path if _path != "./" else "./apps/clusterbook"
 
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
-                substitute = _clusterbookSubstitute
+                substitute = {
+                    CLUSTERBOOK_NAMESPACE = str(_clusterbookNamespace)
+                    CLUSTERBOOK_VERSION = str(_clusterbookVersion)
+                    CLUSTERBOOK_HOSTNAME = str(_clusterbookHostname)
+                    GATEWAY_NAME = str(_gatewayName)
+                    GATEWAY_NAMESPACE = str(_gatewayNamespace)
+                    DOMAIN = str(_domain)
+                    FLUX_SOURCE_API_VERSION = _fluxSourceApiVersion
+                }
                 if _pdnsEnabled == "true":
                     substituteFrom = [
                         flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
@@ -285,13 +273,6 @@ if _templateName == "clusterbook":
 
 # Template: Cert-Manager (infrastructure with cert-manager substitutions)
 if _templateName == "cert-manager":
-    # Build cert-manager substitution map + any additional substitutions
-    _certManagerSubstitute: {str:str} = {
-        CERT_MANAGER_NAMESPACE = _certManagerNamespace
-        CERT_MANAGER_VERSION = _certManagerVersion
-        CERT_MANAGER_INSTALL_CRDS = _certManagerInstallCrds
-    } | _substitute
-
     flux.Kustomization {
         metadata = v1.ObjectMeta {
             name = _name if _name != "flux-kustomization" else "cert-manager"
@@ -337,7 +318,11 @@ if _templateName == "cert-manager":
                 ]
 
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
-                substitute = _certManagerSubstitute
+                substitute = {
+                    CERT_MANAGER_NAMESPACE = _certManagerNamespace
+                    CERT_MANAGER_VERSION = _certManagerVersion
+                    CERT_MANAGER_INSTALL_CRDS = _certManagerInstallCrds
+                }
             }
 
             if _decryptionProvider == "sops" and _decryptionSecretRef:
