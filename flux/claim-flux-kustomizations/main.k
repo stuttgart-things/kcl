@@ -90,6 +90,14 @@ _gitRepoSemver = _spec?.semver or option("semver") or ""
 _gitRepoCommit = _spec?.commit or option("commit") or ""
 _gitRepoSecretRefName = _spec?.secretRefName or option("secretRefName") or ""
 
+# OpenEBS specific parameters (for openebs template)
+_openebsVersion = _spec?.openebsVersion or option("openebsVersion") or "4.2.0"
+_openebsVolumesnapshotsEnabled = _spec?.openebsVolumesnapshotsEnabled or option("openebsVolumesnapshotsEnabled") or "false"
+_openebsCsiNodeInitContainersEnabled = _spec?.openebsCsiNodeInitContainersEnabled or option("openebsCsiNodeInitContainersEnabled") or "false"
+_openebsLocalLvmEnabled = _spec?.openebsLocalLvmEnabled or option("openebsLocalLvmEnabled") or "false"
+_openebsLocalZfsEnabled = _spec?.openebsLocalZfsEnabled or option("openebsLocalZfsEnabled") or "false"
+_openebsReplicatedMayastorEnabled = _spec?.openebsReplicatedMayastorEnabled or option("openebsReplicatedMayastorEnabled") or "false"
+
 # Cilium Gateway specific parameters (for cilium-gateway template)
 _ciliumGatewayName = _spec?.ciliumGatewayName or option("ciliumGatewayName") or "gateway"
 _ciliumGatewayNamespace = _spec?.ciliumGatewayNamespace or option("ciliumGatewayNamespace") or "default"
@@ -283,6 +291,82 @@ if _templateName == "clusterbook":
         }
     }
 
+
+# Template: OpenEBS (infrastructure with openebs substitutions)
+if _templateName == "openebs":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "openebs"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "openebs"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "infrastructure"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-infra"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+
+            path = _path if _path != "./" else "./infra/openebs"
+
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "VERSION": str(_openebsVersion)
+                    "VOLUMESNAPSHOTS_ENABLED": str(_openebsVolumesnapshotsEnabled)
+                    "CSI_NODE_INIT_CONTAINERS_ENABLED": str(_openebsCsiNodeInitContainersEnabled)
+                    "LOCAL_LVM_ENABLED": str(_openebsLocalLvmEnabled)
+                    "LOCAL_ZFS_ENABLED": str(_openebsLocalZfsEnabled)
+                    "REPLICATED_MAYASTOR_ENABLED": str(_openebsReplicatedMayastorEnabled)
+                }
+            }
+
+            if _decryptionProvider == "sops" and _decryptionSecretRef:
+                decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
+                    provider = "sops"
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryptionSecretRef {
+                        name = _decryptionSecretRef
+                    }
+                }
+
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
 
 # Template: Cilium Gateway (infrastructure with gateway substitutions)
 if _templateName == "cilium-gateway":

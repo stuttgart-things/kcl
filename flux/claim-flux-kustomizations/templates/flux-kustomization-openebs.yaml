@@ -1,0 +1,161 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-openebs
+  title: Flux Kustomization OpenEBS
+  description: Deploys a Flux Kustomization for OpenEBS storage with version and feature toggle substitutions
+  tags:
+    - flux
+    - kustomization
+    - openebs
+    - storage
+    - infrastructure
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.24
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: openebs
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: openebs
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+
+    - name: sourceRefKind
+      title: Source Reference Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-infra
+
+    - name: path
+      title: Path
+      type: string
+      default: "./infra/openebs"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+
+    - name: force
+      title: Force Recreation
+      type: boolean
+      default: false
+
+    - name: suspend
+      title: Suspend Reconciliation
+      type: boolean
+      default: false
+
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+
+    - name: openebsVersion
+      title: OpenEBS Version
+      type: string
+      default: "4.2.0"
+      description: "OpenEBS Helm chart version (VERSION)"
+
+    - name: openebsVolumesnapshotsEnabled
+      title: Volume Snapshots Enabled
+      type: string
+      default: "false"
+      description: "Enable volume snapshots (VOLUMESNAPSHOTS_ENABLED)"
+      enum:
+        - "true"
+        - "false"
+
+    - name: openebsCsiNodeInitContainersEnabled
+      title: CSI Node Init Containers Enabled
+      type: string
+      default: "false"
+      description: "Enable CSI node init containers (CSI_NODE_INIT_CONTAINERS_ENABLED)"
+      enum:
+        - "true"
+        - "false"
+
+    - name: openebsLocalLvmEnabled
+      title: Local LVM Enabled
+      type: string
+      default: "false"
+      description: "Enable Local LVM provisioner (LOCAL_LVM_ENABLED)"
+      enum:
+        - "true"
+        - "false"
+
+    - name: openebsLocalZfsEnabled
+      title: Local ZFS Enabled
+      type: string
+      default: "false"
+      description: "Enable Local ZFS provisioner (LOCAL_ZFS_ENABLED)"
+      enum:
+        - "true"
+        - "false"
+
+    - name: openebsReplicatedMayastorEnabled
+      title: Replicated Mayastor Enabled
+      type: string
+      default: "false"
+      description: "Enable replicated Mayastor engine (REPLICATED_MAYASTOR_ENABLED)"
+      enum:
+        - "true"
+        - "false"
+
+    - name: decryptionProvider
+      title: Decryption Provider
+      type: string
+      enum:
+        - sops
+
+    - name: decryptionSecretRef
+      title: Decryption Secret
+      type: string
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
