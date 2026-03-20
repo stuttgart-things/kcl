@@ -90,6 +90,21 @@ _gitRepoSemver = _spec?.semver or option("semver") or ""
 _gitRepoCommit = _spec?.commit or option("commit") or ""
 _gitRepoSecretRefName = _spec?.secretRefName or option("secretRefName") or ""
 
+# Uptime Kuma specific parameters (for uptime-kuma template)
+_uptimeKumaNamespace = _spec?.uptimeKumaNamespace or option("uptimeKumaNamespace") or "uptime-kuma"
+_uptimeKumaVersion = _spec?.uptimeKumaVersion or option("uptimeKumaVersion") or "4.0.0"
+_uptimeKumaStorageClass = _spec?.uptimeKumaStorageClass or option("uptimeKumaStorageClass") or "nfs4-csi"
+_uptimeKumaStorageSize = _spec?.uptimeKumaStorageSize or option("uptimeKumaStorageSize") or "4Gi"
+_uptimeKumaGatewayName = _spec?.uptimeKumaGatewayName or option("uptimeKumaGatewayName") or "gateway"
+_uptimeKumaGatewayNamespace = _spec?.uptimeKumaGatewayNamespace or option("uptimeKumaGatewayNamespace") or "default"
+_uptimeKumaHostname = _spec?.uptimeKumaHostname or option("uptimeKumaHostname") or "uptime"
+_uptimeKumaDomain = _spec?.uptimeKumaDomain or option("uptimeKumaDomain") or ""
+_uptimeKumaAdminUser = _spec?.uptimeKumaAdminUser or option("uptimeKumaAdminUser") or "admin"
+_uptimeKumaFluxHostname = _spec?.uptimeKumaFluxHostname or option("uptimeKumaFluxHostname") or "flux"
+_uptimeKumaVaultHostname = _spec?.uptimeKumaVaultHostname or option("uptimeKumaVaultHostname") or "vault"
+_uptimeKumaClaimApiHostname = _spec?.uptimeKumaClaimApiHostname or option("uptimeKumaClaimApiHostname") or "claim-api"
+_uptimeKumaUptimeHostname = _spec?.uptimeKumaUptimeHostname or option("uptimeKumaUptimeHostname") or "uptime"
+
 # NFS CSI specific parameters (for nfs-csi template)
 _nfsServerFqdn = _spec?.nfsServerFqdn or option("nfsServerFqdn") or ""
 _nfsSharePath = _spec?.nfsSharePath or option("nfsSharePath") or "/data/nfs"
@@ -373,6 +388,75 @@ if _templateName == "clusterbook":
         }
     }
 
+
+# Template: Uptime Kuma (app deployment with monitoring substitutions)
+if _templateName == "uptime-kuma":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "uptime-kuma"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "uptime-kuma"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./apps/uptime-kuma"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "UPTIME_KUMA_NAMESPACE": str(_uptimeKumaNamespace)
+                    "UPTIME_KUMA_VERSION": str(_uptimeKumaVersion)
+                    "UPTIME_KUMA_STORAGE_CLASS": str(_uptimeKumaStorageClass)
+                    "UPTIME_KUMA_STORAGE_SIZE": str(_uptimeKumaStorageSize)
+                    "GATEWAY_NAME": str(_uptimeKumaGatewayName)
+                    "GATEWAY_NAMESPACE": str(_uptimeKumaGatewayNamespace)
+                    "HOSTNAME": str(_uptimeKumaHostname)
+                    "DOMAIN": str(_uptimeKumaDomain)
+                    "UPTIME_KUMA_ADMIN_USER": str(_uptimeKumaAdminUser)
+                    "FLUX_HOSTNAME": str(_uptimeKumaFluxHostname)
+                    "VAULT_HOSTNAME": str(_uptimeKumaVaultHostname)
+                    "CLAIM_API_HOSTNAME": str(_uptimeKumaClaimApiHostname)
+                    "UPTIME_HOSTNAME": str(_uptimeKumaUptimeHostname)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
 
 # Template: NFS CSI (infrastructure with NFS CSI driver substitutions)
 if _templateName == "nfs-csi":

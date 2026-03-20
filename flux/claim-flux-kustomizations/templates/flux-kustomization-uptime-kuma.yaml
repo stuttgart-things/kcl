@@ -1,0 +1,114 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-uptime-kuma
+  title: Flux Kustomization Uptime Kuma
+  description: Deploys a Flux Kustomization for Uptime Kuma monitoring with gateway, storage, and service hostname substitutions
+  tags:
+    - flux
+    - kustomization
+    - uptime-kuma
+    - monitoring
+    - app
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.30
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: uptime-kuma
+    - name: name
+      title: Resource Name
+      type: string
+      default: uptime-kuma
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/uptime-kuma"
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+    - name: uptimeKumaNamespace
+      title: Uptime Kuma Namespace
+      type: string
+      default: uptime-kuma
+    - name: uptimeKumaVersion
+      title: Uptime Kuma Version
+      type: string
+      default: "4.0.0"
+    - name: uptimeKumaStorageClass
+      title: Storage Class
+      type: string
+      default: nfs4-csi
+    - name: uptimeKumaStorageSize
+      title: Storage Size
+      type: string
+      default: "4Gi"
+    - name: uptimeKumaGatewayName
+      title: Gateway Name
+      type: string
+      default: gateway
+    - name: uptimeKumaGatewayNamespace
+      title: Gateway Namespace
+      type: string
+      default: default
+    - name: uptimeKumaHostname
+      title: Hostname
+      type: string
+      default: uptime
+    - name: uptimeKumaDomain
+      title: Domain
+      type: string
+      description: "Domain for Uptime Kuma (DOMAIN)"
+    - name: uptimeKumaAdminUser
+      title: Admin Username
+      type: string
+      default: admin
+    - name: uptimeKumaFluxHostname
+      title: Flux Hostname (for monitoring)
+      type: string
+      default: flux
+      description: "Hostname of Flux Web UI to monitor (FLUX_HOSTNAME)"
+    - name: uptimeKumaVaultHostname
+      title: Vault Hostname (for monitoring)
+      type: string
+      default: vault
+      description: "Hostname of Vault to monitor (VAULT_HOSTNAME)"
+    - name: uptimeKumaClaimApiHostname
+      title: Claim API Hostname (for monitoring)
+      type: string
+      default: claim-api
+      description: "Hostname of Claim API to monitor (CLAIM_API_HOSTNAME)"
+    - name: uptimeKumaUptimeHostname
+      title: Uptime Hostname (for monitoring)
+      type: string
+      default: uptime
+      description: "Hostname of Uptime Kuma itself to monitor (UPTIME_HOSTNAME)"
