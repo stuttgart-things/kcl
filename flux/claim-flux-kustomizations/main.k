@@ -114,9 +114,9 @@ _dependsOnNames = [name.strip() for name in _dependsOnNamesStr.split(",") if nam
 _parseKeyValuePairs = lambda s: str -> {str:str} {
     {kv.split("=")[0].strip(): kv.split("=")[1].strip() for kv in s.split(",") if kv and "=" in kv}
 }
-_substitute = _parseKeyValuePairs(_substituteStr) if _substituteStr else {}
-_commonLabels = _parseKeyValuePairs(_commonLabelsStr) if _commonLabelsStr else {}
-_commonAnnotations = _parseKeyValuePairs(_commonAnnotationsStr) if _commonAnnotationsStr else {}
+_substitute: {str:str} = _parseKeyValuePairs(_substituteStr) if _substituteStr else {}
+_commonLabels: {str:str} = _parseKeyValuePairs(_commonLabelsStr) if _commonLabelsStr else {}
+_commonAnnotations: {str:str} = _parseKeyValuePairs(_commonAnnotationsStr) if _commonAnnotationsStr else {}
 
 # Template: GitOps (basic kustomization)
 if _templateName == "gitops":
