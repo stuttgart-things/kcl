@@ -1,0 +1,9 @@
+templates:
+  - name: flux-gitrepository
+    parameters:
+      name: flux-infra
+      url: https://github.com/stuttgart-things/flux.git
+  - name: flux-gitrepository
+    parameters:
+      name: flux-apps
+      url: https://github.com/stuttgart-things/flux.git

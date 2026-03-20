@@ -1,0 +1,92 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-gitrepository
+  title: Flux GitRepository Source
+  description: Creates a Flux GitRepository source for use by Kustomizations
+  tags:
+    - flux
+    - gitrepository
+    - source
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.11
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: gitrepository
+
+    - name: name
+      title: Resource Name
+      type: string
+      required: true
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the GitRepository (e.g., flux-infra, flux-apps)"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: url
+      title: Git Repository URL
+      type: string
+      required: true
+      description: "HTTP/S or SSH URL of the Git repository"
+
+    - name: branch
+      title: Branch
+      type: string
+      default: main
+      description: "Branch to track (used when tag/semver/commit are not set)"
+
+    - name: tag
+      title: Tag
+      type: string
+      description: "Tag to checkout (takes precedence over branch)"
+
+    - name: semver
+      title: Semver Range
+      type: string
+      description: "Semver tag expression (takes precedence over tag)"
+
+    - name: commit
+      title: Commit SHA
+      type: string
+      description: "Commit SHA to checkout (takes precedence over all)"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1m0s"
+      description: "Interval at which to check for updates"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "60s"
+      description: "Timeout for Git operations"
+
+    - name: suspend
+      title: Suspend Reconciliation
+      type: boolean
+      default: false
+
+    - name: secretRefName
+      title: Auth Secret Name
+      type: string
+      description: "Secret with Git credentials (username/password for HTTPS, identity/known_hosts for SSH)"
+
+    - name: commonLabels
+      title: Common Labels
+      type: string
+      description: "Comma-separated key=value pairs for labels"
+
+    - name: commonAnnotations
+      title: Common Annotations
+      type: string
+      description: "Comma-separated key=value pairs for annotations"

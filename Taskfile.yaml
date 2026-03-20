@@ -25,22 +25,27 @@ tasks:
       - |
         set -e
 
-        # Find all KCL modules
-        MODULE_DIRS=$(find . -maxdepth 3 -type f -name 'kcl.mod' \
-          ! -path './tests/*' ! -path './.git/*' ! -path './.task/*' \
-          -exec dirname {} \; | sed 's|^\./||' | sort)
+        # Non-interactive mode when MODULE_DIR and NEW_VERSION are set
+        if [ -n "{{ .MODULE_DIR }}" ] && [ "{{ .MODULE_DIR }}" != "<no value>" ]; then
+          MODULE_DIR="{{ .MODULE_DIR }}"
+        else
+          # Find all KCL modules
+          MODULE_DIRS=$(find . -maxdepth 3 -type f -name 'kcl.mod' \
+            ! -path './tests/*' ! -path './.git/*' ! -path './.task/*' \
+            -exec dirname {} \; | sed 's|^\./||' | sort)
 
-        if [ -z "$MODULE_DIRS" ]; then
-          echo "No KCL modules found with kcl.mod files"
-          exit 1
-        fi
+          if [ -z "$MODULE_DIRS" ]; then
+            echo "No KCL modules found with kcl.mod files"
+            exit 1
+          fi
 
-        MODULE_DIR=$(echo "$MODULE_DIRS" | \
-          gum choose --header "Select module directory:")
+          MODULE_DIR=$(echo "$MODULE_DIRS" | \
+            gum choose --header "Select module directory:")
 
-        if [ -z "$MODULE_DIR" ]; then
-          echo "No module selected"
-          exit 1
+          if [ -z "$MODULE_DIR" ]; then
+            echo "No module selected"
+            exit 1
+          fi
         fi
 
         # Get module name and current version
@@ -85,10 +90,15 @@ tasks:
           }')
         fi
 
-        echo
-        NEW_VERSION=$(gum input \
-          --prompt "New version: " \
-          --value "${SUGGESTED_TAG#v}")
+        # Non-interactive version input when NEW_VERSION is set
+        if [ -n "{{ .NEW_VERSION }}" ] && [ "{{ .NEW_VERSION }}" != "<no value>" ]; then
+          NEW_VERSION="{{ .NEW_VERSION }}"
+        else
+          echo
+          NEW_VERSION=$(gum input \
+            --prompt "New version: " \
+            --value "${SUGGESTED_TAG#v}")
+        fi
 
         if [ -z "$NEW_VERSION" ]; then
           echo "❌ No version provided, exiting"
@@ -125,6 +135,8 @@ tasks:
       MODULE: github.com/stuttgart-things/dagger/kcl
       VERSION: v0.42.0
       FUNCTION: push-module
+      MODULE_DIR: '{{ .MODULE_DIR }}'
+      NEW_VERSION: '{{ .NEW_VERSION }}'
 
   create:
     desc: Create new module
