@@ -240,7 +240,7 @@ if _templateName == "clusterbook":
         PDNS_ZONE = _pdnsZone
     } if _pdnsEnabled == "true" else {}
 
-    _substitute: {str:str} = _baseSubstitute | _pdnsSubstitute
+    _clusterbookSubstitute: {str:str} = _baseSubstitute | _pdnsSubstitute
 
     flux.Kustomization {
         metadata = v1.ObjectMeta {
@@ -270,7 +270,7 @@ if _templateName == "clusterbook":
             path = _path if _path != "./" else "./apps/clusterbook"
 
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
-                substitute = _substitute
+                substitute = _clusterbookSubstitute
                 if _pdnsEnabled == "true":
                     substituteFrom = [
                         flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
