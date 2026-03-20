@@ -88,27 +88,3 @@ spec:
       title: Domain
       type: string
       description: "Domain for Uptime Kuma (DOMAIN)"
-    - name: uptimeKumaAdminUser
-      title: Admin Username
-      type: string
-      default: admin
-    - name: uptimeKumaFluxHostname
-      title: Flux Hostname (for monitoring)
-      type: string
-      default: flux
-      description: "Hostname of Flux Web UI to monitor (FLUX_HOSTNAME)"
-    - name: uptimeKumaVaultHostname
-      title: Vault Hostname (for monitoring)
-      type: string
-      default: vault
-      description: "Hostname of Vault to monitor (VAULT_HOSTNAME)"
-    - name: uptimeKumaClaimApiHostname
-      title: Claim API Hostname (for monitoring)
-      type: string
-      default: claim-api
-      description: "Hostname of Claim API to monitor (CLAIM_API_HOSTNAME)"
-    - name: uptimeKumaUptimeHostname
-      title: Uptime Hostname (for monitoring)
-      type: string
-      default: uptime
-      description: "Hostname of Uptime Kuma itself to monitor (UPTIME_HOSTNAME)"

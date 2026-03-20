@@ -99,11 +99,6 @@ _uptimeKumaGatewayName = _spec?.uptimeKumaGatewayName or option("uptimeKumaGatew
 _uptimeKumaGatewayNamespace = _spec?.uptimeKumaGatewayNamespace or option("uptimeKumaGatewayNamespace") or "default"
 _uptimeKumaHostname = _spec?.uptimeKumaHostname or option("uptimeKumaHostname") or "uptime"
 _uptimeKumaDomain = _spec?.uptimeKumaDomain or option("uptimeKumaDomain") or ""
-_uptimeKumaAdminUser = _spec?.uptimeKumaAdminUser or option("uptimeKumaAdminUser") or "admin"
-_uptimeKumaFluxHostname = _spec?.uptimeKumaFluxHostname or option("uptimeKumaFluxHostname") or "flux"
-_uptimeKumaVaultHostname = _spec?.uptimeKumaVaultHostname or option("uptimeKumaVaultHostname") or "vault"
-_uptimeKumaClaimApiHostname = _spec?.uptimeKumaClaimApiHostname or option("uptimeKumaClaimApiHostname") or "claim-api"
-_uptimeKumaUptimeHostname = _spec?.uptimeKumaUptimeHostname or option("uptimeKumaUptimeHostname") or "uptime"
 
 # NFS CSI specific parameters (for nfs-csi template)
 _nfsServerFqdn = _spec?.nfsServerFqdn or option("nfsServerFqdn") or ""
@@ -438,11 +433,6 @@ if _templateName == "uptime-kuma":
                     "GATEWAY_NAMESPACE": str(_uptimeKumaGatewayNamespace)
                     "HOSTNAME": str(_uptimeKumaHostname)
                     "DOMAIN": str(_uptimeKumaDomain)
-                    "UPTIME_KUMA_ADMIN_USER": str(_uptimeKumaAdminUser)
-                    "FLUX_HOSTNAME": str(_uptimeKumaFluxHostname)
-                    "VAULT_HOSTNAME": str(_uptimeKumaVaultHostname)
-                    "CLAIM_API_HOSTNAME": str(_uptimeKumaClaimApiHostname)
-                    "UPTIME_HOSTNAME": str(_uptimeKumaUptimeHostname)
                 }
             }
             if _kubeConfigSecretRef:
