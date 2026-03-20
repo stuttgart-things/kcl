@@ -251,13 +251,13 @@ if _templateName == "clusterbook":
 
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
-                    CLUSTERBOOK_NAMESPACE = str(_clusterbookNamespace)
-                    CLUSTERBOOK_VERSION = str(_clusterbookVersion)
-                    CLUSTERBOOK_HOSTNAME = str(_clusterbookHostname)
-                    GATEWAY_NAME = str(_gatewayName)
-                    GATEWAY_NAMESPACE = str(_gatewayNamespace)
-                    DOMAIN = str(_domain)
-                    FLUX_SOURCE_API_VERSION = _fluxSourceApiVersion
+                    "CLUSTERBOOK_NAMESPACE": str(_clusterbookNamespace)
+                    "CLUSTERBOOK_VERSION": str(_clusterbookVersion)
+                    "CLUSTERBOOK_HOSTNAME": str(_clusterbookHostname)
+                    "GATEWAY_NAME": str(_gatewayName)
+                    "GATEWAY_NAMESPACE": str(_gatewayNamespace)
+                    "DOMAIN": str(_domain)
+                    "FLUX_SOURCE_API_VERSION": _fluxSourceApiVersion
                 }
                 if _pdnsEnabled == "true":
                     substituteFrom = [
@@ -319,9 +319,9 @@ if _templateName == "cert-manager":
 
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
-                    CERT_MANAGER_NAMESPACE = _certManagerNamespace
-                    CERT_MANAGER_VERSION = _certManagerVersion
-                    CERT_MANAGER_INSTALL_CRDS = _certManagerInstallCrds
+                    "CERT_MANAGER_NAMESPACE": _certManagerNamespace
+                    "CERT_MANAGER_VERSION": _certManagerVersion
+                    "CERT_MANAGER_INSTALL_CRDS": _certManagerInstallCrds
                 }
             }
 
