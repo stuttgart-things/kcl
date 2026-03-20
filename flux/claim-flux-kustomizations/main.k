@@ -319,9 +319,9 @@ if _templateName == "cert-manager":
 
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
-                    "CERT_MANAGER_NAMESPACE": _certManagerNamespace
-                    "CERT_MANAGER_VERSION": _certManagerVersion
-                    "CERT_MANAGER_INSTALL_CRDS": _certManagerInstallCrds
+                    "CERT_MANAGER_NAMESPACE": str(_certManagerNamespace)
+                    "CERT_MANAGER_VERSION": str(_certManagerVersion)
+                    "CERT_MANAGER_INSTALL_CRDS": str(_certManagerInstallCrds)
                 }
             }
 
