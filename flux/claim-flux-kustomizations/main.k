@@ -96,6 +96,13 @@ _ciliumGatewayNamespace = _spec?.ciliumGatewayNamespace or option("ciliumGateway
 _ciliumGatewayDomain = _spec?.ciliumGatewayDomain or option("ciliumGatewayDomain") or ""
 _ciliumGatewayTlsSecret = _spec?.ciliumGatewayTlsSecret or option("ciliumGatewayTlsSecret") or ""
 
+# Cert-manager selfsigned specific parameters (for cert-manager-selfsigned template)
+_certManagerSelfsignedDomain = _spec?.certManagerSelfsignedDomain or option("certManagerSelfsignedDomain") or ""
+_certManagerSelfsignedSecretName = _spec?.certManagerSelfsignedSecretName or option("certManagerSelfsignedSecretName") or ""
+_certManagerSelfsignedCertName = _spec?.certManagerSelfsignedCertName or option("certManagerSelfsignedCertName") or ""
+_certManagerSelfsignedCertNamespace = _spec?.certManagerSelfsignedCertNamespace or option("certManagerSelfsignedCertNamespace") or "default"
+_certManagerSelfsignedIssuer = _spec?.certManagerSelfsignedIssuer or option("certManagerSelfsignedIssuer") or "vault-pki"
+
 # Cert-manager specific parameters (for cert-manager template)
 _certManagerNamespace = _spec?.certManagerNamespace or option("certManagerNamespace") or "cert-manager"
 _certManagerVersion = _spec?.certManagerVersion or option("certManagerVersion") or "v1.19.1"
@@ -326,6 +333,82 @@ if _templateName == "cilium-gateway":
                     "CILIUM_GATEWAY_NAMESPACE": str(_ciliumGatewayNamespace)
                     "CILIUM_GATEWAY_DOMAIN": str(_ciliumGatewayDomain)
                     "CILIUM_GATEWAY_TLS_SECRET": str(_ciliumGatewayTlsSecret)
+                }
+            }
+
+            if _decryptionProvider == "sops" and _decryptionSecretRef:
+                decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
+                    provider = "sops"
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryptionSecretRef {
+                        name = _decryptionSecretRef
+                    }
+                }
+
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: Cert-Manager Selfsigned (certificate with selfsigned issuer)
+if _templateName == "cert-manager-selfsigned":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "cert-manager-selfsigned"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "cert-manager-selfsigned"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "infrastructure"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-infra"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+
+            path = _path if _path != "./" else "./infra/cert-manager/components/selfsigned"
+
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "CERT_MANAGER_NAMESPACE": str(_certManagerNamespace)
+                    "CERT_MANAGER_SELFSIGNED_DOMAIN": str(_certManagerSelfsignedDomain)
+                    "CERT_MANAGER_SELFSIGNED_SECRET_NAME": str(_certManagerSelfsignedSecretName)
+                    "CERT_MANAGER_SELFSIGNED_CERT_NAME": str(_certManagerSelfsignedCertName)
+                    "CERT_MANAGER_SELFSIGNED_CERT_NAMESPACE": str(_certManagerSelfsignedCertNamespace)
+                    "CERT_MANAGER_SELFSIGNED_ISSUER": str(_certManagerSelfsignedIssuer)
                 }
             }
 

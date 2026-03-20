@@ -1,0 +1,157 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-cert-manager-selfsigned
+  title: Flux Kustomization Cert-Manager Selfsigned
+  description: Deploys a Flux Kustomization for cert-manager selfsigned certificate with domain, secret, and issuer substitutions
+  tags:
+    - flux
+    - kustomization
+    - cert-manager
+    - selfsigned
+    - infrastructure
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.23
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: cert-manager-selfsigned
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: cert-manager-selfsigned
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefKind
+      title: Source Reference Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-infra
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefNamespace
+      title: Source Reference Namespace
+      type: string
+      description: "Namespace of the source, defaults to Kustomization namespace"
+
+    - name: path
+      title: Path
+      type: string
+      default: "./infra/cert-manager/components/selfsigned"
+      description: "Path to the directory containing the kustomization.yaml"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+
+    - name: force
+      title: Force Recreation
+      type: boolean
+      default: false
+
+    - name: suspend
+      title: Suspend Reconciliation
+      type: boolean
+      default: false
+
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      default: "cert-manager-install"
+      description: "Comma-separated list of Kustomization names this depends on"
+
+    - name: dependsOnNamespace
+      title: Dependencies Namespace
+      type: string
+      description: "Namespace of dependencies, defaults to Kustomization namespace"
+
+    - name: certManagerNamespace
+      title: Cert-Manager Namespace
+      type: string
+      default: cert-manager
+      description: "Namespace for cert-manager (CERT_MANAGER_NAMESPACE)"
+
+    - name: certManagerSelfsignedDomain
+      title: Selfsigned Domain
+      type: string
+      description: "Domain for the selfsigned certificate (CERT_MANAGER_SELFSIGNED_DOMAIN)"
+
+    - name: certManagerSelfsignedSecretName
+      title: TLS Secret Name
+      type: string
+      description: "Name of the TLS secret (CERT_MANAGER_SELFSIGNED_SECRET_NAME)"
+
+    - name: certManagerSelfsignedCertName
+      title: Certificate Name
+      type: string
+      description: "Name of the Certificate resource (CERT_MANAGER_SELFSIGNED_CERT_NAME)"
+
+    - name: certManagerSelfsignedCertNamespace
+      title: Certificate Namespace
+      type: string
+      default: default
+      description: "Namespace for the Certificate resource (CERT_MANAGER_SELFSIGNED_CERT_NAMESPACE)"
+
+    - name: certManagerSelfsignedIssuer
+      title: Issuer Name
+      type: string
+      default: vault-pki
+      description: "ClusterIssuer or Issuer name (CERT_MANAGER_SELFSIGNED_ISSUER)"
+
+    - name: decryptionProvider
+      title: Decryption Provider
+      type: string
+      enum:
+        - sops
+
+    - name: decryptionSecretRef
+      title: Decryption Secret
+      type: string
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
