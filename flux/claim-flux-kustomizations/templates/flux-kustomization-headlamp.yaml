@@ -1,0 +1,86 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-headlamp
+  title: Flux Kustomization Headlamp
+  description: Deploys a Flux Kustomization for Headlamp Kubernetes dashboard with gateway and domain substitutions
+  tags:
+    - flux
+    - kustomization
+    - headlamp
+    - app
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.28
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: headlamp
+    - name: name
+      title: Resource Name
+      type: string
+      default: headlamp
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/headlamp"
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+    - name: headlampNamespace
+      title: Headlamp Namespace
+      type: string
+      default: headlamp
+      description: "Namespace for Headlamp (HEADLAMP_NAMESPACE)"
+    - name: headlampVersion
+      title: Headlamp Version
+      type: string
+      default: "0.40.0"
+      description: "Headlamp Helm chart version (HEADLAMP_VERSION)"
+    - name: headlampGatewayName
+      title: Gateway Name
+      type: string
+      default: gateway
+      description: "Name of the Gateway resource (GATEWAY_NAME)"
+    - name: headlampGatewayNamespace
+      title: Gateway Namespace
+      type: string
+      default: default
+      description: "Namespace of the Gateway resource (GATEWAY_NAMESPACE)"
+    - name: headlampHostname
+      title: Hostname
+      type: string
+      default: headlamp
+      description: "Hostname for Headlamp (HOSTNAME)"
+    - name: headlampDomain
+      title: Domain
+      type: string
+      description: "Domain for Headlamp (DOMAIN)"

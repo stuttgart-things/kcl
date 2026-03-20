@@ -90,6 +90,33 @@ _gitRepoSemver = _spec?.semver or option("semver") or ""
 _gitRepoCommit = _spec?.commit or option("commit") or ""
 _gitRepoSecretRefName = _spec?.secretRefName or option("secretRefName") or ""
 
+# Flux Web specific parameters (for flux-web template)
+_fluxWebNamespace = _spec?.fluxWebNamespace or option("fluxWebNamespace") or "flux-system"
+_fluxWebVersion = _spec?.fluxWebVersion or option("fluxWebVersion") or "0.43.0"
+_fluxWebGatewayName = _spec?.fluxWebGatewayName or option("fluxWebGatewayName") or "gateway"
+_fluxWebGatewayNamespace = _spec?.fluxWebGatewayNamespace or option("fluxWebGatewayNamespace") or "default"
+_fluxWebHostname = _spec?.fluxWebHostname or option("fluxWebHostname") or "flux"
+_fluxWebDomain = _spec?.fluxWebDomain or option("fluxWebDomain") or ""
+
+# Headlamp specific parameters (for headlamp template)
+_headlampNamespace = _spec?.headlampNamespace or option("headlampNamespace") or "headlamp"
+_headlampVersion = _spec?.headlampVersion or option("headlampVersion") or "0.40.0"
+_headlampGatewayName = _spec?.headlampGatewayName or option("headlampGatewayName") or "gateway"
+_headlampGatewayNamespace = _spec?.headlampGatewayNamespace or option("headlampGatewayNamespace") or "default"
+_headlampHostname = _spec?.headlampHostname or option("headlampHostname") or "headlamp"
+_headlampDomain = _spec?.headlampDomain or option("headlampDomain") or ""
+
+# Prometheus specific parameters (for prometheus template)
+_prometheusNamespace = _spec?.prometheusNamespace or option("prometheusNamespace") or "monitoring"
+_prometheusVersion = _spec?.prometheusVersion or option("prometheusVersion") or "28.13.0"
+_prometheusStorageClass = _spec?.prometheusStorageClass or option("prometheusStorageClass") or "openebs-hostpath"
+_prometheusStorageSize = _spec?.prometheusStorageSize or option("prometheusStorageSize") or "10Gi"
+_prometheusRetention = _spec?.prometheusRetention or option("prometheusRetention") or "15d"
+_prometheusGatewayName = _spec?.prometheusGatewayName or option("prometheusGatewayName") or "gateway"
+_prometheusGatewayNamespace = _spec?.prometheusGatewayNamespace or option("prometheusGatewayNamespace") or "default"
+_prometheusHostname = _spec?.prometheusHostname or option("prometheusHostname") or "prometheus"
+_prometheusDomain = _spec?.prometheusDomain or option("prometheusDomain") or ""
+
 # Vault HTTPRoute specific parameters (for vault-httproute template)
 _vaultHttprouteNamespace = _spec?.vaultHttprouteNamespace or option("vaultHttprouteNamespace") or "vault"
 _vaultHttprouteGatewayName = _spec?.vaultHttprouteGatewayName or option("vaultHttprouteGatewayName") or "gateway"
@@ -328,6 +355,195 @@ if _templateName == "clusterbook":
         }
     }
 
+
+# Template: Flux Web (app deployment with gateway substitutions)
+if _templateName == "flux-web":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "flux-web"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "flux-web"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./apps/flux-web"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "FLUX_WEB_NAMESPACE": str(_fluxWebNamespace)
+                    "FLUX_WEB_VERSION": str(_fluxWebVersion)
+                    "GATEWAY_NAME": str(_fluxWebGatewayName)
+                    "GATEWAY_NAMESPACE": str(_fluxWebGatewayNamespace)
+                    "HOSTNAME": str(_fluxWebHostname)
+                    "DOMAIN": str(_fluxWebDomain)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: Headlamp (app deployment with gateway substitutions)
+if _templateName == "headlamp":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "headlamp"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "headlamp"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./apps/headlamp"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "HEADLAMP_NAMESPACE": str(_headlampNamespace)
+                    "HEADLAMP_VERSION": str(_headlampVersion)
+                    "GATEWAY_NAME": str(_headlampGatewayName)
+                    "GATEWAY_NAMESPACE": str(_headlampGatewayNamespace)
+                    "HOSTNAME": str(_headlampHostname)
+                    "DOMAIN": str(_headlampDomain)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: Prometheus (infrastructure with monitoring substitutions)
+if _templateName == "prometheus":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "prometheus"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "prometheus"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "infrastructure"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-infra"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./infra/prometheus"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "PROMETHEUS_NAMESPACE": str(_prometheusNamespace)
+                    "PROMETHEUS_VERSION": str(_prometheusVersion)
+                    "PROMETHEUS_STORAGE_CLASS": str(_prometheusStorageClass)
+                    "PROMETHEUS_STORAGE_SIZE": str(_prometheusStorageSize)
+                    "PROMETHEUS_RETENTION": str(_prometheusRetention)
+                    "GATEWAY_NAME": str(_prometheusGatewayName)
+                    "GATEWAY_NAMESPACE": str(_prometheusGatewayNamespace)
+                    "HOSTNAME": str(_prometheusHostname)
+                    "DOMAIN": str(_prometheusDomain)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
 
 # Template: Vault HTTPRoute (gateway route for vault)
 if _templateName == "vault-httproute":

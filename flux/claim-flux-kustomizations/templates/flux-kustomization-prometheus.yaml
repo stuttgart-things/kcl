@@ -1,0 +1,102 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-prometheus
+  title: Flux Kustomization Prometheus
+  description: Deploys a Flux Kustomization for Prometheus monitoring with storage, retention, and gateway substitutions
+  tags:
+    - flux
+    - kustomization
+    - prometheus
+    - monitoring
+    - infrastructure
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.28
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: prometheus
+    - name: name
+      title: Resource Name
+      type: string
+      default: prometheus
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-infra
+    - name: path
+      title: Path
+      type: string
+      default: "./infra/prometheus"
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+    - name: prometheusNamespace
+      title: Prometheus Namespace
+      type: string
+      default: monitoring
+      description: "Namespace for Prometheus (PROMETHEUS_NAMESPACE)"
+    - name: prometheusVersion
+      title: Prometheus Chart Version
+      type: string
+      default: "28.13.0"
+      description: "Prometheus Helm chart version (PROMETHEUS_VERSION)"
+    - name: prometheusStorageClass
+      title: Storage Class
+      type: string
+      default: openebs-hostpath
+      description: "Storage class for Prometheus PVCs (PROMETHEUS_STORAGE_CLASS)"
+    - name: prometheusStorageSize
+      title: Storage Size
+      type: string
+      default: "10Gi"
+      description: "Storage size for Prometheus PVCs (PROMETHEUS_STORAGE_SIZE)"
+    - name: prometheusRetention
+      title: Retention Period
+      type: string
+      default: "15d"
+      description: "Data retention period (PROMETHEUS_RETENTION)"
+    - name: prometheusGatewayName
+      title: Gateway Name
+      type: string
+      default: gateway
+      description: "Name of the Gateway resource (GATEWAY_NAME)"
+    - name: prometheusGatewayNamespace
+      title: Gateway Namespace
+      type: string
+      default: default
+      description: "Namespace of the Gateway resource (GATEWAY_NAMESPACE)"
+    - name: prometheusHostname
+      title: Hostname
+      type: string
+      default: prometheus
+      description: "Hostname for Prometheus (HOSTNAME)"
+    - name: prometheusDomain
+      title: Domain
+      type: string
+      description: "Domain for Prometheus (DOMAIN)"
