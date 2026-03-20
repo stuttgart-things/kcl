@@ -1,0 +1,122 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-vault-httproute
+  title: Flux Kustomization Vault HTTPRoute
+  description: Deploys a Flux Kustomization for Vault HTTPRoute with gateway and domain substitutions
+  tags:
+    - flux
+    - kustomization
+    - vault
+    - httproute
+    - gateway
+    - app
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.27
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: vault-httproute
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: vault-httproute
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/vault/httproute"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      default: "vault,cilium-gateway"
+      description: "Comma-separated list of Kustomization names this depends on"
+
+    - name: vaultHttprouteNamespace
+      title: Vault Namespace
+      type: string
+      default: vault
+      description: "Namespace where Vault is installed (VAULT_NAMESPACE)"
+
+    - name: vaultHttprouteGatewayName
+      title: Gateway Name
+      type: string
+      default: gateway
+      description: "Name of the Gateway resource (GATEWAY_NAME)"
+
+    - name: vaultHttprouteGatewayNamespace
+      title: Gateway Namespace
+      type: string
+      default: default
+      description: "Namespace of the Gateway resource (GATEWAY_NAMESPACE)"
+
+    - name: vaultHttprouteHostname
+      title: Vault Hostname
+      type: string
+      default: vault
+      description: "Hostname for Vault HTTPRoute (VAULT_HOSTNAME)"
+
+    - name: vaultHttprouteDomain
+      title: Vault Domain
+      type: string
+      description: "Domain for Vault HTTPRoute (VAULT_DOMAIN)"
+
+    - name: decryptionProvider
+      title: Decryption Provider
+      type: string
+      enum:
+        - sops
+
+    - name: decryptionSecretRef
+      title: Decryption Secret
+      type: string
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
