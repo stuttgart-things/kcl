@@ -1,0 +1,96 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-nfs-csi
+  title: Flux Kustomization NFS CSI
+  description: Deploys a Flux Kustomization for NFS CSI driver with server, share, and feature substitutions
+  tags:
+    - flux
+    - kustomization
+    - nfs
+    - csi
+    - storage
+    - infrastructure
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.29
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: nfs-csi
+    - name: name
+      title: Resource Name
+      type: string
+      default: nfs-csi
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-infra
+    - name: path
+      title: Path
+      type: string
+      default: "./infra/nfs-csi"
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+    - name: nfsServerFqdn
+      title: NFS Server Address
+      type: string
+      description: "NFS server IP or FQDN (NFS_SERVER_FQDN)"
+    - name: nfsSharePath
+      title: NFS Share Path
+      type: string
+      default: "/data/nfs"
+      description: "NFS export path (NFS_SHARE_PATH)"
+    - name: nfsCsiClusterName
+      title: Cluster Name
+      type: string
+      description: "Cluster name for storage class naming (CLUSTER_NAME)"
+    - name: nfsCsiNamespace
+      title: NFS CSI Namespace
+      type: string
+      default: kube-system
+      description: "Namespace for NFS CSI driver (NFS_CSI_NAMESPACE)"
+    - name: nfsCsiVersion
+      title: NFS CSI Version
+      type: string
+      default: "v4.13.1"
+      description: "NFS CSI driver version (NFS_CSI_VERSION)"
+    - name: nfsCsiEnableCrds
+      title: Enable CRDs
+      type: string
+      default: "false"
+      enum:
+        - "true"
+        - "false"
+    - name: nfsCsiEnableSnapshotter
+      title: Enable Snapshotter
+      type: string
+      default: "true"
+      enum:
+        - "true"
+        - "false"

@@ -1,0 +1,94 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-trust-manager
+  title: Flux Kustomization Trust Manager
+  description: Deploys a Flux Kustomization for cert-manager trust-manager with CA bundle configuration
+  tags:
+    - flux
+    - kustomization
+    - trust-manager
+    - cert-manager
+    - infrastructure
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.29
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: trust-manager
+    - name: name
+      title: Resource Name
+      type: string
+      default: trust-manager
+    - name: namespace
+      title: Namespace
+      type: string
+      default: flux-system
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-infra
+    - name: path
+      title: Path
+      type: string
+      default: "./infra/trust-manager"
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      default: "cert-manager-install"
+      description: "Comma-separated list of Kustomization names this depends on"
+    - name: trustManagerNamespace
+      title: Trust Manager Namespace
+      type: string
+      default: cert-manager
+      description: "Namespace for trust-manager (TRUST_MANAGER_NAMESPACE)"
+    - name: trustManagerVersion
+      title: Trust Manager Version
+      type: string
+      default: "0.22.0"
+      description: "Trust-manager Helm chart version (TRUST_MANAGER_VERSION)"
+    - name: trustBundleCaSecret
+      title: CA Bundle Secret
+      type: string
+      default: cluster-ca-secret
+      description: "Secret containing the cluster CA cert (TRUST_BUNDLE_CA_SECRET)"
+    - name: trustBundleCaKey
+      title: CA Bundle Secret Key
+      type: string
+      default: ca.crt
+      description: "Key in the CA secret (TRUST_BUNDLE_CA_KEY)"
+    - name: trustBundleTargetKey
+      title: Target Bundle Key
+      type: string
+      default: trust-bundle.pem
+      description: "Key name in the generated ConfigMap (TRUST_BUNDLE_TARGET_KEY)"
+    - name: trustBundleVaultCaSecret
+      title: Vault CA Secret
+      type: string
+      default: vault-pki-ca
+      description: "Secret containing the Vault PKI CA cert (TRUST_BUNDLE_VAULT_CA_SECRET)"
+    - name: trustBundleVaultCaKey
+      title: Vault CA Secret Key
+      type: string
+      default: ca.crt
+      description: "Key in the Vault CA secret (TRUST_BUNDLE_VAULT_CA_KEY)"

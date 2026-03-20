@@ -90,6 +90,24 @@ _gitRepoSemver = _spec?.semver or option("semver") or ""
 _gitRepoCommit = _spec?.commit or option("commit") or ""
 _gitRepoSecretRefName = _spec?.secretRefName or option("secretRefName") or ""
 
+# NFS CSI specific parameters (for nfs-csi template)
+_nfsServerFqdn = _spec?.nfsServerFqdn or option("nfsServerFqdn") or ""
+_nfsSharePath = _spec?.nfsSharePath or option("nfsSharePath") or "/data/nfs"
+_nfsCsiClusterName = _spec?.nfsCsiClusterName or option("nfsCsiClusterName") or ""
+_nfsCsiNamespace = _spec?.nfsCsiNamespace or option("nfsCsiNamespace") or "kube-system"
+_nfsCsiVersion = _spec?.nfsCsiVersion or option("nfsCsiVersion") or "v4.13.1"
+_nfsCsiEnableCrds = _spec?.nfsCsiEnableCrds or option("nfsCsiEnableCrds") or "false"
+_nfsCsiEnableSnapshotter = _spec?.nfsCsiEnableSnapshotter or option("nfsCsiEnableSnapshotter") or "true"
+
+# Trust Manager specific parameters (for trust-manager template)
+_trustManagerNamespace = _spec?.trustManagerNamespace or option("trustManagerNamespace") or "cert-manager"
+_trustManagerVersion = _spec?.trustManagerVersion or option("trustManagerVersion") or "0.22.0"
+_trustBundleCaSecret = _spec?.trustBundleCaSecret or option("trustBundleCaSecret") or "cluster-ca-secret"
+_trustBundleCaKey = _spec?.trustBundleCaKey or option("trustBundleCaKey") or "ca.crt"
+_trustBundleTargetKey = _spec?.trustBundleTargetKey or option("trustBundleTargetKey") or "trust-bundle.pem"
+_trustBundleVaultCaSecret = _spec?.trustBundleVaultCaSecret or option("trustBundleVaultCaSecret") or "vault-pki-ca"
+_trustBundleVaultCaKey = _spec?.trustBundleVaultCaKey or option("trustBundleVaultCaKey") or "ca.crt"
+
 # Flux Web specific parameters (for flux-web template)
 _fluxWebNamespace = _spec?.fluxWebNamespace or option("fluxWebNamespace") or "flux-system"
 _fluxWebVersion = _spec?.fluxWebVersion or option("fluxWebVersion") or "0.43.0"
@@ -355,6 +373,132 @@ if _templateName == "clusterbook":
         }
     }
 
+
+# Template: NFS CSI (infrastructure with NFS CSI driver substitutions)
+if _templateName == "nfs-csi":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "nfs-csi"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "nfs-csi"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "infrastructure"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-infra"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./infra/nfs-csi"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "NFS_SERVER_FQDN": str(_nfsServerFqdn)
+                    "NFS_SHARE_PATH": str(_nfsSharePath)
+                    "CLUSTER_NAME": str(_nfsCsiClusterName)
+                    "NFS_CSI_NAMESPACE": str(_nfsCsiNamespace)
+                    "NFS_CSI_VERSION": str(_nfsCsiVersion)
+                    "NFS_CSI_ENABLE_CRDS": str(_nfsCsiEnableCrds)
+                    "NFS_CSI_ENABLE_SNAPSHOTTER": str(_nfsCsiEnableSnapshotter)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: Trust Manager (infrastructure with trust bundle substitutions)
+if _templateName == "trust-manager":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "trust-manager"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "trust-manager"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "infrastructure"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-infra"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./infra/trust-manager"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "TRUST_MANAGER_NAMESPACE": str(_trustManagerNamespace)
+                    "TRUST_MANAGER_VERSION": str(_trustManagerVersion)
+                    "TRUST_BUNDLE_CA_SECRET": str(_trustBundleCaSecret)
+                    "TRUST_BUNDLE_CA_KEY": str(_trustBundleCaKey)
+                    "TRUST_BUNDLE_TARGET_KEY": str(_trustBundleTargetKey)
+                    "TRUST_BUNDLE_VAULT_CA_SECRET": str(_trustBundleVaultCaSecret)
+                    "TRUST_BUNDLE_VAULT_CA_KEY": str(_trustBundleVaultCaKey)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
 
 # Template: Flux Web (app deployment with gateway substitutions)
 if _templateName == "flux-web":
