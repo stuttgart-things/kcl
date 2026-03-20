@@ -240,7 +240,7 @@ if _templateName == "clusterbook":
         PDNS_ZONE = _pdnsZone
     } if _pdnsEnabled == "true" else {}
 
-    _substitute = _baseSubstitute | _pdnsSubstitute
+    _substitute: {str:str} = _baseSubstitute | _pdnsSubstitute
 
     flux.Kustomization {
         metadata = v1.ObjectMeta {
