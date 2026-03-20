@@ -286,7 +286,7 @@ if _templateName == "clusterbook":
 # Template: Cert-Manager (infrastructure with cert-manager substitutions)
 if _templateName == "cert-manager":
     # Build cert-manager substitution map + any additional substitutions
-    _certManagerSubstitute = {
+    _certManagerSubstitute: {str:str} = {
         CERT_MANAGER_NAMESPACE = _certManagerNamespace
         CERT_MANAGER_VERSION = _certManagerVersion
         CERT_MANAGER_INSTALL_CRDS = _certManagerInstallCrds
