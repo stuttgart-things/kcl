@@ -113,6 +113,43 @@ claims render --non-interactive \
 claims render --non-interactive -f gitrepos.yaml -o ./out --single-file
 ```
 
+### Render MinIO with SOPS secret
+
+```bash
+# Render the Kustomization
+claims render --non-interactive \
+  -t flux-kustomization-minio \
+  -p sourceRefName=flux-apps \
+  -p minioClusterIssuer=vault-pki \
+  -p minioIngressHostnameConsole=artifacts-console \
+  -p minioIngressHostnameApi=artifacts \
+  -p minioIngressDomain=my-cluster.sthings-vsphere.labul.sva.de \
+  -o ./apps/ \
+  --filename-pattern "{{.name}}.yaml"
+
+# Create SOPS-encrypted secret for MinIO credentials
+claims encrypt --non-interactive \
+  -t flux-kustomization-minio \
+  --name minio-secrets \
+  --namespace flux-system \
+  --param MINIO_ADMIN_USER=admin \
+  --param MINIO_ADMIN_PASSWORD=my-password \
+  -o ./secrets/
+```
+
+### Render MinIO HTTPRoute
+
+```bash
+claims render --non-interactive \
+  -t flux-kustomization-minio-httproute \
+  -p sourceRefName=flux-apps \
+  -p minioIngressHostnameConsole=artifacts-console \
+  -p minioIngressHostnameApi=artifacts \
+  -p minioIngressDomain=my-cluster.sthings-vsphere.labul.sva.de \
+  -p minioGatewayName=my-gateway \
+  --dry-run
+```
+
 ### Write output to directory
 
 ```bash
@@ -122,6 +159,35 @@ claims render --non-interactive \
   -o ./output/ \
   --filename-pattern "{{.name}}.yaml"
 ```
+
+## SOPS Secrets
+
+Templates with a `secrets` section (e.g., `flux-kustomization-minio`, `flux-kustomization-clusterbook-app`) support SOPS-encrypted secret creation via `claims encrypt`:
+
+```bash
+# Prerequisites
+export SOPS_AGE_RECIPIENTS=age1...  # age public key
+
+# Create encrypted secret
+claims encrypt --non-interactive \
+  -t <template-name> \
+  --name <secret-name> \
+  --namespace <namespace> \
+  --param KEY1=value1 \
+  --param KEY2=value2 \
+  -o ./secrets/
+
+# Output: secrets/<secret-name>-secret.enc.yaml (SOPS encrypted)
+```
+
+The encrypted secret file can be committed to Git. Flux decrypts it during reconciliation when the Kustomization has `decryption: {provider: sops}` configured.
+
+### Templates with SOPS secrets
+
+| Template | Secret Name | Keys |
+|---|---|---|
+| `flux-kustomization-minio` | `minio-secrets` | `MINIO_ADMIN_USER`, `MINIO_ADMIN_PASSWORD` |
+| `flux-kustomization-clusterbook-app` | `clusterbook-pdns-vars` | `PDNS_TOKEN` (optional) |
 
 ## Common Flags
 
