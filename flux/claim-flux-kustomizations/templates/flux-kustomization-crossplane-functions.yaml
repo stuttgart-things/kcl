@@ -2,13 +2,14 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: flux-kustomization-crossplane-install
-  title: Flux Kustomization Crossplane Install
-  description: Deploys Crossplane core with Helm, K8s, and OpenTofu providers via Flux
+  name: flux-kustomization-crossplane-functions
+  title: Flux Kustomization Crossplane Functions
+  description: Deploys Crossplane Functions (auto-ready, go-templating, kcl, patch-and-transform) via Flux
   tags:
     - flux
     - kustomization
     - crossplane
+    - functions
     - infrastructure
 spec:
   type: kustomization
@@ -18,12 +19,12 @@ spec:
     - name: templateName
       title: Template
       type: string
-      default: crossplane-install
+      default: crossplane-functions
 
     - name: name
       title: Resource Name
       type: string
-      default: crossplane-install
+      default: crossplane-functions
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 
     - name: namespace
@@ -55,7 +56,7 @@ spec:
     - name: path
       title: Path
       type: string
-      default: "./cicd/crossplane/components/install"
+      default: "./cicd/crossplane/components/functions"
       description: "Path to the directory containing the kustomization.yaml"
 
     - name: interval
@@ -91,6 +92,7 @@ spec:
     - name: dependsOnNames
       title: Dependency Names
       type: string
+      default: "crossplane-install"
       description: "Comma-separated list of Kustomization names this depends on"
 
     - name: dependsOnNamespace
@@ -102,25 +104,7 @@ spec:
       title: Crossplane Namespace
       type: string
       default: crossplane-system
-      description: "Namespace where Crossplane will be installed (CROSSPLANE_NAMESPACE)"
-
-    - name: crossplaneVersion
-      title: Crossplane Version
-      type: string
-      default: "2.2.0"
-      description: "Crossplane Helm chart version (CROSSPLANE_VERSION)"
-
-    - name: helmProviderVersion
-      title: Helm Provider Version
-      type: string
-      default: "v1.2.0"
-      description: "Crossplane Helm provider version (CROSSPLANE_HELM_PROVIDER_VERSION)"
-
-    - name: k8sProviderVersion
-      title: K8s Provider Version
-      type: string
-      default: "v1.2.1"
-      description: "Crossplane K8s provider version (CROSSPLANE_K8S_PROVIDER_VERSION)"
+      description: "Namespace where Crossplane is installed (CROSSPLANE_NAMESPACE)"
 
     - name: kubeConfigSecretRef
       title: KubeConfig Secret

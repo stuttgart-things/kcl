@@ -8,7 +8,10 @@ Templates:
 - gitops: Basic GitOps Kustomization with common defaults
 - infrastructure: Infrastructure Kustomization with dependencies and health checks
 - cert-manager: Cert-manager deployment with version/namespace substitutions
-- crossplane: Crossplane deployment with provider configurations
+- crossplane: Crossplane deployment with provider configurations (legacy, monolith)
+- crossplane-install: Crossplane core install with providers
+- crossplane-functions: Crossplane functions (depends on crossplane-install)
+- crossplane-configs: Crossplane configurations (depends on crossplane-install + crossplane-functions)
 - gitrepository: Flux GitRepository source for use by Kustomizations
 
 Usage via main.k:
@@ -208,17 +211,25 @@ _certManagerNamespace = _spec?.certManagerNamespace or option("certManagerNamesp
 _certManagerVersion = _spec?.certManagerVersion or option("certManagerVersion") or "v1.19.1"
 _certManagerInstallCrds = _spec?.certManagerInstallCrds or option("certManagerInstallCrds") or "true"
 
-# Crossplane-specific parameters (for crossplane template)
+# Crossplane-specific parameters (for crossplane/crossplane-install template)
 _crossplaneNamespace = _spec?.crossplaneNamespace or option("crossplaneNamespace") or "crossplane-system"
-_crossplaneVersion = _spec?.crossplaneVersion or option("crossplaneVersion") or "2.1.3"
+_crossplaneVersion = _spec?.crossplaneVersion or option("crossplaneVersion") or "2.2.0"
 _terraformConfigName = _spec?.terraformConfigName or option("terraformConfigName") or "terraform-runtime-config"
 _terraformPoll = _spec?.terraformPoll or option("terraformPoll") or "30s"
 _terraformProviderImage = _spec?.terraformProviderImage or option("terraformProviderImage") or "ghcr.io/stuttgart-things/sthings-cptf:1.14.3"
 _terraformProviderVersion = _spec?.terraformProviderVersion or option("terraformProviderVersion") or "v1.0.5"
 _terraformReconcileRate = _spec?.terraformReconcileRate or option("terraformReconcileRate") or "10"
 _terraformS3SecretName = _spec?.terraformS3SecretName or option("terraformS3SecretName") or "terraform-s3"
-_helmProviderVersion = _spec?.helmProviderVersion or option("helmProviderVersion") or "v1.0.6"
-_k8sProviderVersion = _spec?.k8sProviderVersion or option("k8sProviderVersion") or "v1.2.0"
+_helmProviderVersion = _spec?.helmProviderVersion or option("helmProviderVersion") or "v1.2.0"
+_k8sProviderVersion = _spec?.k8sProviderVersion or option("k8sProviderVersion") or "v1.2.1"
+
+# Crossplane configs-specific parameters (for crossplane-configs template)
+_crossplaneConfigCloudConfigVersion = _spec?.crossplaneConfigCloudConfigVersion or option("crossplaneConfigCloudConfigVersion") or "v0.5.1"
+_crossplaneConfigVolumeClaimVersion = _spec?.crossplaneConfigVolumeClaimVersion or option("crossplaneConfigVolumeClaimVersion") or "v0.1.1"
+_crossplaneConfigStoragePlatformVersion = _spec?.crossplaneConfigStoragePlatformVersion or option("crossplaneConfigStoragePlatformVersion") or "v0.6.0"
+_crossplaneConfigAnsibleRunVersion = _spec?.crossplaneConfigAnsibleRunVersion or option("crossplaneConfigAnsibleRunVersion") or "v12.0.0"
+_crossplaneConfigPipelineIntegrationVersion = _spec?.crossplaneConfigPipelineIntegrationVersion or option("crossplaneConfigPipelineIntegrationVersion") or "v0.1.2"
+_crossplaneConfigHarvesterVmVersion = _spec?.crossplaneConfigHarvesterVmVersion or option("crossplaneConfigHarvesterVmVersion") or "v0.3.3"
 
 # Helper: parse comma-separated dependency names to list
 _dependsOnNames = [name.strip() for name in _dependsOnNamesStr.split(",") if name.strip()] if _dependsOnNamesStr else []
@@ -1398,6 +1409,185 @@ if _templateName == "infrastructure":
                     if _commonAnnotations:
                         annotations = _commonAnnotations
                 }
+        }
+    }
+
+# Template: Crossplane Install (core deployment with providers)
+if _templateName == "crossplane-install":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "crossplane-install"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "crossplane-install"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "crossplane"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./cicd/crossplane/components/install"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "CROSSPLANE_NAMESPACE": str(_crossplaneNamespace)
+                    "CROSSPLANE_VERSION": str(_crossplaneVersion)
+                    "CROSSPLANE_HELM_PROVIDER_VERSION": str(_helmProviderVersion)
+                    "CROSSPLANE_K8S_PROVIDER_VERSION": str(_k8sProviderVersion)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: Crossplane Functions (function deployments, depends on crossplane-install)
+if _templateName == "crossplane-functions":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "crossplane-functions"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "crossplane-functions"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "crossplane"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./cicd/crossplane/components/functions"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "CROSSPLANE_NAMESPACE": str(_crossplaneNamespace)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: Crossplane Configs (configuration deployments, depends on crossplane-install + crossplane-functions)
+if _templateName == "crossplane-configs":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "crossplane-configs"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "crossplane-configs"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "crossplane"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./cicd/crossplane/components/configs"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "CROSSPLANE_CONFIG_CLOUD_CONFIG_VERSION": str(_crossplaneConfigCloudConfigVersion)
+                    "CROSSPLANE_CONFIG_VOLUME_CLAIM_VERSION": str(_crossplaneConfigVolumeClaimVersion)
+                    "CROSSPLANE_CONFIG_STORAGE_PLATFORM_VERSION": str(_crossplaneConfigStoragePlatformVersion)
+                    "CROSSPLANE_CONFIG_ANSIBLE_RUN_VERSION": str(_crossplaneConfigAnsibleRunVersion)
+                    "CROSSPLANE_CONFIG_PIPELINE_INTEGRATION_VERSION": str(_crossplaneConfigPipelineIntegrationVersion)
+                    "CROSSPLANE_CONFIG_HARVESTER_VM_VERSION": str(_crossplaneConfigHarvesterVmVersion)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
         }
     }
 

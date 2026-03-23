@@ -2,13 +2,14 @@
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
-  name: flux-kustomization-crossplane-install
-  title: Flux Kustomization Crossplane Install
-  description: Deploys Crossplane core with Helm, K8s, and OpenTofu providers via Flux
+  name: flux-kustomization-crossplane-configs
+  title: Flux Kustomization Crossplane Configs
+  description: Deploys Crossplane Configurations (cloud-config, volume-claim, storage-platform, ansible-run, pipeline-integration, harvester-vm) via Flux
   tags:
     - flux
     - kustomization
     - crossplane
+    - configs
     - infrastructure
 spec:
   type: kustomization
@@ -18,12 +19,12 @@ spec:
     - name: templateName
       title: Template
       type: string
-      default: crossplane-install
+      default: crossplane-configs
 
     - name: name
       title: Resource Name
       type: string
-      default: crossplane-install
+      default: crossplane-configs
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 
     - name: namespace
@@ -55,7 +56,7 @@ spec:
     - name: path
       title: Path
       type: string
-      default: "./cicd/crossplane/components/install"
+      default: "./cicd/crossplane/components/configs"
       description: "Path to the directory containing the kustomization.yaml"
 
     - name: interval
@@ -91,6 +92,7 @@ spec:
     - name: dependsOnNames
       title: Dependency Names
       type: string
+      default: "crossplane-install,crossplane-functions"
       description: "Comma-separated list of Kustomization names this depends on"
 
     - name: dependsOnNamespace
@@ -98,29 +100,41 @@ spec:
       type: string
       description: "Namespace of dependencies, defaults to Kustomization namespace"
 
-    - name: crossplaneNamespace
-      title: Crossplane Namespace
+    - name: crossplaneConfigCloudConfigVersion
+      title: Cloud Config Version
       type: string
-      default: crossplane-system
-      description: "Namespace where Crossplane will be installed (CROSSPLANE_NAMESPACE)"
+      default: "v0.5.1"
+      description: "Version of cloud-config Configuration (CROSSPLANE_CONFIG_CLOUD_CONFIG_VERSION)"
 
-    - name: crossplaneVersion
-      title: Crossplane Version
+    - name: crossplaneConfigVolumeClaimVersion
+      title: Volume Claim Version
       type: string
-      default: "2.2.0"
-      description: "Crossplane Helm chart version (CROSSPLANE_VERSION)"
+      default: "v0.1.1"
+      description: "Version of volume-claim Configuration (CROSSPLANE_CONFIG_VOLUME_CLAIM_VERSION)"
 
-    - name: helmProviderVersion
-      title: Helm Provider Version
+    - name: crossplaneConfigStoragePlatformVersion
+      title: Storage Platform Version
       type: string
-      default: "v1.2.0"
-      description: "Crossplane Helm provider version (CROSSPLANE_HELM_PROVIDER_VERSION)"
+      default: "v0.6.0"
+      description: "Version of storage-platform Configuration (CROSSPLANE_CONFIG_STORAGE_PLATFORM_VERSION)"
 
-    - name: k8sProviderVersion
-      title: K8s Provider Version
+    - name: crossplaneConfigAnsibleRunVersion
+      title: Ansible Run Version
       type: string
-      default: "v1.2.1"
-      description: "Crossplane K8s provider version (CROSSPLANE_K8S_PROVIDER_VERSION)"
+      default: "v12.0.0"
+      description: "Version of ansible-run Configuration (CROSSPLANE_CONFIG_ANSIBLE_RUN_VERSION)"
+
+    - name: crossplaneConfigPipelineIntegrationVersion
+      title: Pipeline Integration Version
+      type: string
+      default: "v0.1.2"
+      description: "Version of pipeline-integration Configuration (CROSSPLANE_CONFIG_PIPELINE_INTEGRATION_VERSION)"
+
+    - name: crossplaneConfigHarvesterVmVersion
+      title: Harvester VM Version
+      type: string
+      default: "v0.3.3"
+      description: "Version of harvester-vm Configuration (CROSSPLANE_CONFIG_HARVESTER_VM_VERSION)"
 
     - name: kubeConfigSecretRef
       title: KubeConfig Secret
