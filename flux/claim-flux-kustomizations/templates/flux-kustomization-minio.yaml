@@ -1,0 +1,195 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-minio
+  title: Flux Kustomization MinIO
+  description: Deploys MinIO object storage via Flux with cert-manager TLS and optional Gateway API HTTPRoute
+  tags:
+    - flux
+    - kustomization
+    - minio
+    - app
+    - storage
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.31
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: minio
+      hidden: true
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: minio
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Kustomization Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefKind
+      title: Source Reference Kind
+      type: string
+      default: GitRepository
+      enum:
+        - GitRepository
+        - OCIRepository
+        - Bucket
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefNamespace
+      title: Source Reference Namespace
+      type: string
+      description: "Namespace of the source, defaults to Kustomization namespace"
+
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/minio"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+
+    - name: force
+      title: Force Recreation
+      type: boolean
+      default: false
+
+    - name: suspend
+      title: Suspend Reconciliation
+      type: boolean
+      default: false
+
+    - name: dependsOnNames
+      title: Dependency Names
+      type: string
+      description: "Comma-separated list of Kustomization names this depends on"
+
+    - name: dependsOnNamespace
+      title: Dependencies Namespace
+      type: string
+
+    - name: minioNamespace
+      title: MinIO Namespace
+      type: string
+      default: minio
+      required: true
+      description: "Target namespace for MinIO (MINIO_NAMESPACE)"
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: minioVersion
+      title: MinIO Chart Version
+      type: string
+      default: "16.0.10"
+      description: "Helm chart version (MINIO_VERSION)"
+
+    - name: minioIngressEnabled
+      title: Enable nginx Ingress
+      type: string
+      default: "false"
+      enum:
+        - "true"
+        - "false"
+      description: "Enable nginx Ingress. Set to false when using Gateway API HTTPRoute."
+
+    - name: minioClusterIssuer
+      title: ClusterIssuer
+      type: string
+      required: true
+      description: "cert-manager ClusterIssuer name for TLS certificates (CLUSTER_ISSUER)"
+
+    - name: minioIngressHostnameConsole
+      title: Console Hostname
+      type: string
+      default: artifacts-console
+      required: true
+      description: "Console hostname prefix (INGRESS_HOSTNAME_CONSOLE)"
+
+    - name: minioIngressHostnameApi
+      title: API Hostname
+      type: string
+      default: artifacts
+      required: true
+      description: "S3 API hostname prefix (INGRESS_HOSTNAME_API)"
+
+    - name: minioIngressDomain
+      title: Domain
+      type: string
+      required: true
+      description: "Base domain (INGRESS_DOMAIN), e.g. my-cluster.sthings-vsphere.labul.sva.de"
+
+    - name: minioStorageClass
+      title: Storage Class
+      type: string
+      default: nfs4-csi
+      description: "StorageClass for persistent volumes (STORAGE_CLASS)"
+
+    - name: minioStorageSize
+      title: Storage Size
+      type: string
+      default: 10Gi
+      description: "Persistent volume size (MINIO_STORAGE_SIZE)"
+
+    - name: minioSecretName
+      title: Secret Name
+      type: string
+      default: minio-secrets
+      description: "Name of the Secret containing MINIO_ADMIN_USER and MINIO_ADMIN_PASSWORD"
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+      description: "Secret containing kubeconfig for remote cluster deployment"
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
+      description: "Service account to impersonate during reconciliation"
+
+  secrets:
+    - name: "{{.minioSecretName}}"
+      namespace: "{{.namespace}}"
+      parameters:
+        - name: MINIO_ADMIN_USER
+          title: MinIO Admin User
+          type: string
+          required: true
+        - name: MINIO_ADMIN_PASSWORD
+          title: MinIO Admin Password
+          type: string
+          required: true

@@ -223,6 +223,20 @@ _terraformS3SecretName = _spec?.terraformS3SecretName or option("terraformS3Secr
 _helmProviderVersion = _spec?.helmProviderVersion or option("helmProviderVersion") or "v1.2.0"
 _k8sProviderVersion = _spec?.k8sProviderVersion or option("k8sProviderVersion") or "v1.2.1"
 
+# MinIO specific parameters (for minio template)
+_minioNamespace = _spec?.minioNamespace or option("minioNamespace") or "minio"
+_minioVersion = _spec?.minioVersion or option("minioVersion") or "16.0.10"
+_minioIngressEnabled = _spec?.minioIngressEnabled or option("minioIngressEnabled") or "false"
+_minioClusterIssuer = _spec?.minioClusterIssuer or option("minioClusterIssuer") or ""
+_minioIngressHostnameConsole = _spec?.minioIngressHostnameConsole or option("minioIngressHostnameConsole") or "artifacts-console"
+_minioIngressHostnameApi = _spec?.minioIngressHostnameApi or option("minioIngressHostnameApi") or "artifacts"
+_minioIngressDomain = _spec?.minioIngressDomain or option("minioIngressDomain") or ""
+_minioStorageClass = _spec?.minioStorageClass or option("minioStorageClass") or "nfs4-csi"
+_minioStorageSize = _spec?.minioStorageSize or option("minioStorageSize") or "10Gi"
+_minioSecretName = _spec?.minioSecretName or option("minioSecretName") or "minio-secrets"
+_minioGatewayName = _spec?.minioGatewayName or option("minioGatewayName") or "gateway"
+_minioGatewayNamespace = _spec?.minioGatewayNamespace or option("minioGatewayNamespace") or "default"
+
 # Crossplane configs-specific parameters (for crossplane-configs template)
 _crossplaneConfigCloudConfigVersion = _spec?.crossplaneConfigCloudConfigVersion or option("crossplaneConfigCloudConfigVersion") or "v0.5.1"
 _crossplaneConfigVolumeClaimVersion = _spec?.crossplaneConfigVolumeClaimVersion or option("crossplaneConfigVolumeClaimVersion") or "v0.1.1"
@@ -1576,6 +1590,142 @@ if _templateName == "crossplane-configs":
                     "CROSSPLANE_CONFIG_ANSIBLE_RUN_VERSION": str(_crossplaneConfigAnsibleRunVersion)
                     "CROSSPLANE_CONFIG_PIPELINE_INTEGRATION_VERSION": str(_crossplaneConfigPipelineIntegrationVersion)
                     "CROSSPLANE_CONFIG_HARVESTER_VM_VERSION": str(_crossplaneConfigHarvesterVmVersion)
+                }
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: MinIO (object storage with optional HTTPRoute)
+if _templateName == "minio":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "minio"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "minio"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./apps/minio"
+            if _dependsOnNames:
+                dependsOn = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                        name = depName
+                        if _dependsOnNamespace:
+                            namespace = _dependsOnNamespace
+                    }
+                    for depName in _dependsOnNames
+                ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "MINIO_NAMESPACE": str(_minioNamespace)
+                    "MINIO_VERSION": str(_minioVersion)
+                    "MINIO_INGRESS_ENABLED": str(_minioIngressEnabled)
+                    "CLUSTER_ISSUER": str(_minioClusterIssuer)
+                    "INGRESS_HOSTNAME_CONSOLE": str(_minioIngressHostnameConsole)
+                    "INGRESS_HOSTNAME_API": str(_minioIngressHostnameApi)
+                    "INGRESS_DOMAIN": str(_minioIngressDomain)
+                    "STORAGE_CLASS": str(_minioStorageClass)
+                    "MINIO_STORAGE_SIZE": str(_minioStorageSize)
+                }
+                substituteFrom = [
+                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
+                        kind = "Secret"
+                        name = _minioSecretName
+                    }
+                ]
+            }
+            if _kubeConfigSecretRef:
+                kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
+                        name = _kubeConfigSecretRef
+                        if _kubeConfigSecretKey:
+                            key = _kubeConfigSecretKey
+                    }
+                }
+            if _serviceAccountName:
+                serviceAccountName = _serviceAccountName
+        }
+    }
+
+# Template: MinIO HTTPRoute (Gateway API routes for console + API)
+if _templateName == "minio-httproute":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name if _name != "flux-kustomization" else "minio-httproute"
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "minio-httproute"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "app"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval if _interval != "5m" else "1h"
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "5m"
+            prune = _prune
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName if _sourceRefName else "flux-apps"
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path if _path != "./" else "./apps/minio/components/httproute"
+            dependsOn = [
+                flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = "minio"
+                }
+            ] + [
+                flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                }
+                for depName in _dependsOnNames
+            ]
+            postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                substitute = {
+                    "MINIO_NAMESPACE": str(_minioNamespace)
+                    "INGRESS_HOSTNAME_CONSOLE": str(_minioIngressHostnameConsole)
+                    "INGRESS_HOSTNAME_API": str(_minioIngressHostnameApi)
+                    "INGRESS_DOMAIN": str(_minioIngressDomain)
+                    "GATEWAY_NAME": str(_minioGatewayName)
+                    "GATEWAY_NAMESPACE": str(_minioGatewayNamespace)
                 }
             }
             if _kubeConfigSecretRef:

@@ -58,6 +58,8 @@ export CLAIM_API_URL=http://localhost:8080
 | `flux-kustomization-prometheus` | Prometheus monitoring stack | - |
 | `flux-kustomization-uptime-kuma` | Uptime monitoring | - |
 | `flux-kustomization-clusterbook-app` | Clusterbook app with optional PowerDNS | - |
+| `flux-kustomization-minio` | MinIO object storage with cert-manager TLS (includes SOPS secret) | - |
+| `flux-kustomization-minio-httproute` | MinIO Gateway API HTTPRoutes (console + API) | `minio` |
 
 ## Usage Examples
 

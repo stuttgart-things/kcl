@@ -1,0 +1,122 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: flux-kustomization-minio-httproute
+  title: Flux Kustomization MinIO HTTPRoute
+  description: Deploys Gateway API HTTPRoutes for MinIO console (9001) and API (9000)
+  tags:
+    - flux
+    - kustomization
+    - minio
+    - httproute
+    - gateway-api
+spec:
+  type: kustomization
+  source: oci://ghcr.io/stuttgart-things/claim-flux-kustomizations
+  tag: 0.3.31
+  parameters:
+    - name: templateName
+      title: Template
+      type: string
+      default: minio-httproute
+      hidden: true
+
+    - name: name
+      title: Resource Name
+      type: string
+      default: minio-httproute
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Kustomization Namespace
+      type: string
+      default: flux-system
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefName
+      title: Source Reference Name
+      type: string
+      default: flux-apps
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: sourceRefNamespace
+      title: Source Reference Namespace
+      type: string
+
+    - name: path
+      title: Path
+      type: string
+      default: "./apps/minio/components/httproute"
+
+    - name: interval
+      title: Reconciliation Interval
+      type: string
+      default: "1h"
+
+    - name: retryInterval
+      title: Retry Interval
+      type: string
+      default: "1m"
+
+    - name: timeout
+      title: Timeout
+      type: string
+      default: "5m"
+
+    - name: prune
+      title: Enable Pruning
+      type: boolean
+      default: true
+
+    - name: minioNamespace
+      title: MinIO Namespace
+      type: string
+      default: minio
+      description: "Namespace for HTTPRoute resources (MINIO_NAMESPACE)"
+
+    - name: minioIngressHostnameConsole
+      title: Console Hostname
+      type: string
+      default: artifacts-console
+      required: true
+      description: "Console hostname prefix (INGRESS_HOSTNAME_CONSOLE)"
+
+    - name: minioIngressHostnameApi
+      title: API Hostname
+      type: string
+      default: artifacts
+      required: true
+      description: "S3 API hostname prefix (INGRESS_HOSTNAME_API)"
+
+    - name: minioIngressDomain
+      title: Domain
+      type: string
+      required: true
+      description: "Base domain (INGRESS_DOMAIN)"
+
+    - name: minioGatewayName
+      title: Gateway Name
+      type: string
+      default: gateway
+      required: true
+      description: "Gateway resource name (GATEWAY_NAME)"
+
+    - name: minioGatewayNamespace
+      title: Gateway Namespace
+      type: string
+      default: default
+      description: "Gateway namespace (GATEWAY_NAMESPACE)"
+
+    - name: kubeConfigSecretRef
+      title: KubeConfig Secret
+      type: string
+
+    - name: kubeConfigSecretKey
+      title: KubeConfig Secret Key
+      type: string
+      default: "value"
+
+    - name: serviceAccountName
+      title: Service Account
+      type: string
