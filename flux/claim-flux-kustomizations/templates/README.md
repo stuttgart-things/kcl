@@ -11,114 +11,81 @@ ClaimTemplate definitions for rendering Flux Kustomization resources via the [cl
 export CLAIM_API_URL=http://localhost:8080
 ```
 
-```bash
-claims render --non-interactive -f gitrepos.yaml -o ./out --single-file
-```
-
 ## Available Templates
 
-| Template | Description |
-|---|---|
-| `clusterbook` | Clusterbook app deployment with optional PowerDNS and NetworkConfig |
-| `cilium-clusterbook` | Cilium LoadBalancer with IP reservation from Clusterbook |
-| `kustomization-gitops` | Generic GitOps Flux Kustomization |
-| `kustomization-infrastructure` | Infrastructure Kustomization with wait, health checks, dependencies |
-| `kustomization-crossplane` | Crossplane deployment with Terraform, Helm, and K8s providers |
+### Sources
+
+| Template | Description | Default dependsOn |
+|---|---|---|
+| `flux-gitrepository` | Flux GitRepository source | - |
+
+### Base Templates
+
+| Template | Description | Default dependsOn |
+|---|---|---|
+| `flux-kustomization-gitops` | Generic GitOps Flux Kustomization | - |
+| `flux-kustomization-infrastructure` | Infrastructure Kustomization with wait, health checks, dependencies | - |
+
+### Infrastructure
+
+| Template | Description | Default dependsOn |
+|---|---|---|
+| `flux-kustomization-cert-manager-install` | Cert-manager deployment with CRDs | - |
+| `flux-kustomization-cert-manager-selfsigned` | Self-signed certificate issuer (Vault PKI) | `cert-manager-install` |
+| `flux-kustomization-trust-manager` | CA certificate distribution via trust-manager | `cert-manager-install` |
+| `flux-kustomization-openebs` | OpenEBS local storage | - |
+| `flux-kustomization-nfs-csi` | NFS CSI storage driver | - |
+| `flux-kustomization-cilium-lb` | Cilium LoadBalancer with Clusterbook IPAM | - |
+| `flux-kustomization-cilium-gateway` | Cilium Gateway API with TLS | - |
+
+### Crossplane
+
+| Template | Description | Default dependsOn |
+|---|---|---|
+| `flux-kustomization-crossplane-install` | Crossplane core with Helm, K8s, OpenTofu providers | - |
+| `flux-kustomization-crossplane-functions` | Crossplane Functions (auto-ready, go-templating, kcl, patch-and-transform) | `crossplane-install` |
+| `flux-kustomization-crossplane-configs` | Crossplane Configurations (cloud-config, volume-claim, storage-platform, ansible-run, pipeline-integration, harvester-vm) | `crossplane-install`, `crossplane-functions` |
+
+### Applications
+
+| Template | Description | Default dependsOn |
+|---|---|---|
+| `flux-kustomization-vault` | HashiCorp Vault deployment | - |
+| `flux-kustomization-vault-autounseal` | Vault auto-unseal mechanism | - |
+| `flux-kustomization-vault-httproute` | Vault HTTP Gateway route | - |
+| `flux-kustomization-flux-web` | Flux dashboard UI | - |
+| `flux-kustomization-headlamp` | Kubernetes dashboard | - |
+| `flux-kustomization-prometheus` | Prometheus monitoring stack | - |
+| `flux-kustomization-uptime-kuma` | Uptime monitoring | - |
+| `flux-kustomization-clusterbook-app` | Clusterbook app with optional PowerDNS | - |
 
 ## Usage Examples
 
-### Clusterbook (no PDNS, no NetworkConfig)
+### Render a single template
 
 ```bash
 claims render --non-interactive \
-  -t clusterbook \
-  -p PDNS_ENABLED=false \
-  -p networkConfigName="" \
-  --skip-secrets \
-  --dry-run
-```
-
-### Clusterbook (with PDNS enabled)
-
-```bash
-claims render --non-interactive \
-  -t clusterbook \
-  -p PDNS_ENABLED=true \
-  -p PDNS_URL=https://pdns.sthings-vsphere.labul.sva.de \
-  -p PDNS_ZONE=sthings-vsphere.labul.sva.de \
-  -p networkConfigName="10.31.102" \
-  -o output
-```
-
-### Clusterbook (with NetworkConfig)
-
-Complex values like `networks` must be passed via a params file (`-f`):
-
-```bash
-cat <<'EOF' > /tmp/params.yaml
-PDNS_ENABLED: "false"
-networkConfigName: clusterbook-networks
-networks:
-  "10.31.101":
-    - "5:ASSIGNED:rancher-mgmt"
-    - "6"
-    - "7"
-  "10.31.103":
-    - "3"
-    - "4:ASSIGNED:sandiego"
-EOF
-
-claims render --non-interactive \
-  -t clusterbook \
-  -f /tmp/params.yaml \
-  --skip-secrets \
-  --dry-run
-```
-
-### Clusterbook (custom versions and domain)
-
-```bash
-claims render --non-interactive \
-  -t clusterbook \
-  -p CLUSTERBOOK_VERSION=v1.20.1 \
-  -p CLUSTERBOOK_HOSTNAME=myapp \
-  -p DOMAIN=myapp.example.com \
-  -p GATEWAY_NAME=my-gateway \
-  -p GATEWAY_NAMESPACE=ingress \
-  -p PDNS_ENABLED=false \
-  -p networkConfigName="" \
-  --skip-secrets \
-  -o output
-```
-
-### Cilium LoadBalancer with Clusterbook IPAM
-
-```bash
-claims render --non-interactive \
-  -t cilium-clusterbook \
-  -p clusterName=testcluster \
-  -p networkKey=10.31.103 \
-  -p registerDns=false \
-  -o output
-```
-
-### GitOps Kustomization
-
-```bash
-claims render --non-interactive \
-  -t kustomization-gitops \
-  -p name=my-app \
+  -t flux-kustomization-crossplane-install \
   -p sourceRefName=flux-apps \
-  -p path="./apps/my-app" \
-  -p namespace=flux-system \
+  -p crossplaneVersion=2.2.0 \
   --dry-run
 ```
 
-### GitOps with post-build substitutions
+### Render with dependencies
 
 ```bash
 claims render --non-interactive \
-  -t kustomization-gitops \
+  -t flux-kustomization-crossplane-functions \
+  -p sourceRefName=flux-apps \
+  -p dependsOnNames=crossplane-install \
+  --dry-run
+```
+
+### Render with custom substitutions
+
+```bash
+claims render --non-interactive \
+  -t flux-kustomization-gitops \
   -p name=my-app \
   -p sourceRefName=flux-apps \
   -p path="./apps/my-app" \
@@ -126,53 +93,32 @@ claims render --non-interactive \
   --dry-run
 ```
 
-### GitOps with dependencies
+### Render with remote cluster kubeconfig
 
 ```bash
 claims render --non-interactive \
-  -t kustomization-gitops \
-  -p name=my-app \
-  -p sourceRefName=flux-apps \
-  -p path="./apps/my-app" \
-  -p dependsOnNames="cert-manager,ingress-nginx" \
-  --dry-run
-```
-
-### Infrastructure Kustomization
-
-```bash
-claims render --non-interactive \
-  -t kustomization-infrastructure \
+  -t flux-kustomization-infrastructure \
   -p name=cert-manager \
   -p sourceRefName=flux-infra \
   -p path="./infra/cert-manager" \
-  --dry-run
-```
-
-### Infrastructure with dependencies and remote cluster
-
-```bash
-claims render --non-interactive \
-  -t kustomization-infrastructure \
-  -p name=ingress-nginx \
-  -p sourceRefName=flux-infra \
-  -p path="./infra/ingress-nginx" \
-  -p dependsOnNames="cert-manager" \
   -p kubeConfigSecretRef=remote-cluster-kubeconfig \
   --dry-run
 ```
 
-### Crossplane deployment
+### Render multiple templates from file
+
+```bash
+claims render --non-interactive -f gitrepos.yaml -o ./out --single-file
+```
+
+### Write output to directory
 
 ```bash
 claims render --non-interactive \
-  -t kustomization-crossplane \
-  -p name=crossplane \
+  -t flux-kustomization-crossplane-install \
   -p sourceRefName=flux-apps \
-  -p path="./cicd/crossplane" \
-  -p crossplaneVersion=2.1.3 \
-  -p terraformProviderVersion=v1.0.5 \
-  --dry-run
+  -o ./output/ \
+  --filename-pattern "{{.name}}.yaml"
 ```
 
 ## Common Flags
@@ -186,18 +132,8 @@ claims render --non-interactive \
 | `--skip-secrets` | Skip secret generation |
 | `-o` | Output directory (default: `.`) |
 | `-f` | Parameters from YAML/JSON file |
-| `--combine-secrets` | Combine secrets in same output file |
-
-## Writing output to file
-
-```bash
-claims render --non-interactive \
-  -t clusterbook \
-  -p PDNS_ENABLED=false \
-  -p networkConfigName="" \
-  --skip-secrets \
-  -o /path/to/output
-```
+| `--filename-pattern` | Output filename pattern (Go template) |
+| `--single-file` | Combine all output into a single file |
 
 ## OCI Source
 
