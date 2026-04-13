@@ -2,7 +2,7 @@
 # Generates Crossplane v2 namespaced OpenTofu Workspaces that configure
 # Vault Kubernetes auth backends (optionally with backend_config).
 
-import crossplane_provider_opentofu.v1beta1 as otf
+import v1beta1 as otf
 
 schema K8sAuthBackendConfig:
     # Renders a `vault_kubernetes_auth_backend_config` for this auth. The
