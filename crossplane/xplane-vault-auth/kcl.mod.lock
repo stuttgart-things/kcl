@@ -25,9 +25,9 @@
     oci_tag = "1.31"
   [dependencies.xplane-vault-auth-base]
     name = "xplane-vault-auth-base"
-    full_name = "xplane-vault-auth-base_0.5.0"
-    version = "0.5.0"
-    sum = "dmf8+01CmYGymujmdJanj/l0XhiaIgHvBsXzsFGlIms="
+    full_name = "xplane-vault-auth-base_0.6.0"
+    version = "0.6.0"
+    sum = "GPRZlT7+Zth+EdNXQHPYkD4ZHoTAgE1oQVcELfkKFYg="
     reg = "ghcr.io"
     repo = "stuttgart-things/xplane-vault-auth-base"
-    oci_tag = "0.5.0"
+    oci_tag = "0.6.0"
