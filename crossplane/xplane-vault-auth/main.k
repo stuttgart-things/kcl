@@ -1,24 +1,23 @@
 import xplane_vault_auth_base as vault_auth
 
-# --- Read parameters ---
 _params = option("params") or {}
 _spec = _params?.oxr?.spec or {}
 
-# --- Extract fields with defaults ---
 _clusterName = _spec?.clusterName or "default"
 _vaultAddr = _spec?.vaultAddr or "https://vault.example.com"
+_namespace = _spec?.namespace or "default"
 _vaultTokenSecret = _spec?.vaultTokenSecret or "vault"
-_vaultTokenSecretNamespace = _spec?.vaultTokenSecretNamespace or "crossplane-system"
 _vaultTokenSecretKey = _spec?.vaultTokenSecretKey or "terraform.tfvars"
+_providerConfigName = _spec?.providerConfigName or _clusterName
+_providerConfigKind = _spec?.providerConfigKind or "ClusterProviderConfig"
+_skipTlsVerify = _spec?.skipTlsVerify if "skipTlsVerify" in _spec else True
 
-# --- Allow overriding of k8sAuth entries via params ---
 _k8sAuths = [
-    # If user provides params.oxr.spec.k8sAuths, use those dynamically
     vault_auth.K8sAuth {
         name = auth?.name or "default"
         clusterName = auth?.clusterName or _clusterName
         vaultAddr = auth?.vaultAddr or _vaultAddr
-        skipTlsVerify = auth?.skipTlsVerify or True
+        skipTlsVerify = auth?.skipTlsVerify if "skipTlsVerify" in auth else _skipTlsVerify
         tokenPolicies = auth?.tokenPolicies or ["read-secrets"]
         tokenTtl = auth?.tokenTtl or 3600
         boundServiceAccountNamespaces = auth?.boundServiceAccountNamespaces or ["default"]
@@ -28,23 +27,16 @@ _k8sAuths = [
     ])
 ]
 
-# --- Build VaultConfig dynamically ---
 _config = vault_auth.VaultConfig {
     k8sAuths = _k8sAuths
     clusterName = _clusterName
     vaultAddr = _vaultAddr
-    skipTlsVerify = True
+    skipTlsVerify = _skipTlsVerify
+    namespace = _namespace
     vaultTokenSecret = _vaultTokenSecret
-    vaultTokenSecretNamespace = _vaultTokenSecretNamespace
     vaultTokenSecretKey = _vaultTokenSecretKey
+    providerConfigName = _providerConfigName
+    providerConfigKind = _providerConfigKind
 }
 
-# --- Generate Vault auth workspaces ---
-_generatedWorkspaces = vault_auth.vaultK8sAuth(_config)
-
-# --- Flatten and add providerConfigRef (varFiles already added in main module) ---
-items = [
-    workspace | {
-        spec.providerConfigRef.name = _clusterName
-    } for workspaceList in _generatedWorkspaces for workspace in workspaceList
-]
+items = vault_auth.vaultK8sAuth(_config)
