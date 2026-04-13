@@ -133,7 +133,7 @@ tasks:
         echo "✅ Push complete!"
     vars:
       MODULE: github.com/stuttgart-things/dagger/kcl
-      VERSION: v0.42.0
+      VERSION: v0.92.1
       FUNCTION: push-module
       MODULE_DIR: '{{ .MODULE_DIR }}'
       NEW_VERSION: '{{ .NEW_VERSION }}'
