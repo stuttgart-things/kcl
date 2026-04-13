@@ -1,11 +1,13 @@
 import xplane_vault_auth_base as vault_auth
 
 _params = option("params") or {}
-_spec = _params?.oxr?.spec or {}
+_oxr = _params?.oxr or {}
+_spec = _oxr?.spec or {}
+_meta = _oxr?.metadata or {}
 
 _clusterName = _spec?.clusterName or "default"
 _vaultAddr = _spec?.vaultAddr or "https://vault.example.com"
-_namespace = _spec?.namespace or "default"
+_namespace = _spec?.namespace or _meta?.namespace or "default"
 _vaultTokenSecret = _spec?.vaultTokenSecret or "vault"
 _vaultTokenSecretKey = _spec?.vaultTokenSecretKey or "terraform.tfvars"
 _providerConfigName = _spec?.providerConfigName or _clusterName
