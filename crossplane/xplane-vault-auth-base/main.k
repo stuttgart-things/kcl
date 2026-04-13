@@ -64,15 +64,47 @@ resource "vault_kubernetes_auth_backend_role" "service_account" {
   token_policies                   = var.token_policies
 }
 
-variable "auth_name"                        { type = string }
-variable "cluster_name"                     { type = string }
-variable "vault_addr"                       { type = string }
-variable "skip_tls_verify"                  { type = bool   default = false }
-variable "vault_token"                      { type = string sensitive = true }
-variable "token_policies"                   { type = list(string) default = [] }
-variable "token_ttl"                        { type = number default = 3600 }
-variable "bound_service_account_names"      { type = list(string) default = ["default"] }
-variable "bound_service_account_namespaces" { type = list(string) default = ["default"] }
+variable "auth_name" {
+  type = string
+}
+
+variable "cluster_name" {
+  type = string
+}
+
+variable "vault_addr" {
+  type = string
+}
+
+variable "skip_tls_verify" {
+  type    = bool
+  default = false
+}
+
+variable "vault_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "token_policies" {
+  type    = list(string)
+  default = []
+}
+
+variable "token_ttl" {
+  type    = number
+  default = 3600
+}
+
+variable "bound_service_account_names" {
+  type    = list(string)
+  default = ["default"]
+}
+
+variable "bound_service_account_namespaces" {
+  type    = list(string)
+  default = ["default"]
+}
 
 output "auth_backend_path" {
   value = vault_auth_backend.kubernetes.path
@@ -105,13 +137,37 @@ resource "vault_kubernetes_auth_backend_config" "kubernetes" {
   depends_on = [vault_auth_backend.kubernetes]
 }
 
-variable "kubernetes_host"        { type = string }
-variable "sa_secret_name"         { type = string }
-variable "sa_secret_namespace"    { type = string }
-variable "sa_ca_cert_key"         { type = string default = "ca.crt" }
-variable "sa_token_key"           { type = string default = "token" }
-variable "disable_iss_validation" { type = bool   default = true }
-variable "disable_local_ca_jwt"   { type = bool   default = true }
+variable "kubernetes_host" {
+  type = string
+}
+
+variable "sa_secret_name" {
+  type = string
+}
+
+variable "sa_secret_namespace" {
+  type = string
+}
+
+variable "sa_ca_cert_key" {
+  type    = string
+  default = "ca.crt"
+}
+
+variable "sa_token_key" {
+  type    = string
+  default = "token"
+}
+
+variable "disable_iss_validation" {
+  type    = bool
+  default = true
+}
+
+variable "disable_local_ca_jwt" {
+  type    = bool
+  default = true
+}
 """
 
 _listToJson = lambda items: [str] -> str {
