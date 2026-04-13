@@ -1,69 +1,91 @@
-# xplane-vault-auth
+# xplane-vault-auth-base
 
-```bash
-cd examples
-kcl run vault-k8s-auth.k -D params='{
-    "oxr": {
-      "spec": {
-        "clusterName": "default",
-        "vaultAddr": "https://vault.demo-infra.sthings-vsphere.labul.sva.de",
-        "vaultTokenSecret": "vault",
-        "k8sAuths": [
-          {"name": "frontend", "tokenPolicies": ["read-secrets"]},
-          {"name": "backend", "tokenPolicies": ["read-secrets","write-logs"]}
-        ]
-      }
-    }
-  }' --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}' | kubectl apply -f -
+> **Library module** — not runnable standalone. Exports the `K8sAuth` / `VaultConfig` schemas and the `vaultK8sAuth` function that generate **Crossplane v2 namespaced OpenTofu `Workspace`** resources for Vault Kubernetes auth backends. Imported by consumer modules such as [`xplane-vault-auth`](../xplane-vault-auth/).
+
+- **Workspace apiVersion:** `opentofu.m.upbound.io/v1beta1`
+- **Depends on:** [`crossplane-provider-opentofu`](../../models/crossplane-provider-opentofu/)
+- **Crossplane:** v2
+
+## API
+
+```python
+import xplane_vault_auth_base as vault_auth
+
+config = vault_auth.VaultConfig {
+    clusterName = "default"
+    vaultAddr = "https://vault.example.com"
+    namespace = "default"                        # ns of the Workspace + token Secret
+    vaultTokenSecret = "vault"
+    providerConfigName = "default"
+    providerConfigKind = "ClusterProviderConfig" # or "ProviderConfig"
+    k8sAuths = [
+        vault_auth.K8sAuth { name = "frontend", tokenPolicies = ["read-secrets"] }
+        vault_auth.K8sAuth { name = "backend",  tokenPolicies = ["read-secrets", "write-logs"] }
+    ]
+}
+
+items = vault_auth.vaultK8sAuth(config)
 ```
 
-* seperate clustername from tf provider name
-* add sa token + crt
-* add crossplane config
+`vaultK8sAuth` returns a flat list of `otf.Workspace` values — one per `k8sAuths` entry — named `<clusterName>-<authName>-vault-auth`, each with an inline HCL module that creates a `vault_auth_backend "kubernetes"` plus its `vault_kubernetes_auth_backend_role`.
 
-```bash
----
+### `VaultConfig`
+
+| Field | Default | Notes |
+|---|---|---|
+| `k8sAuths` | — | List of `K8sAuth` entries. |
+| `clusterName` | — | Prefix for auth backend paths. |
+| `vaultAddr` | — | Vault server URL. |
+| `skipTlsVerify` | `false` | |
+| `namespace` | `default` | Namespace of the generated Workspace + `varFiles` Secret. |
+| `vaultTokenSecret` | `vault` | Secret name holding `terraform.tfvars`. |
+| `vaultTokenSecretKey` | `terraform.tfvars` | Key inside the Secret. |
+| `providerConfigName` | `default` | |
+| `providerConfigKind` | `ClusterProviderConfig` | Or `ProviderConfig`. |
+
+### `K8sAuth`
+
+| Field | Default |
+|---|---|
+| `name` | required |
+| `clusterName` | required |
+| `vaultAddr` | required |
+| `skipTlsVerify` | `false` |
+| `tokenPolicies` | `["read-secrets"]` |
+| `tokenTtl` | `3600` |
+| `boundServiceAccountNamespaces` | `["default"]` |
+| `labels` / `annotations` | — |
+
+## Vault token Secret
+
+The generated `varFiles` entry references a Secret in the **same namespace** as the Workspace:
+
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
   name: vault
-  namespace: crossplane-system
+  namespace: default
 type: Opaque
 stringData:
-  # HCL format - the value must be quoted in the HCL syntax
   terraform.tfvars: |
     vault_token = "hvs..."
 ```
 
+## Migration from 0.4.x
 
+0.5.0 is a breaking change:
 
+- Switched dependency from `crossplane-provider-terraform` to `crossplane-provider-opentofu`.
+- Workspace `apiVersion` changed to `opentofu.m.upbound.io/v1beta1`.
+- `vaultK8sAuth` now returns a **flat** `[Workspace]` (was a list-of-lists; consumers no longer need to flatten).
+- `VaultConfig.vaultTokenSecretNamespace` removed — secret is co-located with the Workspace.
+- `VaultConfig.namespace` added — namespace of the generated Workspace.
+- `VaultConfig.providerConfigName` and `VaultConfig.providerConfigKind` added — consumer must pass a provider config reference; default kind is `ClusterProviderConfig`.
+- `providerConfigRef` is emitted by the library; consumers no longer need to inject it.
+- `skipTlsVerify` bug fixed (previously an explicit `False` was collapsed to `True`).
+- Convenience helpers `simpleVaultK8sAuth`, `simpleVaultK8sAuthWithPolicies`, `advancedVaultK8sAuth`, `multiVaultK8sAuth` removed; call `vaultK8sAuth(VaultConfig{...})` directly.
 
-```bash
-kcl run --quiet examples/simple-auth.k | grep -A 1000 "^items:" | sed 's/^- /---\n/' | sed '1d' | sed 's/^  //'
-```
+## License
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Run the test suite: `kcl run tests/test_main.k`
-6. Submit a pull request
-
-## 📝 License
-
-This project is licensed under the Apache License 2.0. See [LICENSE](../LICENSE) for details.
-
-## 🔗 Related Projects
-
-- [crossplane-provider-terraform](../crossplane-provider-terraform/) - Base Terraform provider module
-- [xplane-vault-config](../xplane-vault-config/) - Complete Vault services configuration
-- [Crossplane Terraform Provider](https://github.com/crossplane-contrib/provider-terraform) - Upstream provider
-- [Stuttgart-Things Infrastructure](https://github.com/stuttgart-things) - Platform engineering resources
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/stuttgart-things/kcl/issues)
-- **Documentation**: [Stuttgart-Things Docs](https://stuttgart-things.github.io)
-- **Community**: [Stuttgart-Things Discussions](https://github.com/orgs/stuttgart-things/discussions)
+Apache 2.0 — see [LICENSE](../../LICENSE).

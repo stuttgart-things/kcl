@@ -1,4 +1,12 @@
 [dependencies]
+  [dependencies.crossplane-provider-opentofu]
+    name = "crossplane-provider-opentofu"
+    full_name = "crossplane-provider-opentofu_0.1.0"
+    version = "0.1.0"
+    sum = "usy7Ar9sthZnJ1fitSK6FCP0XJkDRZuE7YE9/oMMN6Y="
+    reg = "ghcr.io"
+    repo = "stuttgart-things/crossplane-provider-opentofu"
+    oci_tag = "0.1.0"
   [dependencies.crossplane-provider-terraform]
     name = "crossplane-provider-terraform"
     full_name = "crossplane-provider-terraform_0.1.0"
@@ -17,9 +25,9 @@
     oci_tag = "1.31"
   [dependencies.xplane-vault-auth-base]
     name = "xplane-vault-auth-base"
-    full_name = "xplane-vault-auth-base_0.4.0"
-    version = "0.4.0"
-    sum = "xe2M9sNoNx0IkFXfyAX/TjqHTljWfik0Hx+VtESn754="
+    full_name = "xplane-vault-auth-base_0.5.0"
+    version = "0.5.0"
+    sum = "dmf8+01CmYGymujmdJanj/l0XhiaIgHvBsXzsFGlIms="
     reg = "ghcr.io"
-    repo = "stuttgart-things/xplane-vault-auth-base:0.4.0"
-    oci_tag = "0.4.0"
+    repo = "stuttgart-things/xplane-vault-auth-base"
+    oci_tag = "0.5.0"
