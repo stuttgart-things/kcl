@@ -1,4 +1,11 @@
+# crossplane-provider-helm
 
+KCL models for the Crossplane Helm Provider ([crossplane-contrib/provider-helm](https://github.com/crossplane-contrib/provider-helm)).
+
+## CRD sources
+
+- [`helm.crossplane.io/v1beta1` Release](https://github.com/crossplane-contrib/provider-helm/blob/main/package/crds/helm.crossplane.io_releases.yaml)
+- [`helm.m.crossplane.io/v1beta1` Release](https://github.com/crossplane-contrib/provider-helm/blob/main/package/crds/helm.m.crossplane.io_releases.yaml) (Crossplane v2 namespaced managed variant)
 
 ```toml
 # kcl.mod
