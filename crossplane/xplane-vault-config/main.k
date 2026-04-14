@@ -1,5 +1,5 @@
-import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
-import crossplane_provider_kubernetes.v1alpha2.kubernetes_crossplane_io_v1alpha2_object as k8s
+import crossplane_provider_helm.models.v1beta1.helmm.helmm_crossplane_io_v1beta1_release as helm
+import crossplane_provider_kubernetes.v1alpha1.kubernetesm.kubernetesm_crossplane_io_v1alpha1_object as k8s
 
 # --- Null-safe param accessors (Crossplane v2 namespaced-friendly) ---
 _params = option("params") or {}
@@ -17,12 +17,16 @@ clusterName = _spec?.clusterName or "default"
 # Release/Object. Falls back to the XR's own metadata.namespace.
 _namespace = _spec?.namespace or _meta?.namespace or "default"
 
-# Provider config reference. provider-helm and provider-kubernetes still ship
-# a cluster-scoped ProviderConfig (no ClusterProviderConfig kind), so only
-# `name` is required here even when consumed by a v2 namespaced XR.
+# Provider config reference. The v2 namespaced API groups
+# (helm.m.crossplane.io, kubernetes.m.crossplane.io) require both `kind` and
+# `name`. We default to ClusterProviderConfig — the cluster-scoped provider
+# config that namespaced MRs typically consume. Override with
+# spec.providerConfigKind if you want a namespaced ProviderConfig instead.
 _providerConfigName = _spec?.providerConfigName or clusterName
+_providerConfigKind = _spec?.providerConfigKind or "ClusterProviderConfig"
 
 _providerConfigRef = {
+    kind = _providerConfigKind
     name = _providerConfigName
 }
 
@@ -49,7 +53,7 @@ safeClusterName = clusterName.replace(".", "-").replace("_", "-")
 
 # Secrets Store CSI Driver Release
 csiRelease = helm.Release {
-    apiVersion = "helm.crossplane.io/v1beta1"
+    apiVersion = "helm.m.crossplane.io/v1beta1"
     kind = "Release"
     metadata = {
         name = "vault-csi-${safeClusterName}"
@@ -83,7 +87,7 @@ csiRelease = helm.Release {
 
 # Vault Secrets Operator Release
 vsoRelease = helm.Release {
-    apiVersion = "helm.crossplane.io/v1beta1"
+    apiVersion = "helm.m.crossplane.io/v1beta1"
     kind = "Release"
     metadata = {
         name = "vso-${safeClusterName}"
@@ -127,7 +131,7 @@ _esoProbeConfig = {
 } if isVcluster else {}
 
 esoRelease = helm.Release {
-    apiVersion = "helm.crossplane.io/v1beta1"
+    apiVersion = "helm.m.crossplane.io/v1beta1"
     kind = "Release"
     metadata = {
         name = "eso-${safeClusterName}"
@@ -217,7 +221,7 @@ esoRelease = helm.Release {
 # Generate ServiceAccount objects for each auth
 serviceAccounts = [
     k8s.Object {
-        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
         metadata = {
             name = "serviceaccount-${auth.name}-${safeClusterName}"
@@ -248,7 +252,7 @@ serviceAccounts = [
 # Generate Secret objects for each auth
 secrets = [
     k8s.Object {
-        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
         metadata = {
             name = "secret-${auth.name}-${safeClusterName}"
@@ -283,7 +287,7 @@ secrets = [
 # Generate ClusterRoleBinding objects for each auth
 clusterRoleBindings = [
     k8s.Object {
-        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
         metadata = {
             name = "clusterrolebinding-${auth.name}-${safeClusterName}"
@@ -322,7 +326,7 @@ clusterRoleBindings = [
 # Generate Token Reader objects for each auth - reads token from service account secrets
 tokenReaders = [
     k8s.Object {
-        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
         metadata = {
             name = "token-reader-${auth.name}-${safeClusterName}"
@@ -332,7 +336,6 @@ tokenReaders = [
             }
         }
         spec = {
-            deletionPolicy = "Delete"
             managementPolicies = ["Observe"]  # Important: Only observe, don't manage!
             providerConfigRef = _providerConfigRef
             forProvider = {
@@ -355,9 +358,10 @@ tokenReaders = [
                     toConnectionSecretKey = "token" # pragma: allowlist secret
                 }
             ]
+            # Namespaced Object: writeConnectionSecretToRef is name-only;
+            # the secret lands in the MR's own namespace (_namespace).
             writeConnectionSecretToRef = {
-                name = "vault-token-{}-{}".format(auth.name, safeClusterName)  # Connection secret with token and cluster
-                namespace = "crossplane-system"
+                name = "vault-token-{}-{}".format(auth.name, safeClusterName)
             }
         }
     }
@@ -380,7 +384,7 @@ uniqueNamespaces = [ns for ns in _uniqueMap]
 # Generate Namespace objects for all unique namespaces - include cluster name
 namespaces = [
     k8s.Object {
-        apiVersion = "kubernetes.crossplane.io/v1alpha2"
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
         metadata = {
             name = "namespace-${ns.replace('_', '-').replace('.', '-')}-${safeClusterName}"

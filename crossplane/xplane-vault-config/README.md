@@ -363,16 +363,67 @@ Every resource includes the `krm.kcl.dev/composition-resource-name` annotation f
 - **Token Readers**: `vault-token-reader-{auth.name}`
 
 ### Generated Connection Secrets
-Each ServiceAccount auth creates a connection secret in `crossplane-system`:
-- **Name**: `vault-token-{auth.name}`
+Each ServiceAccount auth creates a connection secret written to the XR's own
+namespace (namespaced Object's `writeConnectionSecretToRef` is name-only):
+- **Name**: `vault-token-{auth.name}-{safeClusterName}`
 - **Key**: `token` (Base64-encoded JWT)
 
 ## Dependencies
 
-- Crossplane Helm Provider v0.1.1+
-- Crossplane Kubernetes Provider v0.18.0+
-- Kubernetes cluster with Crossplane installed
-- Appropriate RBAC permissions for Helm operations
+- Crossplane v2 (required — this module emits `helm.m.crossplane.io` and `kubernetes.m.crossplane.io` managed resources)
+- `crossplane-provider-helm` OCI `0.1.4+` (from `ghcr.io/stuttgart-things`)
+- `crossplane-provider-kubernetes` OCI `0.1.1+` (from `ghcr.io/stuttgart-things`)
+- A `ClusterProviderConfig` named after `spec.clusterName` (or overridden via `spec.providerConfigName` / `spec.providerConfigKind`)
+
+## Test / render locally
+
+Render the composition function against a sample XR without deploying to a
+cluster. Save the file below as `test-params.yaml`:
+
+```yaml
+kcl_options:
+  - key: params
+    value:
+      oxr:
+        apiVersion: vaultconfig.stuttgart-things.com/v1alpha1
+        kind: VaultConfig
+        metadata:
+          name: multi-auth-vault-config
+          namespace: vault-system
+        spec:
+          name: test
+          clusterName: vcluster-k3s-tink5
+          isVcluster: true
+          namespaceCsi: secrets-csi
+          namespaceVso: vault-operator
+          namespaceEso: external-secrets-system
+          csiChartVersion: "1.5.4"
+          vsoChartVersion: "1.0.1"
+          esoChartVersion: "1.0.0"
+          csiEnabled: true
+          vsoEnabled: true
+          esoEnabled: true
+          providerConfigName: vcluster-k3s-tink5
+          k8sAuths:
+            - name: vault-auth-app1
+              namespace: default
+            - name: vault-auth-app2
+              namespace: team-a
+```
+
+Then render:
+
+```bash
+kcl run main.k -Y test-params.yaml
+```
+
+You should see:
+
+- 3 `helm.m.crossplane.io/v1beta1 Release`s (csi, vso, eso) in `vault-system`
+- `kubernetes.m.crossplane.io/v1alpha1 Object`s for every namespace, auth ServiceAccount, auth Secret, ClusterRoleBinding, and token reader — all in `vault-system`
+- `providerConfigRef: {kind: ClusterProviderConfig, name: vcluster-k3s-tink5}` on every MR
+
+Omit `-Y` to render with the null-safe defaults (empty params path).
 
 ## Development
 
