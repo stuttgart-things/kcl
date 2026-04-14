@@ -53,8 +53,11 @@ for i in "${!CRD_URLS[@]}"; do
     fi
   done < <(find "${out}" -type f -name '*.k' -print0)
 
-  # Merge: schemas + shared k8s types. Skip kcl.mod (written below).
-  rsync -a --exclude='kcl.mod' --exclude='kcl.mod.lock' "${out}/" "${MODULE_DIR}/"
+  # Merge schemas into the module. Skip kcl.mod (written below) and the
+  # bundled k8s/ types — we declare k8s as a dependency instead, matching the
+  # layout of existing modules like crossplane-provider-helm.
+  rsync -a --exclude='kcl.mod' --exclude='kcl.mod.lock' --exclude='k8s/' \
+    "${out}/" "${MODULE_DIR}/"
 done
 
 cat > "${MODULE_DIR}/kcl.mod" <<EOF
@@ -62,6 +65,9 @@ cat > "${MODULE_DIR}/kcl.mod" <<EOF
 name = "${MODULE_NAME}"
 edition = "v0.12.3"
 version = "${VERSION}"
+
+[dependencies]
+k8s = "1.32.4"
 EOF
 
 echo "✅ module written to ${MODULE_DIR}"
