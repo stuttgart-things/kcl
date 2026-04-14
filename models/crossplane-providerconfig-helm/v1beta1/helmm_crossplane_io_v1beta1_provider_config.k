@@ -162,7 +162,7 @@ schema HelmmCrossplaneIoV1beta1ProviderConfigSpecIdentity:
 
     source: "None" | "Secret" | "InjectedIdentity" | "Environment" | "Filesystem"
 
-    $type: "GoogleApplicationCredentials" | "AzureServicePrincipalCredentials" | "AzureWorkloadIdentityCredentials" | "UpboundTokens"
+    $type: "GoogleApplicationCredentials" | "AzureServicePrincipalCredentials" | "AzureWorkloadIdentityCredentials" | "UpboundTokens" | "AWSWebIdentityCredentials"
 
 
 schema HelmmCrossplaneIoV1beta1ProviderConfigSpecIdentityEnv:
