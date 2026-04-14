@@ -5,10 +5,11 @@
 
 # ..
 [dependencies]
-crossplane-provider-helm = { oci = "oci://ghcr.io/stuttgart-things/crossplane-provider-helm", tag = "0.1.1" }
+crossplane-provider-helm = { oci = "oci://ghcr.io/stuttgart-things/crossplane-provider-helm", tag = "0.1.3" }
 ```
 
 import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
+import crossplane_provider_helm.models.v1beta1.helmm.helmm_crossplane_io_v1beta1_release as helmm
 
 ```py
 # Example 1: Nginx deployment
@@ -64,6 +65,31 @@ postgres = helm.Release {
                         size: "10Gi"
                     }
                 }
+            }
+        }
+    }
+}
+```
+
+```py
+# Example 3: Crossplane v2 namespaced managed Release (helm.m.crossplane.io/v1beta1)
+ns_release = helmm.Release {
+    apiVersion: "helm.m.crossplane.io/v1beta1"
+    kind: "Release"
+    metadata: {
+        name: "nginx-ns"
+        namespace: "default"
+    }
+    spec: {
+        providerConfigRef: {
+            kind: "ClusterProviderConfig"
+            name: "default"
+        }
+        forProvider: {
+            chart: {
+                name: "nginx"
+                repository: "https://charts.bitnami.com/bitnami"
+                version: "15.0.0"
             }
         }
     }
