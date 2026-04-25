@@ -252,5 +252,3 @@ schema KubernetesmCrossplaneIoV1alpha1ObservedObjectCollectionStatusConditionsIt
     status: str
 
     $type: str
-
-

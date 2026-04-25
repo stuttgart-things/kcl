@@ -11,8 +11,8 @@ _createDNS = True
 _preserveKubeconfigServer = True
 _releaseOnDelete = True
 
-_kubeconfigSecretName = "philly"
-_kubeconfigSecretNamespace = "argocd"
+_kubeconfigSecretName = "philly"  # pragma: allowlist secret
+_kubeconfigSecretNamespace = "argocd"  # pragma: allowlist secret
 
 _argocdNamespace = "argocd"
 

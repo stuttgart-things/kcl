@@ -273,5 +273,3 @@ schema KubernetesmCrossplaneIoV1alpha1ClusterProviderConfigStatusConditionsItems
     status: str
 
     $type: str
-
-

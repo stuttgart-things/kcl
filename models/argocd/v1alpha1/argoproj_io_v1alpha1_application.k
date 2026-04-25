@@ -8839,5 +8839,3 @@ schema ArgoprojIoV1alpha1ApplicationStatusSyncComparedToSourcesItems0PluginParam
     name?: str
 
     string?: str
-
-

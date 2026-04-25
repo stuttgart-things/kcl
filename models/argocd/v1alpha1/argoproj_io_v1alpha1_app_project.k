@@ -443,5 +443,3 @@ schema ArgoprojIoV1alpha1AppProjectStatusJwtTokensByRoleAnonItemsItems0:
     iat: int
 
     id?: str
-
-
