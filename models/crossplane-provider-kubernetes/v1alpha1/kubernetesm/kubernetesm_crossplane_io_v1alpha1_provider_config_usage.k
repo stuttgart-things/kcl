@@ -77,5 +77,3 @@ schema KubernetesmCrossplaneIoV1alpha1ProviderConfigUsageResourceRef:
     name: str
 
     uid?: str
-
-

@@ -206,5 +206,3 @@ schema OpentofumUpboundIoV1beta1ClusterProviderConfigStatusConditionsItems0:
     status: str
 
     $type: str
-
-

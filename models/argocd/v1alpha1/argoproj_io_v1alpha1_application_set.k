@@ -47473,5 +47473,3 @@ schema ArgoprojIoV1alpha1ApplicationSetStatusResourcesItems0Health:
     message?: str
 
     status?: str
-
-

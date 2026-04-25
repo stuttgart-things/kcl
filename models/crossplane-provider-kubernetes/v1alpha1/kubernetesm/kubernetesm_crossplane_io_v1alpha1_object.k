@@ -376,5 +376,3 @@ schema KubernetesmCrossplaneIoV1alpha1ObjectStatusConditionsItems0:
     status: str
 
     $type: str
-
-

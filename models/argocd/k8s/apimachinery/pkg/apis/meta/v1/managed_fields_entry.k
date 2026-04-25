@@ -37,5 +37,3 @@ schema ManagedFieldsEntry:
     operation?: str
 
     time?: str
-
-

@@ -44,7 +44,7 @@ for i in "${!CRD_URLS[@]}"; do
   # Collision check: any .k file that already exists in the module with
   # different content is a real conflict — halt so the operator can resolve.
   while IFS= read -r -d '' f; do
-    rel="${f#${out}/}"
+    rel="${f#"${out}"/}"
     dst="${MODULE_DIR}/${rel}"
     if [ -f "${dst}" ] && ! cmp -s "${f}" "${dst}"; then
       echo "ERROR: schema collision at ${rel}" >&2

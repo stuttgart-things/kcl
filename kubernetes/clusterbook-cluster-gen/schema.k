@@ -6,9 +6,9 @@ schema ObjectMeta:
     annotations?: {str: str}
 
 schema SecretRef:
-    name: str
-    namespace: str
-    key?: str
+    name: str  # pragma: allowlist secret
+    namespace: str  # pragma: allowlist secret
+    key?: str  # pragma: allowlist secret
 
 schema ProviderConfigRef:
     name: str
