@@ -50,6 +50,11 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpec:
     clusterName : str, default is Undefined, required
         ClusterName is the cluster identifier registered in clusterbook.
         Used as the ArgoCD cluster name and as the IP reservation key.
+    clusterType : str, default is Undefined, optional
+        ClusterType is a free-form discriminator written to the ArgoCD cluster
+        Secret as the label clusterbook.stuttgart-things.com/cluster-type.
+        Used by ApplicationSet selectors to fan out type-specific platform
+        bundles (e.g. "kind", "vsphere", "talos"). Optional.
     createDNS : bool, default is Undefined, optional
         CreateDNS asks clusterbook to create a wildcard DNS record.
     existingSecretRef : ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecExistingSecretRef, default is Undefined, optional
@@ -60,8 +65,15 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpec:
         Labels are applied to the cluster Secret under the
         clusterbook.stuttgart-things.com/ prefix. Use them as selectors in
         ApplicationSet cluster generators.
-    networkKey : str, default is Undefined, required
-        NetworkKey is the clusterbook network pool (e.g. "10.31.103").
+    lbRange : ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecLbRange, default is Undefined, optional
+        lb range
+    networkKey : str, default is Undefined, optional
+        NetworkKey is the clusterbook network pool (e.g. "10.31.103") used
+        for IP/DNS allocation. Optional only when ClusterType is "kind" — a
+        kind cluster registered without NetworkKey takes the
+        registration-only path: the operator skips clusterbook server calls
+        entirely and only writes the ArgoCD cluster Secret + labels +
+        LBRange annotations. Required for all other cluster types.
     preserveKubeconfigServer : bool, default is Undefined, optional
         PreserveKubeconfigServer keeps data.server on the cluster Secret
         set to whatever the referenced kubeconfig's current-context cluster
@@ -73,7 +85,7 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpec:
         is still made and DNS is still created; IP/FQDN/zone are still
         exposed on the Secret as labels and annotations for ApplicationSet
         selection and templating. Takes precedence over UseFQDNAsServer.
-    providerConfigRef : ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecProviderConfigRef, default is Undefined, required
+    providerConfigRef : ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecProviderConfigRef, default is Undefined, optional
         provider config ref
     releaseOnDelete : bool, default is Undefined, optional
         ReleaseOnDelete releases the clusterbook IP when the CR is deleted.
@@ -97,6 +109,8 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpec:
 
     clusterName: str
 
+    clusterType?: str
+
     createDNS?: bool
 
     existingSecretRef?: ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecExistingSecretRef
@@ -105,11 +119,13 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpec:
 
     labels?: {str:str}
 
-    networkKey: str
+    lbRange?: ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecLbRange
+
+    networkKey?: str
 
     preserveKubeconfigServer?: bool
 
-    providerConfigRef: ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecProviderConfigRef
+    providerConfigRef?: ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecProviderConfigRef
 
     releaseOnDelete?: bool
 
@@ -166,6 +182,41 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecKubeconfigSecr
     namespace: str
 
 
+schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecLbRange:
+    r"""
+    LBRange optionally reserves a contiguous IP range (in addition to the
+    primary allocated IP) intended for LoadBalancer pools — e.g. a Cilium
+    CiliumLoadBalancerIPPool block. Resolved range is exposed on the
+    Secret as the annotations clusterbook.stuttgart-things.com/lb-range-start
+    and /lb-range-stop. Optional.
+
+    Attributes
+    ----------
+    count : int, default is Undefined, optional
+        Count is the number of contiguous IPs to reserve from networkKey in
+        addition to the primary cluster IP. Mutually exclusive with Start/Stop.
+    start : str, default is Undefined, optional
+        Start, Stop pin the range verbatim — typical for kind clusters whose
+        LoadBalancer IPs come from the docker bridge network rather than the
+        clusterbook pool. When set, the operator does NOT reserve them from
+        networkKey, only writes them through to the Secret. Both must be set
+        together. Mutually exclusive with Count.
+    stop : str, default is Undefined, optional
+        stop
+    """
+
+
+    count?: int
+
+    start?: str
+
+    stop?: str
+
+
+    check:
+        count >= 1 if count not in [None, Undefined]
+
+
 schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterSpecProviderConfigRef:
     r"""
     ProviderConfigRef points to a ClusterbookProviderConfig with the
@@ -197,6 +248,13 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterStatus:
         fqdn
     ip : str, default is Undefined, optional
         ip
+    lbRangeStart : str, default is Undefined, optional
+        LBRangeStart, LBRangeStop record the resolved LoadBalancer range so
+        repeat reconciles in operator-allocated mode (spec.lbRange.count > 0)
+        don't re-reserve the range. In user-pinned mode they mirror
+        spec.lbRange.start/stop.
+    lbRangeStop : str, default is Undefined, optional
+        lb range stop
     secretName : str, default is Undefined, optional
         secret name
     zone : str, default is Undefined, optional
@@ -209,6 +267,10 @@ schema ClusterbookStuttgartThingsComV1alpha1ClusterbookClusterStatus:
     fqdn?: str
 
     ip?: str
+
+    lbRangeStart?: str
+
+    lbRangeStop?: str
 
     secretName?: str
 
