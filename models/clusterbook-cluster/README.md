@@ -21,7 +21,7 @@ kcl mod add oci://ghcr.io/stuttgart-things/clusterbook-cluster
 
 # Or add to kcl.mod manually
 [dependencies]
-clusterbook-cluster = { oci = "oci://ghcr.io/stuttgart-things/clusterbook-cluster", tag = "0.0.1" }
+clusterbook-cluster = { oci = "oci://ghcr.io/stuttgart-things/clusterbook-cluster", tag = "0.1.0" }
 ```
 
 ## Usage
@@ -91,6 +91,49 @@ items = [cluster]
 `kubeconfigSecretRef` and `existingSecretRef` are mutually exclusive — exactly
 one must be set.
 
+### ClusterbookCluster (kind / registration-only mode)
+
+For `kind` clusters the operator can skip clusterbook-server calls entirely
+and only emit the Argo CD cluster `Secret` plus user-pinned LB-range
+annotations. `networkKey` and `providerConfigRef` are omitted; the CRD
+requires `preserveKubeconfigServer=true` in this mode (no IP/FQDN allocated
+for `data.server`).
+
+```python
+import clusterbook-cluster.v1alpha1.clusterbook_stuttgart_things_com_v1alpha1_clusterbook_cluster as cbk_mod
+
+cluster = cbk_mod.ClusterbookCluster {
+    metadata = {
+        name = "dev"
+    }
+    spec = {
+        clusterName = "dev"
+        clusterType = "kind"
+        preserveKubeconfigServer = True
+        kubeconfigSecretRef = {
+            name = "kind-dev-kubeconfig"
+            namespace = "argocd"
+            key = "kubeconfig"
+        }
+        argocdNamespace = "argocd"
+        lbRange = {
+            start = "172.18.255.200"
+            stop = "172.18.255.250"
+        }
+        labels = {
+            "auto-project" = "true"
+            "cicd-platform" = "true"
+            "cicd-platform/crossplane" = "true"
+        }
+        releaseOnDelete = True
+    }
+}
+
+items = [cluster]
+```
+
+Requires `clusterbook-operator >= v0.16.0`.
+
 ## Rendering
 
 ```bash
@@ -105,6 +148,12 @@ kcl run examples/clusterbook_cluster.k \
   -D clusterName=denver \
   -D networkKey=10.31.103 \
   -D kubeconfigSecretName=denver-kubeconfig
+
+# Render the kind / registration-only example
+kcl run examples/clusterbook_cluster_kind.k \
+  -D clusterName=dev \
+  -D lbRangeStart=172.18.255.200 \
+  -D lbRangeStop=172.18.255.250
 ```
 
 ## Testing
@@ -118,7 +167,8 @@ Expected output:
 ```
 test_clusterbook_cluster_managed: PASS
 test_clusterbook_cluster_enrich: PASS
-PASS: 2/2
+test_clusterbook_cluster_kind: PASS
+PASS: 3/3
 ```
 
 ## CRD Source
