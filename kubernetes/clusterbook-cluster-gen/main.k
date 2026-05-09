@@ -7,10 +7,25 @@ _namespace = option("namespace") or ""
 _labels = option("labels") or {}
 _annotations = option("annotations") or {}
 
-# Spec — required clusterbook fields
-_networkKey = option("networkKey") or "10.31.101"
+# Spec — clusterbook fields. networkKey + providerConfigRef apply to
+# default/classic clusters; for clusterType=kind they are intentionally
+# omitted from the rendered manifest (the operator allocates differently).
+_clusterType = option("clusterType") or ""
+_isKind = _clusterType == "kind"
+
+_networkKey = option("networkKey") or ("10.31.101" if not _isKind else "")
 _clusterName = option("clusterName") or _name
 _argocdNamespace = option("argocdNamespace") or "argocd"
+
+# kind-only LB IP range (docker-bridge carve-out). Both -DlbRangeStart and
+# -DlbRangeStop must be provided to render a non-empty lbRange; otherwise it
+# is omitted and clusterbook-operator will reject a kind CR without it.
+_lbRangeStart = option("lbRangeStart") or ""
+_lbRangeStop = option("lbRangeStop") or ""
+_lbRange = schema.LbRange {
+    start = _lbRangeStart
+    stop = _lbRangeStop
+} if _lbRangeStart and _lbRangeStop else Undefined
 
 # DNS / server URL behavior
 _createDNS = option("createDNS")
@@ -58,11 +73,13 @@ _metadata = schema.ObjectMeta {
 _useExisting = True if _existingSecretRef else False
 
 _spec = schema.ClusterbookClusterSpec {
-    networkKey = _networkKey
+    networkKey = _networkKey if _networkKey and not _isKind else Undefined
     clusterName = _clusterName
-    providerConfigRef = _providerConfigRef
+    providerConfigRef = _providerConfigRef if not _isKind else Undefined
+    clusterType = _clusterType if _clusterType else Undefined
+    lbRange = _lbRange
     argocdNamespace = _argocdNamespace if _argocdNamespace else Undefined
-    createDNS = _createDNS if _createDNS != None else Undefined
+    createDNS = _createDNS if _createDNS != None and not _isKind else Undefined
     preserveKubeconfigServer = _preserveKubeconfigServer if _preserveKubeconfigServer != None else Undefined
     useFQDNAsServer = _useFQDNAsServer if _useFQDNAsServer != None else Undefined
     serverSubdomain = _serverSubdomain if _serverSubdomain else Undefined
