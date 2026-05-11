@@ -35,6 +35,7 @@ schema ClusterbookClusterSpec:
     kubeconfigSecretRef?: SecretRef
     existingSecretRef?: SecretRef
     labels?: {str: str}
+    annotations?: {str: str}
     releaseOnDelete?: bool
 
     check:

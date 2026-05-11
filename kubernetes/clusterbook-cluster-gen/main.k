@@ -60,6 +60,14 @@ _clusterLabels = option("clusterLabels") or {
     "auto-project" = "true"
 }
 
+# Free-form annotations merged onto the ArgoCD cluster Secret. Useful
+# for AppSets that read chart values via
+# `{{ index .metadata.annotations "..." }}` — e.g. cert-manager-vault-pki
+# reads `clusterbook.stuttgart-things.com/{vault-server, vault-pki-path,
+# vault-token-secret}`. Operator-managed annotations (cluster-name, ip,
+# fqdn, zone, lb-range-*) win on conflict at reconcile time.
+_clusterAnnotations = option("clusterAnnotations") or {}
+
 _releaseOnDelete = option("releaseOnDelete")
 
 _metadata = schema.ObjectMeta {
@@ -87,6 +95,7 @@ _spec = schema.ClusterbookClusterSpec {
     kubeconfigSecretRef = _kubeconfigSecretRef if not _useExisting else Undefined
     existingSecretRef = _existingSecretRef if _useExisting else Undefined
     labels = _clusterLabels if _clusterLabels else Undefined
+    annotations = _clusterAnnotations if _clusterAnnotations else Undefined
     releaseOnDelete = _releaseOnDelete if _releaseOnDelete != None else Undefined
 }
 
