@@ -1,359 +1,221 @@
 """
-Example usage of HarvesterVM resource from resources.stuttgart-things.com in KCL.
-With conditional template loading based on template name.
+HarvesterVM generator (Crossplane v2, EnvironmentConfig model).
+
+Emits a single namespaced `HarvesterVM` XR for the `harvester-vm` Configuration
+(stuttgart-things/crossplane-configurations -> machinery/harvester-vm).
+
+Design (see issue #53):
+  * Adopts the EnvironmentConfig model. Per-environment infrastructure
+    (providerConfigRef, storageClassName, namespace, networkName, imageId) is
+    inherited from the EnvironmentConfig selected by `spec.environmentConfig`.
+    Those fields are emitted ONLY when explicitly overridden, so the
+    EnvironmentConfig wins by default.
+  * One parameterized path (t-shirt `size` + `hardened` bool) instead of the
+    old demo/production/minimal template trio.
+  * Boot disk defaults to ReadWriteOnce (a RWX Block boot volume risks
+    corruption with RerunOnFailure) — aligned with crossplane-configurations#32.
+
+Usage:
+    kcl run . -D name=dev9 -D size=L
+    kcl run . -D name=dev9 -D size=M -D image=ubuntu25 -D hardened=true
+    kcl run . -D name=db01 -D size=XL -D sshKey="ssh-rsa AAAA..." \
+              -D providerConfigRef=harvester -D networkName=default/vms
 """
 
 import k8s.apimachinery.pkg.apis.meta.v1 as v1
 import v1alpha1.resources_stuttgart_things_com_v1alpha1_harvester_vm as harvestervm
 
-# Read parameters from CLI or fallback to defaults
+# Parameters from the claims API (params) or CLI (-D options).
 _params = option("params") or {}
-_spec = _params?.harvestervm?.spec or {}
 
-# Template selector
-_templateName = option("templateName") or _params?.templateName or "demo"  # Options: "demo", "production", "minimal"
-
-# T-shirt size configurations (memory, storage, CPU cores)
-_sizeConfigs = {
-    "S": {"memory": "2Gi", "storage": "20Gi", "cpu": "2", "cores": 2}
-    "M": {"memory": "4Gi", "storage": "40Gi", "cpu": "4", "cores": 4}
-    "L": {"memory": "8Gi", "storage": "80Gi", "cpu": "8", "cores": 8}
-    "XL": {"memory": "16Gi", "storage": "160Gi", "cpu": "16", "cores": 16}
-    "XXL": {"memory": "32Gi", "storage": "320Gi", "cpu": "32", "cores": 32}
+# --- helpers -----------------------------------------------------------------
+# Coerce a -D string / params value into a bool. Returns `fallback` when unset
+# (None or empty string), so optional booleans fall back to e.g. `hardened`.
+_asBool = lambda v, fallback: bool -> bool {
+    fallback if (v == None or v == "") else (str(v).lower() in ["true", "1", "yes"])
 }
 
-# Size selector (optional - if set, overrides individual memory/storage/cpu values)
-_size = option("size") or _params?.size or ""
+# --- EnvironmentConfig selector ----------------------------------------------
+_environmentConfig = option("environmentConfig") or _params?.environmentConfig or "default"
+
+# --- identity ----------------------------------------------------------------
+_name = option("name") or _params?.name or "harvester-vm"
+# where the XR object lives
+_namespace = option("namespace") or _params?.namespace or "default"
+_pvcName = option("pvcName") or _params?.pvcName or "${_name}-disk-0"
+_vmName = option("vmName") or _params?.vmName or _name
+_hostname = option("hostname") or _params?.hostname or _name
+
+# --- t-shirt sizing ----------------------------------------------------------
+# size drives cpu cores, memory, cpu resource string and root-disk storage.
+_sizeConfigs = {
+    "S": {"cores": 2, "memory": "2Gi", "cpu": "2", "storage": "20Gi"}
+    "M": {"cores": 4, "memory": "4Gi", "cpu": "4", "storage": "40Gi"}
+    "L": {"cores": 8, "memory": "8Gi", "cpu": "8", "storage": "80Gi"}
+    "XL": {"cores": 16, "memory": "16Gi", "cpu": "16", "storage": "160Gi"}
+    "XXL": {"cores": 32, "memory": "32Gi", "cpu": "32", "storage": "320Gi"}
+}
+_size = option("size") or _params?.size or "M"
 _sizeConfig = _sizeConfigs[_size] if _size in _sizeConfigs else {}
 
-# VM Image alias mapping (friendly name -> Harvester imageId)
-_imageAliases = {
-    "ubuntu25": "image-t9w92"
-    "ubuntu22": "image-lg5qf"
-    "rocky9": "image-k7m2x"
-    "rocky8": "image-r4n9p"
-    "debian12": "image-d3b7k"
-    "opensuse15": "image-s5v2m"
-    "opensuse-micro": "image-m5bh6"
+# Explicit overrides win over the t-shirt size (Expert use), then size, then a
+# built-in fallback.
+_cores = int(option("cores") or _sizeConfig?.cores or 4)
+_memory = option("memory") or _sizeConfig?.memory or "4Gi"
+_cpuResource = str(option("cpuResource") or _sizeConfig?.cpu or "4")
+_storage = option("storage") or _sizeConfig?.storage or "40Gi"
+
+# --- image catalog -----------------------------------------------------------
+# Single source of truth shared with the ClaimTemplate enums. The default
+# `inherit` omits volume.imageId so it comes from the EnvironmentConfig.
+#
+# NOTE: the image ids below are environment-specific (Harvester assigns them on
+# upload). Reconcile this map with the images actually present in your Harvester
+# (`kubectl -n <ns> get virtualmachineimages`) before relying on a non-inherit
+# alias. Day-to-day, prefer `inherit` and let the EnvironmentConfig supply the
+# base image.
+_imageCatalog = {
+    "ubuntu25": "default/image-t9w92"
+    "ubuntu22": "default/image-lg5qf"
+    "rocky9": "default/image-k7m2x"
+    "rocky8": "default/image-r4n9p"
+    "debian12": "default/image-d3b7k"
+    "opensuse15": "default/image-s5v2m"
+    "opensuse-micro": "default/image-m5bh6"
 }
+_image = option("image") or _params?.image or "inherit"
 
-# Image selector (resolves alias to imageId)
-_image = option("image") or _params?.image or ""
-_resolvedImageId = _imageAliases[_image] if _image in _imageAliases else ""
+# A direct imageId (full `namespace/image-xxx`) always wins; otherwise resolve
+# the alias; `inherit` / unknown alias -> "" -> field omitted -> EnvironmentConfig.
+_imageId = (option("imageId") or _params?.imageId or "") or (_imageCatalog[_image] if _image in _imageCatalog else "")
 
-# Common parameters
-_name = option("name") or _params?.name or "demo-harvester-vm"
-_namespace = option("namespace") or _params?.namespace or "default"
-_providerConfigRef = option("providerConfigRef") or _params?.providerConfigRef or "dev"
+# --- env-sourced overrides (emitted only when set -> EnvironmentConfig wins) --
+_providerConfigRef = option("providerConfigRef") or _params?.providerConfigRef or ""
+_storageClassName = option("storageClassName") or _params?.storageClassName or ""
+_targetNamespace = option("targetNamespace") or _params?.targetNamespace or ""
+_networkName = option("networkName") or _params?.networkName or ""
 
-# Volume parameters
-_volumeSpec = _spec?.volume or {}
-_pvcName = option("pvcName") or _volumeSpec?.pvcName or "${_name}-root"
-_volumeNamespace = option("volumeNamespace") or _volumeSpec?.namespace or _namespace
-_storage = _sizeConfig?.storage or option("storage") or _volumeSpec?.storage or "20Gi"
-_accessModes = option("accessModes") or _volumeSpec?.accessModes or ["ReadWriteMany"]
-_volumeMode = option("volumeMode") or _volumeSpec?.volumeMode or "Block"
+# --- root-disk volume --------------------------------------------------------
+# ReadWriteOnce by default: a RWX Block boot volume invites a second instance
+# attaching the same disk (corruption risk with RerunOnFailure).
+_accessModes = option("accessModes") or _params?.volume?.accessModes or ["ReadWriteOnce"]
+_volumeMode = option("volumeMode") or _params?.volume?.volumeMode or "Block"
 
-# Harvester Image parameters (uses annotation harvesterhci.io/imageId)
-# Priority: resolved alias > direct imageId option > from volumeSpec annotation
-_imageId = _resolvedImageId or option("imageId") or (_volumeSpec?.annotations?["harvesterhci.io/imageId"]?.split("/")[1] if _volumeSpec?.annotations?["harvesterhci.io/imageId"] else "")
-_imageNamespace = option("imageNamespace") or "default"
-# StorageClassName for Harvester: longhorn-{imageId}
-_storageClassName = option("storageClassName") or _volumeSpec?.storageClassName or ("longhorn-${_imageId}" if _imageId else "harvester-longhorn")
+# --- cloud-init --------------------------------------------------------------
+_hardened = _asBool(option("hardened") or _params?.hardened, False)
+_domain = option("domain") or _params?.domain or "local"
+_timezone = option("timezone") or _params?.timezone or "Europe/Berlin"
+_user = option("user") or _params?.user or "sthings"
+_sshKey = option("sshKey") or _params?.sshKey or ""
 
-# CloudInit parameters
-_cloudInitSpec = _spec?.cloudInit or {}
-_vmName = option("vmName") or _cloudInitSpec?.vmName or _cloudInitSpec?.hostname or _name
-_cloudInitNamespace = option("cloudInitNamespace") or _cloudInitSpec?.namespace or _namespace
-_hostname = option("hostname") or _cloudInitSpec?.hostname or _name.split("-")[0]
-_domain = option("domain") or _cloudInitSpec?.domain or "stuttgart-things.local"
-_timezone = option("timezone") or _cloudInitSpec?.timezone or "Europe/Berlin"
-_packageUpdate = _cloudInitSpec?.packageUpdate if _cloudInitSpec?.packageUpdate != None else True
-_packageUpgrade = _cloudInitSpec?.packageUpgrade if _cloudInitSpec?.packageUpgrade != None else False
-_sshPasswordAuth = _cloudInitSpec?.sshPasswordAuth if _cloudInitSpec?.sshPasswordAuth != None else False
-_disableRoot = _cloudInitSpec?.disableRoot if _cloudInitSpec?.disableRoot != None else True
-_packages = option("packages") or _params?.packages or _cloudInitSpec?.packages or []
+# hardened tightens the OS posture; the relaxed defaults favour dev convenience.
+_packageUpdate = _asBool(option("packageUpdate"), True)
+_packageUpgrade = _asBool(option("packageUpgrade"), _hardened)
+_sshPasswordAuth = _asBool(option("sshPasswordAuth"), not _hardened)
+_disableRoot = _asBool(option("disableRoot"), _hardened)
 
-# VM parameters
-_vmSpec = _spec?.vm or {}
-_description = option("description") or _vmSpec?.description or "Harvester VM managed by Crossplane"
-_runStrategy = option("runStrategy") or _vmSpec?.runStrategy or "RerunOnFailure"
-_evictionStrategy = option("evictionStrategy") or _vmSpec?.evictionStrategy or "LiveMigrateIfPossible"
-_terminationGracePeriodSeconds = int(_vmSpec?.terminationGracePeriodSeconds or option("terminationGracePeriodSeconds") or 120)
-_os = option("os") or _vmSpec?.os or "ubuntu"
-_machineType = option("machineType") or _vmSpec?.machineType or "q35"
+# Always keep qemu-guest-agent (the VMI needs it to report an IP), then append
+# any user-requested packages without duplicating it.
+_extraPackages = option("packages") or _params?.packages or []
+_packages = ["qemu-guest-agent"] + [p for p in _extraPackages if p != "qemu-guest-agent"]
 
-# CPU configuration - use size config if available
-_cores = int(_sizeConfig?.cores or _vmSpec?.cpu?.cores or option("cores") or 4)
-_sockets = int(_vmSpec?.cpu?.sockets or option("sockets") or 1)
-_threads = int(_vmSpec?.cpu?.threads or option("threads") or 1)
+# --- vm ----------------------------------------------------------------------
+_description = option("description") or _params?.description or "${_name} VM provisioned by Crossplane"
+_os = option("os") or _params?.os or "ubuntu"
+_machineType = option("machineType") or _params?.machineType or "q35"
+_runStrategy = option("runStrategy") or _params?.runStrategy or "RerunOnFailure"
+_evictionStrategy = option("evictionStrategy") or _params?.evictionStrategy or "LiveMigrateIfPossible"
+_terminationGracePeriodSeconds = int(option("terminationGracePeriodSeconds") or _params?.terminationGracePeriodSeconds or 120)
 
-# Resource configuration - use size config if available
-_memory = _sizeConfig?.memory or option("memory") or _vmSpec?.resources?.memory or "8Gi"
-_cpu = _sizeConfig?.cpu or option("cpuResource") or _vmSpec?.resources?.cpu or "4"
+# --- optional Ansible provisioning -------------------------------------------
+_ansibleEnabled = _asBool(option("ansibleEnabled") or _params?.ansible?.enabled, False)
 
-# Network configuration
-_networkName = option("networkName") or "default/vms"
-
-# Demo Template - Basic VM for testing
-if _templateName == "demo":
-    harvestervm.HarvesterVM {
-        metadata = v1.ObjectMeta {
-            name = _name
-            namespace = _namespace
-            annotations = {
-                "crossplane.io/managed-by" = "kcl"
-            }
+# --- render ------------------------------------------------------------------
+harvestervm.HarvesterVM {
+    metadata = v1.ObjectMeta {
+        name = _name
+        namespace = _namespace
+        annotations = {
+            "crossplane.io/managed-by" = "kcl"
         }
-
-        spec = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpec {
-            providerConfigRef = _providerConfigRef
-
-            volume = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVolume {
-                pvcName = _pvcName
-                namespace = _volumeNamespace
-                storageClassName = _storageClassName
-                storage = _storage
-                accessModes = _accessModes
-                volumeMode = _volumeMode
-                labels = {
-                    app = _name
-                }
-            }
-
-            cloudInit = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInit {
-                vmName = _vmName
-                namespace = _cloudInitNamespace
-                hostname = _hostname
-                domain = _domain
-                timezone = _timezone
-                users = [
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInitUser {
-                        name = "ubuntu"
-                        groups = "sudo"
-                        shell = "/bin/bash"
-                        sudo = "ALL=(ALL) NOPASSWD:ALL"
-                    }
-                ]
-                packages = [
-                    "qemu-guest-agent"
-                    "curl"
-                    "vim"
-                ]
-                runcmd = [
-                    "systemctl enable qemu-guest-agent"
-                    "systemctl start qemu-guest-agent"
-                ]
-                packageUpdate = _packageUpdate
-                packageUpgrade = _packageUpgrade
-                sshPasswordAuth = _sshPasswordAuth
-                disableRoot = _disableRoot
-            }
-
-            vm = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVm {
-                description = _description
-                runStrategy = _runStrategy
-                evictionStrategy = _evictionStrategy
-                terminationGracePeriodSeconds = _terminationGracePeriodSeconds
-                os = _os
-                machineType = _machineType
-
-                cpu = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmCpu {
-                    cores = _cores
-                    sockets = _sockets
-                    threads = _threads
-                }
-
-                resources = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmResources {
-                    memory = _memory
-                    cpu = str(_cpu)
-                }
-
-                disks = [
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmDisk {
-                        name = "rootdisk"
-                        bootOrder = 1
-                    }
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmDisk {
-                        name = "cloudinitdisk"
-                    }
-                ]
-
-                networks = [
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmNetwork {
-                        name = "default"
-                        networkName = _networkName
-                    }
-                ]
-            }
+        labels = {
+            app = _name
         }
     }
-
-# Production Template - High-spec VM with production settings
-if _templateName == "production":
-    harvestervm.HarvesterVM {
-        metadata = v1.ObjectMeta {
-            name = _name
-            namespace = _namespace
-            annotations = {
-                "crossplane.io/managed-by" = "kcl"
-                "environment" = "production"
-            }
+    spec = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpec {
+        environmentConfig = _environmentConfig
+        if _providerConfigRef:
+            providerConfigRef = _providerConfigRef
+        volume = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVolume {
+            pvcName = _pvcName
+            storage = _storage
+            accessModes = _accessModes
+            volumeMode = _volumeMode
+            if _storageClassName:
+                storageClassName = _storageClassName
+            if _targetNamespace:
+                namespace = _targetNamespace
+            if _imageId:
+                imageId = _imageId
             labels = {
                 app = _name
-                environment = "production"
-                tier = "compute"
             }
         }
-
-        spec = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpec {
-            providerConfigRef = _providerConfigRef
-
-            volume = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVolume {
-                pvcName = _pvcName
-                namespace = _volumeNamespace
-                storageClassName = _storageClassName
-                storage = option("storage") or "100Gi"
-                accessModes = ["ReadWriteOnce"]
-                volumeMode = "Filesystem"
-                labels = {
-                    app = _name
-                    environment = "production"
+        cloudInit = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInit {
+            vmName = _vmName
+            hostname = _hostname
+            if _targetNamespace:
+                namespace = _targetNamespace
+            domain = _domain
+            timezone = _timezone
+            users = [
+                harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInitUser {
+                    name = _user
+                    groups = "sudo"
+                    shell = "/bin/bash"
+                    sudo = "ALL=(ALL) NOPASSWD:ALL"
+                    lockPasswd = False
+                    if _sshKey:
+                        sshAuthorizedKeys = [_sshKey]
                 }
+            ]
+            packages = _packages
+            runcmd = [
+                "systemctl enable --now qemu-guest-agent.service"
+            ]
+            packageUpdate = _packageUpdate
+            packageUpgrade = _packageUpgrade
+            sshPasswordAuth = _sshPasswordAuth
+            disableRoot = _disableRoot
+        }
+        vm = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVm {
+            description = _description
+            runStrategy = _runStrategy
+            evictionStrategy = _evictionStrategy
+            terminationGracePeriodSeconds = _terminationGracePeriodSeconds
+            os = _os
+            machineType = _machineType
+            cpu = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmCpu {
+                cores = _cores
+                sockets = 1
+                threads = 1
             }
-
-            cloudInit = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInit {
-                vmName = _vmName
-                namespace = _cloudInitNamespace
-                hostname = _hostname
-                domain = _domain
-                timezone = _timezone
-                users = [
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInitUser {
-                        name = "ubuntu"
-                        groups = "sudo"
-                        shell = "/bin/bash"
-                        sudo = "ALL=(ALL) NOPASSWD:ALL"
-                    }
-                ]
-                packages = [
-                    "qemu-guest-agent"
-                    "curl"
-                    "vim"
-                    "htop"
-                    "jq"
-                ]
-                runcmd = [
-                    "systemctl enable qemu-guest-agent"
-                    "systemctl start qemu-guest-agent"
-                ]
-                packageUpdate = True
-                packageUpgrade = True
-                sshPasswordAuth = False
-                disableRoot = True
+            resources = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmResources {
+                memory = _memory
+                cpu = _cpuResource
             }
-
-            vm = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVm {
-                description = "Production VM - ${_name}"
-                runStrategy = "RerunOnFailure"
-                evictionStrategy = "LiveMigrateIfPossible"
-                terminationGracePeriodSeconds = 180
-                os = _os
-                machineType = "q35"
-
-                cpu = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmCpu {
-                    cores = int(option("cores") or 8)
-                    sockets = 1
-                    threads = 1
-                }
-
-                resources = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmResources {
-                    memory = option("memory") or "16Gi"
-                    cpu = option("cpuResource") or "8"
-                }
-
-                disks = [
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmDisk {
-                        name = "rootdisk"
-                        bootOrder = 1
-                    }
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmDisk {
-                        name = "cloudinitdisk"
-                    }
-                ]
-
+            # Networks inherit from the EnvironmentConfig unless overridden.
+            if _networkName:
                 networks = [
                     harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmNetwork {
                         name = "default"
                         networkName = _networkName
                     }
                 ]
-            }
         }
+        if _ansibleEnabled:
+            ansible = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecAnsible {
+                enabled = True
+            }
     }
-
-# Minimal Template - Bare minimum required fields
-if _templateName == "minimal":
-    harvestervm.HarvesterVM {
-        metadata = v1.ObjectMeta {
-            name = _name
-            namespace = _namespace
-        }
-
-        spec = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpec {
-            providerConfigRef = _providerConfigRef
-
-            volume = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVolume {
-                pvcName = _pvcName
-                namespace = _volumeNamespace
-                storageClassName = _storageClassName
-                storage = _storage
-                accessModes = _accessModes
-                volumeMode = _volumeMode
-                if _imageId:
-                    annotations = {
-                        "harvesterhci.io/imageId" = "${_imageNamespace}/${_imageId}"
-                    }
-            }
-
-            cloudInit = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecCloudInit {
-                vmName = _vmName
-                namespace = _cloudInitNamespace
-                hostname = _hostname
-                domain = _domain
-                timezone = _timezone
-                packages = _packages
-                packageUpdate = _packageUpdate
-                packageUpgrade = _packageUpgrade
-                sshPasswordAuth = _sshPasswordAuth
-                disableRoot = _disableRoot
-            }
-
-            vm = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVm {
-                cpu = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmCpu {
-                    cores = _cores
-                }
-
-                resources = harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmResources {
-                    memory = _memory
-                    cpu = str(_cpu)
-                }
-
-                disks = [
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmDisk {
-                        name = "rootdisk"
-                    }
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmDisk {
-                        name = "cloudinitdisk"
-                    }
-                ]
-
-                networks = [
-                    harvestervm.ResourcesStuttgartThingsComV1alpha1HarvesterVMSpecVmNetwork {
-                        name = "default"
-                        networkName = _networkName
-                    }
-                ]
-            }
-        }
-    }
+}

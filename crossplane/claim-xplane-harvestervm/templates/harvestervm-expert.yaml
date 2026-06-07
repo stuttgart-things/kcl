@@ -4,7 +4,7 @@ kind: ClaimTemplate
 metadata:
   name: harvestervm-expert
   title: Crossplane Harvester VM (Expert)
-  description: Creates a Harvester VM with full control over all parameters
+  description: Full control over a Harvester VM, including the env-sourced infrastructure overrides and optional Ansible provisioning.
   tags:
     - harvester
     - vm
@@ -14,101 +14,218 @@ metadata:
 spec:
   type: harvestervm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
-  tag: 0.1.4
+  tag: 0.2.0
   parameters:
-    - name: templateName
-      title: Template
-      type: string
-      default: demo
-      enum:
-        - demo
-        - production
-        - minimal
-      description: "KCL template: demo (standard), production (hardened settings), minimal (bare minimum)"
-
+    # ---- identity ----
     - name: name
       title: VM Name
       type: string
       required: true
-      default: demo-harvester-vm
+      default: dev-vm
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
-      description: "Name of the VM and claim resource"
+      description: "Name of the VM and XR"
 
     - name: namespace
-      title: Namespace
+      title: XR Namespace
       type: string
       default: default
-      description: "Kubernetes namespace for the claim"
+      description: "Namespace the HarvesterVM XR object lives in"
 
-    - name: providerConfigRef
-      title: Provider Config
+    - name: environmentConfig
+      title: Environment
       type: string
-      required: true
-      default: dev
-      description: "Name of the ProviderConfig for Kubernetes operations"
+      default: default
+      description: "EnvironmentConfig selector for shared infrastructure defaults"
 
-    # VM Resources - direct control, no t-shirt size
+    - name: vmName
+      title: VM Name (cloud-init)
+      type: string
+      required: false
+      description: "Overrides the cloud-init VM name (defaults to <name>)"
+
+    - name: hostname
+      title: Hostname
+      type: string
+      required: false
+      description: "VM hostname (defaults to <name>)"
+
+    # ---- sizing: a size, or explicit cpu/memory/storage overrides ----
+    - name: size
+      title: T-Shirt Size
+      type: string
+      default: M
+      enum:
+        - S
+        - M
+        - L
+        - XL
+        - XXL
+      description: "Baseline sizing; the explicit cores/memory/cpuResource/storage below override it when set"
+
     - name: cores
       title: CPU Cores
       type: integer
-      default: 4
-      description: "Number of CPU cores"
+      required: false
+      description: "Override CPU cores (otherwise from size)"
 
     - name: memory
       title: Memory
       type: string
-      default: 8Gi
-      description: "Memory size (e.g., 4Gi, 8Gi, 16Gi)"
+      required: false
+      description: "Override memory, e.g. 8Gi (otherwise from size)"
 
     - name: cpuResource
-      title: CPU Resource Limit
+      title: CPU Resource
       type: string
-      default: "4"
-      description: "CPU resource limit"
+      required: false
+      description: "Override CPU resource string, e.g. \"8\" (otherwise from size)"
 
-    # Volume Configuration
+    - name: storage
+      title: Root Disk Size
+      type: string
+      required: false
+      description: "Override root disk size, e.g. 80Gi (otherwise from size)"
+
+    # ---- image / volume ----
+    - name: image
+      title: VM Image
+      type: string
+      default: inherit
+      enum:
+        - inherit
+        - ubuntu25
+        - ubuntu22
+        - rocky9
+        - rocky8
+        - debian12
+        - opensuse15
+        - opensuse-micro
+      description: "Base image alias. 'inherit' uses the environment's default image."
+
+    - name: imageId
+      title: Image ID (Override)
+      type: string
+      required: false
+      description: "Direct Harvester image id in namespace/image-xxx form (wins over the alias and the environment)"
+
     - name: pvcName
       title: PVC Name
       type: string
-      description: "Name of the PVC (defaults to <name>-root)"
+      required: false
+      description: "Root disk PVC name (defaults to <name>-disk-0)"
+
+    - name: accessModes
+      title: Access Modes
+      type: array
+      items:
+        type: string
+      default:
+        - ReadWriteOnce
+      description: "PVC access modes. Keep ReadWriteOnce for a single-VM boot disk (RWX Block boot volume risks corruption)."
+
+    - name: volumeMode
+      title: Volume Mode
+      type: string
+      default: Block
+      enum:
+        - Block
+        - Filesystem
+      description: "PVC volume mode"
+
+    # ---- env-sourced infrastructure overrides (blank = inherit) ----
+    - name: providerConfigRef
+      title: Provider Config (Override)
+      type: string
+      required: false
+      description: "ClusterProviderConfig name; blank inherits from the environment"
 
     - name: storageClassName
-      title: Storage Class
+      title: Storage Class (Override)
       type: string
-      required: true
-      default: harvester-longhorn
-      description: "Storage class name for the PVC"
+      required: false
+      description: "Storage class; blank inherits from the environment"
 
-    - name: storage
-      title: Storage Size
+    - name: targetNamespace
+      title: Target Namespace (Override)
       type: string
-      default: 20Gi
-      description: "Storage size (e.g., 20Gi, 100Gi)"
+      required: false
+      description: "Namespace for the PVC, cloud-init Secret and VM; blank inherits from the environment"
 
-    # CloudInit Configuration
-    - name: hostname
-      title: Hostname
+    - name: networkName
+      title: Network Name (Override)
       type: string
-      description: "VM hostname (defaults to first part of name)"
+      required: false
+      description: "Multus network in namespace/name form; blank inherits from the environment"
+
+    # ---- cloud-init ----
+    - name: user
+      title: Login User
+      type: string
+      default: sthings
+      description: "Primary cloud-init user"
+
+    - name: sshKey
+      title: SSH Public Key
+      type: string
+      required: false
+      description: "SSH public key for the login user"
+
+    - name: packages
+      title: Extra Packages
+      type: array
+      items:
+        type: string
+      default: []
+      description: "Additional packages (qemu-guest-agent always included)"
 
     - name: domain
       title: Domain
       type: string
-      default: stuttgart-things.local
-      description: "Domain name for the VM"
+      default: local
+      description: "Cloud-init domain"
 
     - name: timezone
       title: Timezone
       type: string
       default: Europe/Berlin
-      description: "Timezone (e.g., Europe/Berlin, UTC)"
+      description: "Timezone"
 
-    # VM Settings
+    - name: hardened
+      title: Hardened OS
+      type: boolean
+      default: false
+      description: "Tighten cloud-init posture; the explicit booleans below override it"
+
+    - name: packageUpgrade
+      title: Package Upgrade
+      type: boolean
+      required: false
+      description: "Upgrade packages on boot (otherwise from hardened)"
+
+    - name: sshPasswordAuth
+      title: SSH Password Auth
+      type: boolean
+      required: false
+      description: "Allow SSH password authentication (otherwise from hardened)"
+
+    - name: disableRoot
+      title: Disable Root
+      type: boolean
+      required: false
+      description: "Disable root login (otherwise from hardened)"
+
+    # ---- vm ----
     - name: os
       title: Operating System
       type: string
       default: ubuntu
-      description: "OS type for the VM"
+      description: "OS type label for the VM"
+
+    - name: machineType
+      title: Machine Type
+      type: string
+      default: q35
+      description: "KubeVirt machine type"
 
     - name: runStrategy
       title: Run Strategy
@@ -131,9 +248,9 @@ spec:
         - None
       description: "VM eviction strategy"
 
-    # Network
-    - name: networkName
-      title: Network Name
-      type: string
-      default: default/default
-      description: "Network name (namespace/name format)"
+    # ---- optional Ansible provisioning ----
+    - name: ansibleEnabled
+      title: Ansible Provisioning
+      type: boolean
+      default: false
+      description: "Emit an AnsibleRun after the VM is up (requires the ansible-run Configuration on the cluster)"

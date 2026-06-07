@@ -4,7 +4,7 @@ kind: ClaimTemplate
 metadata:
   name: harvestervm-developer
   title: Crossplane Harvester VM (Developer)
-  description: Creates Harvester VMs with minimal input - just pick a name, size, and count
+  description: Create a Harvester VM with minimal input — just a name and a size. Infrastructure is inherited from the environment.
   tags:
     - harvester
     - vm
@@ -14,24 +14,16 @@ metadata:
 spec:
   type: harvestervm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
-  tag: 0.1.4
+  tag: 0.2.0
   parameters:
-    # User-facing parameters
+    # ---- the essentials a developer picks ----
     - name: name
       title: VM Name
       type: string
       required: true
-      default: demo-harvester-vm
+      default: dev-vm
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
       description: "Name of the VM"
-
-    - name: count
-      title: Number of VMs
-      type: integer
-      default: 1
-      minimum: 1
-      maximum: 10
-      description: "Number of VMs to create"
 
     - name: size
       title: T-Shirt Size
@@ -43,112 +35,34 @@ spec:
         - L
         - XL
         - XXL
-      description: "VM size: S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
-
-    - name: packages
-      title: Packages
-      type: array
-      items:
-        type: string
-      default:
-        - curl
-      description: "List of packages to install via cloud-init"
+      description: "VM size — S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
 
     - name: image
       title: VM Image
       type: string
-      required: true
-      default: u25-dev
+      default: inherit
       enum:
-        - u25-dev
-        - opensuse-dev
-        - rocky9-dev
-        - upstream
-      description: "VM operating system image"
+        - inherit
+        - ubuntu25
+        - ubuntu22
+        - rocky9
+        - rocky8
+        - debian12
+        - opensuse15
+        - opensuse-micro
+      description: "Base image. 'inherit' uses the environment's default image (recommended)."
 
-    # Hidden parameters for advanced image configuration
-    - name: imageId
-      title: VM Image ID (Override)
-      type: string
-      required: false
-      description: "Direct Harvester image ID (overrides image alias if set)"
-      hidden: true
-
-    - name: imageNamespace
-      title: Image Namespace
+    # ---- everything else is inherited from the environment / hidden ----
+    - name: environmentConfig
+      title: Environment
       type: string
       default: default
-      description: "Namespace where the Harvester image is located"
+      description: "EnvironmentConfig selector that supplies provider, storage class, namespace, network and base image"
       hidden: true
 
-    # Hidden parameters (pre-configured, not prompted to users)
-    - name: templateName
-      title: Template
-      type: string
-      default: minimal
-      description: "KCL template to use"
-      hidden: true
-
-    - name: namespace
-      title: Namespace
-      type: string
-      default: default
-      description: "Kubernetes namespace for the claim"
-      hidden: true
-
-    - name: networkName
-      title: Network name
-      type: string
-      default: "default/vms"
-      description: "Network name in namespace/name format (e.g. default/vms)"
-      hidden: true
-
-    - name: providerConfigRef
-      title: Provider Config
-      type: string
-      required: true
-      default: harvester
-      description: "Name of the ProviderConfig for Kubernetes operations"
-      hidden: true
-
-    - name: storageClassName
-      title: Storage Class
-      type: string
-      required: false
-      description: "Storage class name for the PVC (auto-generated as longhorn-{imageId} if not specified)"
-      hidden: true
-
-    - name: domain
-      title: Domain
-      type: string
-      default: stuttgart-things.local
-      description: "Domain name for the VM"
-      hidden: true
-
-    - name: timezone
-      title: Timezone
-      type: string
-      default: Europe/Berlin
-      description: "Timezone"
-      hidden: true
-
-    - name: os
-      title: Operating System
-      type: string
-      default: ubuntu
-      description: "OS type for the VM"
-      hidden: true
-
-    - name: runStrategy
-      title: Run Strategy
-      type: string
-      default: RerunOnFailure
-      description: "VM run strategy"
-      hidden: true
-
-    - name: evictionStrategy
-      title: Eviction Strategy
-      type: string
-      default: LiveMigrateIfPossible
-      description: "VM eviction strategy"
+    - name: hardened
+      title: Hardened OS
+      type: boolean
+      default: false
+      description: "Tighten cloud-init posture (package upgrade on boot, disable root, no SSH password auth)"
       hidden: true
