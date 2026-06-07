@@ -4,7 +4,7 @@ kind: ClaimTemplate
 metadata:
   name: harvestervm-detailed
   title: Crossplane Harvester VM (Detailed)
-  description: Creates Harvester VMs with environment-level controls and T-shirt sizing
+  description: Create a Harvester VM with sizing, image, SSH access and OS hardening. Infrastructure still inherited from the environment.
   tags:
     - harvester
     - vm
@@ -14,24 +14,15 @@ metadata:
 spec:
   type: harvestervm
   source: oci://ghcr.io/stuttgart-things/claim-xplane-harvestervm
-  tag: 0.1.4
+  tag: 0.2.0
   parameters:
-    # User-facing parameters
     - name: name
       title: VM Name
       type: string
       required: true
-      default: demo-harvester-vm
+      default: dev-vm
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
       description: "Name of the VM"
-
-    - name: count
-      title: Number of VMs
-      type: integer
-      default: 1
-      minimum: 1
-      maximum: 10
-      description: "Number of VMs to create"
 
     - name: size
       title: T-Shirt Size
@@ -43,118 +34,65 @@ spec:
         - L
         - XL
         - XXL
-      description: "VM size: S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
+      description: "VM size — S (2CPU/2Gi/20Gi), M (4CPU/4Gi/40Gi), L (8CPU/8Gi/80Gi), XL (16CPU/16Gi/160Gi), XXL (32CPU/32Gi/320Gi)"
 
     - name: image
       title: VM Image
       type: string
-      required: true
-      default: u25-dev
+      default: inherit
       enum:
-        - u25-dev
-        - opensuse-dev
-        - rocky9-dev
-        - upstream
-      description: "VM operating system image"
+        - inherit
+        - ubuntu25
+        - ubuntu22
+        - rocky9
+        - rocky8
+        - debian12
+        - opensuse15
+        - opensuse-micro
+      description: "Base image. 'inherit' uses the environment's default image."
+
+    - name: hardened
+      title: Hardened OS
+      type: boolean
+      default: false
+      description: "Tighten cloud-init posture (package upgrade on boot, disable root, no SSH password auth)"
+
+    - name: user
+      title: Login User
+      type: string
+      default: sthings
+      description: "Primary cloud-init user (sudo, /bin/bash)"
+
+    - name: sshKey
+      title: SSH Public Key
+      type: string
+      required: false
+      description: "SSH public key added to the login user's authorized_keys"
 
     - name: packages
-      title: Packages
+      title: Extra Packages
       type: array
       items:
         type: string
-      default:
-        - curl
-      description: "List of packages to install via cloud-init"
-
-    # Environment configuration
-    - name: namespace
-      title: Namespace
-      type: string
-      default: default
-      description: "Kubernetes namespace for the claim"
-
-    - name: providerConfigRef
-      title: Provider Config
-      type: string
-      required: true
-      default: harvester
-      description: "Name of the ProviderConfig for Kubernetes operations"
-
-    - name: os
-      title: Operating System
-      type: string
-      default: ubuntu
-      enum:
-        - ubuntu
-        - opensuse
-        - rocky
-      description: "OS type for the VM"
+      default: []
+      description: "Additional packages to install via cloud-init (qemu-guest-agent is always included)"
 
     - name: domain
       title: Domain
       type: string
-      default: stuttgart-things.local
-      description: "Domain name for the VM"
+      default: local
+      description: "Cloud-init domain name"
 
-    - name: networkName
-      title: Network Name
-      type: string
-      default: default/vms
-      description: "Network name in namespace/name format (e.g. default/vms)"
-
-    - name: runStrategy
-      title: Run Strategy
-      type: string
-      default: RerunOnFailure
-      enum:
-        - Always
-        - RerunOnFailure
-        - Manual
-        - Halted
-      description: "VM run strategy"
-
-    - name: templateName
-      title: KCL Template
-      type: string
-      default: minimal
-      enum:
-        - demo
-        - production
-        - minimal
-      description: "KCL template: demo (standard), production (hardened settings), minimal (bare minimum)"
-
-    # Hidden parameters (pre-configured, not prompted to users)
-    - name: imageId
-      title: VM Image ID (Override)
-      type: string
-      required: false
-      description: "Direct Harvester image ID (overrides image alias if set)"
-      hidden: true
-
-    - name: imageNamespace
-      title: Image Namespace
+    - name: environmentConfig
+      title: Environment
       type: string
       default: default
-      description: "Namespace where the Harvester image is located"
-      hidden: true
+      description: "EnvironmentConfig selector that supplies provider, storage class, namespace, network and base image"
 
-    - name: storageClassName
-      title: Storage Class
-      type: string
-      required: false
-      description: "Storage class name for the PVC (auto-generated as longhorn-{imageId} if not specified)"
-      hidden: true
-
+    # ---- hidden: inherited from the environment unless overridden in Expert ----
     - name: timezone
       title: Timezone
       type: string
       default: Europe/Berlin
       description: "Timezone"
-      hidden: true
-
-    - name: evictionStrategy
-      title: Eviction Strategy
-      type: string
-      default: LiveMigrateIfPossible
-      description: "VM eviction strategy"
       hidden: true
