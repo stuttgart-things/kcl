@@ -10,6 +10,43 @@ The schema mirrors the upstream CRD in
 For the type-safe model package generated directly from the CRD see
 [`models/clusterbook-cluster`](../../models/clusterbook-cluster/).
 
+## ClaimTemplates
+
+[`templates/`](templates/) ships `ClaimTemplate` specs for the
+[claim-machinery-api](https://github.com/stuttgart-things/claim-machinery-api) /
+IDP scaffolder. The API renders each parameter as a `-D <name>=<value>` flag
+against this module, so the form fields map directly onto the `option(...)`
+inputs `main.k` already reads.
+
+| Template | File | Cluster type | Prompts for |
+|---|---|---|---|
+| **Developer** | `templates/clusterbook-cluster-developer.yaml` | default/classic | name, network pool |
+| **Detailed** | `templates/clusterbook-cluster-detailed.yaml` | default/classic | + clusterName, provider config, ArgoCD namespace, kubeconfig secret, DNS, FQDN/server URL |
+| **Platform** | `templates/clusterbook-cluster-platform.yaml` | default/classic | management cluster + a multiselect of network-/storage-platform components |
+| **Kind** | `templates/clusterbook-cluster-kind.yaml` | kind | name, LoadBalancer IP range |
+
+For `kind`, `clusterType=kind` is fixed (hidden) and `networkKey` /
+`providerConfigRef` are omitted automatically — the operator carves the
+LoadBalancer range from the docker bridge instead.
+
+### Platform feature gates (cluster Secret labels)
+
+The `labels` stamped onto the ArgoCD cluster Secret are the platform feature
+gates that drive the per-component ApplicationSets (e.g.
+`network-platform/cilium-lb: "true"`). The `ClaimTemplate` parameter schema has
+no map type, so the **Platform** template exposes them as a `multiselect`
+`platformFeatures` list instead: each selected key is rendered as
+`"<key>": "true"`. Unselected keys are omitted — the ApplicationSets gate on the
+`"true"` value, so absent is equivalent to off. Keep the umbrella gates
+(`network-platform`, `storage-platform`) selected for their sub-components to
+take effect.
+
+Power users can still pass the full map directly with
+`-D 'clusterLabels={"network-platform":"true",...}'`; an explicit `clusterLabels`
+override is used as the base and any `platformFeatures` are merged on top. When
+no `platformFeatures` are selected, the `clusterLabels` default
+(`env`/`role`/`auto-project`) is preserved for backward compatibility.
+
 ## Quick start (OCI, standalone)
 
 Recreate the `philly` cluster from the labul lab with a single command:
@@ -93,7 +130,8 @@ valid JSON (use single quotes around the whole arg to keep the shell out of it).
 | `existingSecretRef` | `{name,namespace}` | `{}` (omitted) | enrich-mode reference to an existing ArgoCD cluster Secret. Mutually exclusive with `kubeconfigSecretRef` — set this and the kubeconfig ref is omitted |
 | `providerConfigName` | `str` | `"default"` | name for the auto-built `providerConfigRef` |
 | `providerConfigRef` | `{name}` | `{name = providerConfigName}` | full override |
-| `clusterLabels` | `{str: str}` | `{"env":"lab","role":"mgmt","auto-project":"true"}` | labels merged onto the ArgoCD cluster Secret (used for `ApplicationSet` selection) |
+| `clusterLabels` | `{str: str}` | `{"env":"lab","role":"mgmt","auto-project":"true"}` (omitted when `platformFeatures` is set) | labels merged onto the ArgoCD cluster Secret (used for `ApplicationSet` selection) |
+| `platformFeatures` | `[str]` | `[]` | platform-gate keys; each is stamped as `"<key>": "true"` and merged onto `clusterLabels` (form-friendly alternative to a raw map) |
 | `releaseOnDelete` | `bool` | omitted | release the clusterbook IP reservation when the CR is deleted |
 
 `kubeconfigSecretRef` and `existingSecretRef` are mutually exclusive — exactly
@@ -211,3 +249,4 @@ The CRD-derived model package publishes separately to
 - [schema.k](schema.k) — typed `ClusterbookCluster`, `ClusterbookClusterSpec`, `SecretRef`, `ProviderConfigRef`, `ObjectMeta`
 - [examples/philly.k](examples/philly.k) — recreates the labul `philly` cluster
 - [examples/enrich.k](examples/enrich.k) — enrich-mode variant with `useFQDNAsServer`
+- [templates/](templates/) — `ClaimTemplate` specs (developer / detailed / platform / kind) for claim-machinery-api

@@ -1,0 +1,71 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: clusterbook-cluster-kind
+  title: Clusterbook Cluster (Kind)
+  description: Register a kind cluster with clusterbook-operator. networkKey and providerConfigRef are omitted automatically — the operator carves the LoadBalancer range from the docker bridge instead.
+  tags:
+    - clusterbook
+    - cluster
+    - kind
+    - argocd
+    - kubernetes
+spec:
+  type: clusterbookcluster
+  source: oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen
+  tag: 0.4.0
+  parameters:
+    - name: name
+      title: Cluster Name
+      type: string
+      required: true
+      default: kind-dev
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "metadata.name and (by default) the clusterbook/ArgoCD cluster name"
+
+    # ---- kind requires an LB IP range carved from the docker bridge ----
+    - name: lbRangeStart
+      title: LoadBalancer Range Start
+      type: string
+      required: true
+      default: "172.18.255.200"
+      description: "first IP of the docker-bridge range the cilium-lb-kind ApplicationSet turns into a CiliumLoadBalancerIPPool"
+
+    - name: lbRangeStop
+      title: LoadBalancer Range Stop
+      type: string
+      required: true
+      default: "172.18.255.250"
+      description: "last IP of the docker-bridge LoadBalancer range"
+
+    # ---- fixed / inherited for kind clusters ----
+    - name: clusterType
+      title: Cluster Type
+      type: string
+      default: kind
+      enum:
+        - kind
+      description: "fixed to 'kind' — omits networkKey/providerConfigRef and requires the LB range"
+      hidden: true
+
+    - name: kubeconfigSecretKey
+      title: Kubeconfig Secret Key
+      type: string
+      default: kubeconfig
+      description: "data key inside the kubeconfig Secret"
+      hidden: true
+
+    - name: argocdNamespace
+      title: ArgoCD Namespace
+      type: string
+      default: argocd
+      description: "namespace where the ArgoCD cluster Secret (and kubeconfig Secret) is written"
+      hidden: true
+
+    - name: releaseOnDelete
+      title: Release IP On Delete
+      type: boolean
+      default: true
+      description: "release the clusterbook IP reservation when the CR is deleted"
+      hidden: true

@@ -53,12 +53,26 @@ _providerConfigRef = option("providerConfigRef") or {
     name = _providerConfigName
 }
 
-# Selector labels merged onto the ArgoCD cluster Secret
-_clusterLabels = option("clusterLabels") or {
+# Selector labels merged onto the ArgoCD cluster Secret. Two ways to set them:
+#   * `clusterLabels` — a full {str:str} map override (power users / -D JSON).
+#   * `platformFeatures` — a list of platform-gate keys; each becomes
+#     "<key>": "true". This is the form-friendly path (claim-machinery-api
+#     multiselect) since the ClaimTemplate parameter schema has no map type.
+# A selected feature stamps `"<key>": "true"`; unselected keys are simply
+# omitted (ApplicationSets gate on the "true" value, so absent == off).
+_platformFeatures = option("platformFeatures") or []
+_featureLabels = {f: "true" for f in _platformFeatures}
+
+# Base labels: an explicit clusterLabels override always wins. Otherwise fall
+# back to the lab/role defaults ONLY when no platform features were selected, so
+# a platform claim isn't polluted with env=lab/role=mgmt it never asked for.
+_defaultClusterLabels = {
     "env" = "lab"
     "role" = "mgmt"
     "auto-project" = "true"
 }
+_baseClusterLabels = option("clusterLabels") or (_defaultClusterLabels if not _platformFeatures else {})
+_clusterLabels = _baseClusterLabels | _featureLabels
 
 # Free-form annotations merged onto the ArgoCD cluster Secret. Useful
 # for AppSets that read chart values via

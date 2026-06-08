@@ -424,4 +424,3 @@ schema ResourcesStuttgartThingsComV1alpha1HarvesterVMStatusVm:
     """
     name?: str
     ready?: bool
-

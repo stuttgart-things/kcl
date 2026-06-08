@@ -1,0 +1,94 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: clusterbook-cluster-detailed
+  title: Clusterbook Cluster (Detailed)
+  description: Register a default/classic cluster with full control over network pool, ArgoCD server URL behaviour, kubeconfig secret and DNS.
+  tags:
+    - clusterbook
+    - cluster
+    - argocd
+    - kubernetes
+    - detailed
+spec:
+  type: clusterbookcluster
+  source: oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen
+  tag: 0.4.0
+  parameters:
+    - name: name
+      title: Cluster Name
+      type: string
+      required: true
+      default: dev-cluster
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "metadata.name"
+
+    - name: clusterName
+      title: Clusterbook Cluster Name
+      type: string
+      required: false
+      description: "clusterbook cluster identifier and ArgoCD cluster name (defaults to the cluster name above)"
+
+    - name: networkKey
+      title: Network Pool
+      type: string
+      required: true
+      default: "10.31.101"
+      description: "clusterbook network pool that supplies the cluster VIP, e.g. 10.31.103"
+
+    - name: providerConfigName
+      title: Provider Config
+      type: string
+      default: default
+      description: "name for the auto-built providerConfigRef"
+
+    - name: argocdNamespace
+      title: ArgoCD Namespace
+      type: string
+      default: argocd
+      description: "namespace where the ArgoCD cluster Secret (and, by default, the kubeconfig Secret) is written"
+
+    - name: kubeconfigSecretName
+      title: Kubeconfig Secret Name
+      type: string
+      required: false
+      description: "name of the kubeconfig Secret (defaults to the cluster name)"
+
+    - name: createDNS
+      title: Create DNS Record
+      type: boolean
+      default: true
+      description: "ask clusterbook to create a wildcard DNS record"
+
+    - name: preserveKubeconfigServer
+      title: Preserve Kubeconfig Server URL
+      type: boolean
+      default: true
+      description: "keep data.server set to the kubeconfig's URL (takes precedence over Use FQDN As Server)"
+
+    - name: useFQDNAsServer
+      title: Use FQDN As Server
+      type: boolean
+      default: false
+      description: "rewrite data.server to the clusterbook FQDN (requires Create DNS Record)"
+
+    - name: serverSubdomain
+      title: Server Subdomain
+      type: string
+      default: api
+      description: "substitution label for the wildcard FQDN when Use FQDN As Server is enabled"
+      hidden: true
+
+    - name: serverPort
+      title: Server Port
+      type: number
+      default: 6443
+      description: "port appended to the ArgoCD server URL"
+      hidden: true
+
+    - name: releaseOnDelete
+      title: Release IP On Delete
+      type: boolean
+      default: true
+      description: "release the clusterbook IP reservation when the CR is deleted"

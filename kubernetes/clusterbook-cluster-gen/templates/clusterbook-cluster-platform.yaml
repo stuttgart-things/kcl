@@ -1,0 +1,117 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: clusterbook-cluster-platform
+  title: Clusterbook Cluster (Platform / Management)
+  description: Register a management cluster and select which network- and storage-platform components to enable. Each selected component is stamped as a "<key>: true" label on the ArgoCD cluster Secret, gating the matching ApplicationSet.
+  tags:
+    - clusterbook
+    - cluster
+    - argocd
+    - platform
+    - management
+spec:
+  type: clusterbookcluster
+  source: oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen
+  tag: 0.4.0
+  parameters:
+    - name: name
+      title: Cluster Name
+      type: string
+      required: true
+      default: crossplane-mgmt
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "metadata.name and (by default) the clusterbook/ArgoCD cluster name"
+
+    - name: networkKey
+      title: Network Pool
+      type: string
+      required: true
+      default: "192.168.10"
+      description: "network to reserve IP + FQDN from in the clusterbook backend, e.g. 192.168.10"
+
+    - name: providerConfigName
+      title: Provider Config
+      type: string
+      default: default
+      description: "the bundled ClusterbookProviderConfig"
+
+    - name: argocdNamespace
+      title: ArgoCD Namespace
+      type: string
+      default: argocd
+      description: "namespace where the ArgoCD cluster Secret (and kubeconfig Secret) is written"
+
+    - name: kubeconfigSecretKey
+      title: Kubeconfig Secret Key
+      type: string
+      default: kubeconfig
+      description: "data key inside the kubeconfig Secret that registers the cluster with ArgoCD"
+
+    - name: createDNS
+      title: Create DNS Record
+      type: boolean
+      default: true
+      description: "reserve the FQDN → produces the clusterbook fqdn annotation"
+
+    - name: useFQDNAsServer
+      title: Use FQDN As Server
+      type: boolean
+      default: false
+      description: "keep the ArgoCD server URL on the reserved IP (reachable); flip later to use the FQDN"
+
+    - name: preserveKubeconfigServer
+      title: Preserve Kubeconfig Server URL
+      type: boolean
+      default: true
+      description: "keep the kubeconfig's API server URL; don't rewrite it to the reserved IP"
+
+    - name: releaseOnDelete
+      title: Release IP On Delete
+      type: boolean
+      default: true
+      description: "release the clusterbook IP reservation when the CR is deleted"
+
+    # ---- platform feature gates -> ArgoCD cluster Secret labels ----
+    # Each selected key is stamped as "<key>: true" and gates the matching
+    # ApplicationSet. Umbrella gates (network-platform / storage-platform) must
+    # stay selected for their sub-components to take effect.
+    - name: platformFeatures
+      title: Platform Components
+      type: array
+      multiselect: true
+      description: "components to enable on this cluster (each becomes a '<key>: true' label)"
+      items:
+        type: string
+      default:
+        - auto-project
+        - network-platform
+        - network-platform/cilium-lb
+        - network-platform/cilium-gateway
+        - network-platform/cert-manager-install
+        - network-platform/cert-manager-selfsigned
+        - network-platform/cert-manager-cluster-ca
+        - network-platform/cert-manager-vault-pki
+        - network-platform/trust-manager-install
+        - network-platform/trust-manager-bundle
+        - storage-platform
+        - storage-platform/openebs
+      enum:
+        - auto-project
+        - network-platform
+        - network-platform/cilium-lb
+        - network-platform/cilium-gateway
+        - network-platform/cilium-gateway-secondary
+        - network-platform/cert-manager-install
+        - network-platform/cert-manager-selfsigned
+        - network-platform/cert-manager-cluster-ca
+        - network-platform/cert-manager-vault-pki
+        - network-platform/trust-manager-install
+        - network-platform/trust-manager-bundle
+        - storage-platform
+        - storage-platform/openebs
+        - storage-platform/longhorn
+        - storage-platform/nfs-csi-install
+        - storage-platform/nfs-csi-storageclasses
+        - storage-platform.stuttgart-things.com/nfs-config
