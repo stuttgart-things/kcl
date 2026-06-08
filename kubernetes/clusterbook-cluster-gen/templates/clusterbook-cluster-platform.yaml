@@ -4,7 +4,7 @@ kind: ClaimTemplate
 metadata:
   name: clusterbook-cluster-platform
   title: Clusterbook Cluster (Platform / Management)
-  description: Register a management cluster and select which network- and storage-platform components to enable. Each selected component is stamped as a "<key>: true" label on the ArgoCD cluster Secret, gating the matching ApplicationSet.
+  description: 'Register a management cluster and select which network- and storage-platform components to enable. Each selected component is stamped as a "<key>: true" label on the ArgoCD cluster Secret, gating the matching ApplicationSet.'
   tags:
     - clusterbook
     - cluster
