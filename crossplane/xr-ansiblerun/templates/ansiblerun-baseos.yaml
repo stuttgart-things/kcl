@@ -1,0 +1,88 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-ansiblerun-baseos
+  title: Crossplane Ansible Run (baseos)
+  description: Run the sthings.baseos.setup playbook against a target host. Image, collections and gitRevision come from the ansible-run-defaults EnvironmentConfig.
+  tags:
+    - ansible
+    - baseos
+    - tekton
+    - crossplane
+spec:
+  type: xr-ansiblerun
+  source: oci://ghcr.io/stuttgart-things/xr-ansiblerun
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: baseos
+      hidden: true
+
+    - name: name
+      title: AnsibleRun Name
+      type: string
+      required: true
+      default: ansible-run-test
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the AnsibleRun XR / claim"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: pipelineRunName
+      title: PipelineRun Name
+      type: string
+      required: true
+      default: run-ansible-baseos
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the rendered Tekton PipelineRun"
+
+    - name: namespace
+      title: Pipeline Namespace
+      type: string
+      default: tekton-ci
+      description: "Namespace where the PipelineRun executes"
+
+    - name: hosts
+      title: Target Host(s)
+      type: string
+      required: true
+      default: 192.168.10.149
+      description: "Target host(s) for the playbook. Comma-separated for multiple (builds the 'all' inventory group)"
+
+    - name: varsFile
+      title: Ansible Vars (file)
+      type: array
+      default:
+        - manage_filesystem+-false
+        - update_packages+-true
+        - ansible_become+-true
+        - ansible_become_method+-sudo
+      description: "Ansible vars passed to the playbook. manage_filesystem=false skips the LVM data-disk role; the rest do package updates + privilege escalation. Append env-specific overrides (e.g. vault_instances+-[\"https://vault.infra.sthings.lab\"])"
+
+    - name: crossplaneObjectName
+      title: Crossplane Object Name
+      type: string
+      default: run-ansible-test
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the provider-kubernetes Object wrapping the PipelineRun"
+
+    - name: crossplaneNamespace
+      title: Crossplane Object Namespace
+      type: string
+      default: default
+      description: "Namespace for the wrapped Object"
+
+    - name: crossplaneProviderConfig
+      title: Provider Config
+      type: string
+      default: in-cluster
+      description: "provider-kubernetes (Cluster)ProviderConfig the wrapped Object targets"

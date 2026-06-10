@@ -1,0 +1,64 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-ansiblerun-minimal
+  title: Crossplane Ansible Run (minimal)
+  description: Run an Ansible playbook via a Tekton PipelineRun - shared defaults (image, collections, credentials) come from the EnvironmentConfig.
+  tags:
+    - ansible
+    - tekton
+    - crossplane
+spec:
+  type: xr-ansiblerun
+  source: oci://ghcr.io/stuttgart-things/xr-ansiblerun
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: minimal
+      hidden: true
+
+    - name: name
+      title: AnsibleRun Name
+      type: string
+      required: true
+      default: ansible-run
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the AnsibleRun XR / claim"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Namespace of the XR on the management cluster"
+
+    - name: pipelineRunName
+      title: PipelineRun Name
+      type: string
+      required: true
+      default: run-ansible
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the rendered Tekton PipelineRun"
+
+    - name: namespace
+      title: Pipeline Namespace
+      type: string
+      default: tekton-ci
+      description: "Namespace where the PipelineRun executes (needs the ansible-credentials Secret)"
+
+    - name: gitRepoUrl
+      title: Git Repository URL
+      type: string
+      default: https://github.com/stuttgart-things/stage-time.git
+      description: "Git repository holding the pipeline definition"
+
+    - name: crossplaneProviderConfig
+      title: Provider Config
+      type: string
+      default: in-cluster
+      description: "provider-kubernetes (Cluster)ProviderConfig the wrapped Object targets"
