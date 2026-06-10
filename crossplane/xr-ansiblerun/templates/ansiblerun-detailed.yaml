@@ -1,0 +1,135 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-ansiblerun-detailed
+  title: Crossplane Ansible Run (detailed)
+  description: Run Ansible playbooks with explicit image, collections, storage, git revision and readiness derivation.
+  tags:
+    - ansible
+    - tekton
+    - crossplane
+    - detailed
+spec:
+  type: xr-ansiblerun
+  source: oci://ghcr.io/stuttgart-things/xr-ansiblerun
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: detailed
+      hidden: true
+
+    - name: name
+      title: AnsibleRun Name
+      type: string
+      required: true
+      default: ansible-run
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: pipelineRunName
+      title: PipelineRun Name
+      type: string
+      required: true
+      default: run-ansible
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: namespace
+      title: Pipeline Namespace
+      type: string
+      default: tekton-ci
+
+    - name: hosts
+      title: Target Host(s)
+      type: string
+      default: ""
+      description: "Target host(s). Comma-separated for multiple. Leave empty to rely on ansibleTargetHost"
+
+    - name: gitRepoUrl
+      title: Git Repository URL
+      type: string
+      default: https://github.com/stuttgart-things/stage-time.git
+
+    - name: gitRevision
+      title: Git Revision
+      type: string
+      default: ""
+      description: "Git branch/revision. Leave empty to inherit the EnvironmentConfig value"
+
+    - name: gitPath
+      title: Git Pipeline Path
+      type: string
+      default: ""
+      description: "Path to the pipeline YAML in the repo"
+
+    - name: ansibleWorkingImage
+      title: Ansible Working Image
+      type: string
+      default: ""
+      description: "Override the Ansible container image. Leave empty to inherit the EnvironmentConfig value"
+
+    - name: ansibleVerbosity
+      title: Ansible Verbosity
+      type: string
+      default: "2"
+      pattern: "^[0-9]+$"
+
+    - name: storageSize
+      title: Workspace Storage Size
+      type: string
+      default: 20Mi
+
+    - name: storageClass
+      title: Workspace StorageClass
+      type: string
+      default: ""
+      description: "Leave empty to use the module default (openebs-hostpath)"
+
+    - name: ansibleCredentialsSecretName
+      title: Ansible Credentials Secret
+      type: string
+      default: ""
+      description: "Leave empty to inherit the EnvironmentConfig value"
+
+    - name: environmentConfig
+      title: EnvironmentConfig
+      type: string
+      default: default
+      description: "Selects the per-environment EnvironmentConfig of shared defaults"
+
+    - name: deriveReadiness
+      title: Derive Readiness
+      type: boolean
+      default: true
+      description: "Become Ready only once the PipelineRun's Succeeded condition is True"
+
+    - name: crossplaneObjectName
+      title: Crossplane Object Name
+      type: string
+      default: ""
+      description: "Leave empty to reuse the PipelineRun name"
+
+    - name: crossplaneNamespace
+      title: Crossplane Object Namespace
+      type: string
+      default: default
+
+    - name: crossplaneProviderConfig
+      title: Provider Config
+      type: string
+      default: in-cluster
+
+    - name: crossplaneTimeout
+      title: Crossplane Timeout
+      type: string
+      default: "60"
+      pattern: "^[0-9]+$"

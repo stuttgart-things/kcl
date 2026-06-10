@@ -1,0 +1,34 @@
+# Proven-working example: an AnsibleRun driven through the high-level
+# `ansible-run` Configuration. Runs the sthings.baseos.setup playbook against a
+# single target host via a Tekton PipelineRun (wrapped in a provider-kubernetes
+# Object on in-cluster). Reproduce with the baseos template:
+#   kcl run . -D templateName=baseos -D name=ansible-run-test \
+#     -D pipelineRunName=run-ansible-baseos -D namespace=tekton-ci \
+#     -D hosts=192.168.10.149 -D crossplaneProviderConfig=in-cluster \
+#     -D crossplaneObjectName=run-ansible-test
+#
+# ansibleWorkingImage + ansibleExtraCollections + gitRevision are intentionally
+# OMITTED so they fall through to the `ansible-run-defaults` EnvironmentConfig.
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: AnsibleRun
+metadata:
+  name: ansible-run-test
+  namespace: default
+spec:
+  pipelineRunName: run-ansible-baseos
+  namespace: tekton-ci
+  gitRepoUrl: https://github.com/stuttgart-things/stage-time.git
+  ansiblePlaybooks:
+    - sthings.baseos.setup
+  ansibleVarsFile:
+    - manage_filesystem+-false
+    - update_packages+-true
+    - ansible_become+-true
+    - ansible_become_method+-sudo
+    - vault_instances+-["https://vault.infra.sthings.lab"]
+  ansibleVarsInventory:
+    - 'all+["192.168.10.149"]'
+  wrapInCrossplane: true
+  crossplaneObjectName: run-ansible-test
+  crossplaneNamespace: default
+  crossplaneProviderConfig: in-cluster
