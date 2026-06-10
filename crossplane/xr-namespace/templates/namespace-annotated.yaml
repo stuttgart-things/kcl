@@ -1,0 +1,52 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-namespace-annotated
+  title: Crossplane Managed Namespace (annotated)
+  description: Creates/adopts a Namespace on a target cluster with a user-defined set of annotations.
+  tags:
+    - namespace
+    - crossplane
+spec:
+  type: xr-namespace
+  source: oci://ghcr.io/stuttgart-things/xr-namespace
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: annotated
+      hidden: true
+
+    - name: name
+      title: Namespace Name
+      type: string
+      required: true
+      default: demo-ns
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: providerConfig
+      title: Target cluster
+      type: string
+      default: harvester
+      enum:
+        - in-cluster
+        - harvester
+
+    - name: annotations
+      title: Namespace Annotations
+      type: object
+      default: {}
+      description: >
+        Arbitrary annotations applied to the Namespace, as a key/value map the
+        user defines. Example for the Harvester "Default" Rancher project so the
+        UI lists the VMs: {"field.cattle.io/projectId": "c-cxgxd:p-sfgv4"}.
