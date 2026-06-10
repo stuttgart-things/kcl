@@ -1,0 +1,18 @@
+# Proven-working example: a medium Harvester / KubeVirt VM driven through the
+# high-level virtual-machine Configuration. provider+environment=harvester routes
+# to a HarvesterVM on the remote Harvester via the EnvironmentConfig; os=ubuntu24
+# maps to imageId default/u26-dev; ansible=false keeps it a plain VM.
+# Reproduce: kcl run . -D templateName=detailed -D name=vm-harvester-1 \
+#   -D size=medium -D provider=harvester -D environment=harvester \
+#   -D os=ubuntu24 -D ansible=false
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: XVirtualMachine
+metadata:
+  name: vm-harvester-1
+  namespace: default
+spec:
+  size: medium
+  provider: harvester
+  environment: harvester
+  os: ubuntu24
+  ansible: false
