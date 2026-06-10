@@ -1,0 +1,44 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-rancher-cluster-minimal
+  title: Rancher Cluster (minimal)
+  description: Provision a Rancher cluster via the name/environment abstraction - distro, version, placement and the Harvester infra come from the EnvironmentConfig.
+  tags:
+    - rancher
+    - cluster
+    - crossplane
+spec:
+  type: xr-rancher-cluster
+  source: oci://ghcr.io/stuttgart-things/xr-rancher-cluster
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: minimal
+      hidden: true
+
+    - name: name
+      title: Cluster Name
+      type: string
+      required: true
+      default: k3s-min
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Rancher cluster (also the kubeconfig Secret prefix and ClusterProviderConfig name)"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Namespace of the XR on the management cluster"
+
+    - name: environmentConfig
+      title: EnvironmentConfig
+      type: string
+      default: default
+      description: "Selects the EnvironmentConfig carrying providerConfigRef, distro, version, rancherNamespace and the Harvester/Argo CD defaults"

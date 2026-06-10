@@ -1,0 +1,114 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-rancher-cluster-detailed
+  title: Rancher Cluster (detailed)
+  description: Provision a generic (custom-node) Rancher cluster with explicit distro, version, namespaces, bootstrap namespace and full Argo CD registration.
+  tags:
+    - rancher
+    - cluster
+    - crossplane
+    - detailed
+spec:
+  type: xr-rancher-cluster
+  source: oci://ghcr.io/stuttgart-things/xr-rancher-cluster
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: detailed
+      hidden: true
+
+    - name: name
+      title: Cluster Name
+      type: string
+      required: true
+      default: rke2-prod
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: environmentConfig
+      title: EnvironmentConfig
+      type: string
+      default: default
+
+    - name: infrastructure
+      title: Infrastructure
+      type: string
+      default: generic
+      enum:
+        - generic
+        - harvester
+      description: "generic = custom-node cluster (manual registration); harvester = VM nodes on a Harvester cluster"
+
+    - name: providerConfigRef
+      title: Control-Plane ProviderConfig
+      type: string
+      default: ""
+      description: "ClusterProviderConfig of the control-plane cluster. Leave empty to inherit the EnvironmentConfig value"
+
+    - name: rancherProviderConfigRef
+      title: Rancher ProviderConfig (split)
+      type: string
+      default: ""
+      description: "ClusterProviderConfig targeting the Rancher management cluster. Set to split Crossplane and Rancher; leave empty to co-locate"
+
+    - name: distro
+      title: Distribution
+      type: string
+      default: rke2
+      enum:
+        - k3s
+        - rke2
+      description: "Keep consistent with kubernetesVersion's +k3s/+rke2 suffix"
+
+    - name: kubernetesVersion
+      title: Kubernetes Version
+      type: string
+      default: ""
+      description: "e.g. v1.34.7+k3s1 or v1.31.5+rke2r1. Leave empty to inherit the EnvironmentConfig value"
+
+    - name: rancherNamespace
+      title: Rancher Namespace
+      type: string
+      default: ""
+      description: "Namespace holding the provisioning Cluster + kubeconfig Secret. Leave empty to inherit (fleet-default)"
+
+    - name: bootstrapNamespace
+      title: Bootstrap Namespace
+      type: string
+      default: crossplane-bootstrap
+      description: "Namespace bootstrapped on the downstream cluster to prove the kubeconfig works"
+
+    - name: argocdRegister
+      title: Register in Argo CD
+      type: boolean
+      default: false
+      description: "Register the new cluster in Argo CD via clusterbook-operator"
+
+    - name: argocdNamespace
+      title: Argo CD Namespace
+      type: string
+      default: ""
+      description: "Only used when Register in Argo CD is on. Leave empty to inherit (argocd)"
+
+    - name: argocdProviderConfigRef
+      title: Argo CD ProviderConfig
+      type: string
+      default: ""
+      description: "ClusterProviderConfig of the cluster running Argo CD + clusterbook-operator. Leave empty to inherit"
+
+    - name: argocdServer
+      title: Argo CD Server Override
+      type: string
+      default: ""
+      description: "Downstream API endpoint (https://host:6443). Normally left empty (auto-discovered); set only for HA VIP/LB"
