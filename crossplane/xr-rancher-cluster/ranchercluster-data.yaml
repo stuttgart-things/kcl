@@ -1,0 +1,25 @@
+# Proven-working example: a Harvester-backed k3s Rancher cluster, split control
+# plane, driven through the high-level `rancher-cluster` Configuration. All
+# lab-constant config (providerConfigRef + rancherProviderConfigRef,
+# rancherNamespace, distro, kubernetesVersion, the Harvester image/network/
+# credential/vmNamespace/sshUser and the Argo CD target) comes from the
+# `rancher-cluster-defaults` EnvironmentConfig selected by environmentConfig.
+# This XR only carries per-cluster values: name, sizing and the Argo CD toggle.
+# Reproduce with the harvester template:
+#   kcl run . -D templateName=harvester -D name=k3s-xp \
+#     -D cpuCount=6 -D memorySize=6 -D quantity=1 -D argocdRegister=true
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: RancherCluster
+metadata:
+  name: k3s-xp
+  namespace: default
+spec:
+  name: k3s-xp
+  environmentConfig: default
+  infrastructure: harvester
+  harvester:
+    cpuCount: 6
+    memorySize: 6
+    quantity: 1
+  argocd:
+    register: true

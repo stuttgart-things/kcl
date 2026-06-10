@@ -1,0 +1,75 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-rancher-cluster-harvester
+  title: Rancher Cluster (Harvester)
+  description: Provision a Harvester-backed Rancher cluster. infrastructure is fixed to harvester; image, network, credential and Argo CD target come from the EnvironmentConfig. This claim sets per-node sizing and the Argo CD toggle.
+  tags:
+    - rancher
+    - cluster
+    - harvester
+    - crossplane
+spec:
+  type: xr-rancher-cluster
+  source: oci://ghcr.io/stuttgart-things/xr-rancher-cluster
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: harvester
+      hidden: true
+
+    - name: name
+      title: Cluster Name
+      type: string
+      required: true
+      default: k3s-xp
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Rancher cluster"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: environmentConfig
+      title: EnvironmentConfig
+      type: string
+      default: default
+      description: "Selects the EnvironmentConfig carrying the Harvester infra identity and the Argo CD target"
+
+    - name: cpuCount
+      title: vCPUs per Node
+      type: string
+      default: "4"
+      pattern: "^[0-9]+$"
+
+    - name: memorySize
+      title: Memory per Node (GiB)
+      type: string
+      default: "4"
+      pattern: "^[0-9]+$"
+
+    - name: diskSize
+      title: Root Disk per Node (GiB)
+      type: string
+      default: "40"
+      pattern: "^[0-9]+$"
+
+    - name: quantity
+      title: Node Count
+      type: string
+      default: "1"
+      pattern: "^[0-9]+$"
+      description: "Number of nodes in the machine pool"
+
+    - name: argocdRegister
+      title: Register in Argo CD
+      type: boolean
+      default: false
+      description: "Register the new cluster in Argo CD via clusterbook-operator (server endpoint auto-discovered)"
