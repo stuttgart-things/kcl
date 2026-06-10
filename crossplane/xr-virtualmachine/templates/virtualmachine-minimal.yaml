@@ -1,0 +1,67 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-virtualmachine-minimal
+  title: Crossplane Virtual Machine (minimal)
+  description: Create a VM via the size/provider/environment abstraction - placement and credentials come from the EnvironmentConfig.
+  tags:
+    - vm
+    - crossplane
+spec:
+  type: xr-virtualmachine
+  source: oci://ghcr.io/stuttgart-things/xr-virtualmachine
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: minimal
+      hidden: true
+
+    - name: name
+      title: VM Name
+      type: string
+      required: true
+      default: demo-vm
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the XVirtualMachine claim / VM"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: size
+      title: T-Shirt Size
+      type: string
+      default: small
+      enum:
+        - small
+        - medium
+        - large
+        - xlarge
+      description: "Maps to cpu/ram/disk"
+
+    - name: provider
+      title: Infrastructure Provider
+      type: string
+      default: vsphere
+      enum:
+        - vsphere
+        - proxmox
+        - harvester
+      description: "vsphere/proxmox emit a VMProvision (OpenTofu); harvester emits a HarvesterVM (KubeVirt)"
+
+    - name: environment
+      title: Environment
+      type: string
+      default: labul
+      enum:
+        - labul
+        - labda
+        - harvester
+      description: "Selects the EnvironmentConfig carrying the per-provider topology"

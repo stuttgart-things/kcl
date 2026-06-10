@@ -1,0 +1,109 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-virtualmachine-detailed
+  title: Crossplane Virtual Machine (detailed)
+  description: Create a VM with explicit os, count, ansible toggle and an optional ProviderConfig override.
+  tags:
+    - vm
+    - crossplane
+    - detailed
+spec:
+  type: xr-virtualmachine
+  source: oci://ghcr.io/stuttgart-things/xr-virtualmachine
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: detailed
+      hidden: true
+
+    - name: name
+      title: VM Name
+      type: string
+      required: true
+      default: demo-vm
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the XVirtualMachine claim / VM"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: size
+      title: T-Shirt Size
+      type: string
+      default: medium
+      enum:
+        - small
+        - medium
+        - large
+        - xlarge
+      description: "Maps to cpu/ram/disk"
+
+    - name: provider
+      title: Infrastructure Provider
+      type: string
+      default: vsphere
+      enum:
+        - vsphere
+        - proxmox
+        - harvester
+      description: "vsphere/proxmox emit a VMProvision (OpenTofu); harvester emits a HarvesterVM (KubeVirt)"
+
+    - name: environment
+      title: Environment
+      type: string
+      default: labul
+      enum:
+        - labul
+        - labda
+        - harvester
+      description: "Selects the EnvironmentConfig carrying the per-provider topology"
+
+    - name: os
+      title: OS / Image
+      type: string
+      default: ubuntu24
+      enum:
+        - ubuntu24
+        - sthings-u26
+        - sthings-u26-k3s
+        - rocky9-dev
+        - sthings-rocky9
+        - sthings-leap
+      description: "Image to use. ubuntu24 is the default alias for the Harvester u26-dev image."
+
+    - name: count
+      title: VM Count
+      type: string
+      default: "1"
+      pattern: "^[0-9]+$"
+      description: "Number of VMs to create"
+
+    - name: ansible
+      title: Run Ansible
+      type: boolean
+      default: true
+      description: "Run base-OS Ansible provisioning after VM creation"
+
+    - name: providerRefName
+      title: ProviderConfig Name (override)
+      type: string
+      default: ""
+      description: "Override the ProviderConfig reference. Leave empty to inherit the composition default."
+
+    - name: providerRefKind
+      title: ProviderConfig Kind (override)
+      type: string
+      default: ClusterProviderConfig
+      enum:
+        - ClusterProviderConfig
+        - ProviderConfig
+      description: "Only used when ProviderConfig Name is set"
