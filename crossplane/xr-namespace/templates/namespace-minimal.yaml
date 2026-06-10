@@ -11,7 +11,7 @@ metadata:
 spec:
   type: xr-namespace
   source: oci://ghcr.io/stuttgart-things/xr-namespace
-  tag: 0.1.0
+  tag: 0.1.1
   parameters:
     # Template selector
     - name: templateName

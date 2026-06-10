@@ -13,7 +13,7 @@ which declaratively creates/adopts a `Namespace` on a target cluster via the
 
 ```bash
 # minimal - just a name and a target cluster
-kcl run oci://ghcr.io/stuttgart-things/xr-namespace --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-namespace --tag 0.1.1 \
   -D templateName=minimal -D name=team-alpha -D providerConfig=in-cluster
 ```
 
@@ -21,7 +21,7 @@ kcl run oci://ghcr.io/stuttgart-things/xr-namespace --tag 0.1.0 \
 # annotated - generic annotations as a comma-separated key=value string.
 # Reproduces the Harvester `vms` case (assign the namespace to the Rancher
 # "Default" project so the UI lists the VMs running in it):
-kcl run oci://ghcr.io/stuttgart-things/xr-namespace --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-namespace --tag 0.1.1 \
   -D templateName=annotated -D name=vms -D providerConfig=harvester \
   -D annotations='field.cattle.io/projectId=c-cxgxd:p-sfgv4'
 ```
