@@ -1,0 +1,10 @@
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ManagedNamespace
+metadata:
+  name: vms
+  namespace: default
+spec:
+  providerConfigRef: harvester
+  name: vms
+  annotations:
+    field.cattle.io/projectId: c-cxgxd:p-sfgv4

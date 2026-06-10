@@ -1,0 +1,43 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-namespace-minimal
+  title: Crossplane Managed Namespace (minimal)
+  description: Creates/adopts a Namespace on a target cluster - just a name and a target cluster.
+  tags:
+    - namespace
+    - crossplane
+spec:
+  type: xr-namespace
+  source: oci://ghcr.io/stuttgart-things/xr-namespace
+  tag: 0.1.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: minimal
+      hidden: true
+
+    - name: name
+      title: Namespace Name
+      type: string
+      required: true
+      default: demo-ns
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: providerConfig
+      title: Target cluster
+      type: string
+      default: in-cluster
+      enum:
+        - in-cluster
+        - harvester
