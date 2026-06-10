@@ -26,6 +26,9 @@ kcl run oci://ghcr.io/stuttgart-things/xr-namespace --tag 0.1.0 \
   -D annotations='field.cattle.io/projectId=c-cxgxd:p-sfgv4'
 ```
 
-The `annotations` parameter accepts either a native key/value map (when driven
-through the claims CLI / `params`) or a comma-separated `key=value` string for
-`-D` CLI use, e.g. `field.cattle.io/projectId=c-cxgxd:p-sfgv4,owner=team-x`.
+The `annotations` parameter is a comma-separated `key=value` string, e.g.
+`field.cattle.io/projectId=c-cxgxd:p-sfgv4,owner=team-x`. It is a string (not an
+object) on purpose: the claim-machinery API renders OCI modules via `kcl -D
+key=value` and cannot round-trip object params, so a string is parsed in
+`main.k` instead. `providerConfig` is free text (no fixed enum) so profiles can
+target a ProviderConfig that isn't in the common list.

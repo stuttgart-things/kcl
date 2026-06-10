@@ -38,15 +38,19 @@ spec:
       title: Target cluster
       type: string
       default: harvester
-      enum:
-        - in-cluster
-        - harvester
+      description: >
+        Name of the Kubernetes (Cluster)ProviderConfig to target. Common values:
+        in-cluster, harvester. Free text - enter any ProviderConfig that exists
+        on crossplane-mgmt (useful when the profile targets a recently created
+        cluster not in the default list).
 
     - name: annotations
       title: Namespace Annotations
-      type: object
-      default: {}
+      type: string
+      default: ""
       description: >
-        Arbitrary annotations applied to the Namespace, as a key/value map the
-        user defines. Example for the Harvester "Default" Rancher project so the
-        UI lists the VMs: {"field.cattle.io/projectId": "c-cxgxd:p-sfgv4"}.
+        Annotations applied to the Namespace as a comma-separated list of
+        key=value pairs (the API cannot round-trip object params to KCL, so a
+        string is used). Example for the Harvester "Default" Rancher project so
+        the UI lists the VMs: field.cattle.io/projectId=c-cxgxd:p-sfgv4
+        Multiple: field.cattle.io/projectId=c-cxgxd:p-sfgv4,owner=team-x

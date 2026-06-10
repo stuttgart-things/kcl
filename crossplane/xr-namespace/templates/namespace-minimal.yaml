@@ -38,6 +38,8 @@ spec:
       title: Target cluster
       type: string
       default: in-cluster
-      enum:
-        - in-cluster
-        - harvester
+      description: >
+        Name of the Kubernetes (Cluster)ProviderConfig to target. Common values:
+        in-cluster, harvester. Free text - enter any ProviderConfig that exists
+        on crossplane-mgmt (useful when the profile targets a recently created
+        cluster not in the default list).
