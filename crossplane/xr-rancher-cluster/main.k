@@ -15,6 +15,9 @@ minimal   : Just the XRD-required `name` (+ environmentConfig). distro, version,
 harvester : Harvester preset (infrastructure=harvester). Exposes per-node sizing
             (cpu/memory/disk/quantity) and the Argo CD toggle; infra identity
             (image/network/credential) comes from the EnvironmentConfig.
+harvester-bootstrap : Like harvester, but Argo CD registration is ON by default and
+            the cluster ships bootstrap-ready: IP/DNS reservation + the full
+            platform-profile label set + vault-pki annotations baked in.
 detailed  : Generic (custom-node) cluster with explicit distro, kubernetesVersion,
             namespaces, bootstrap namespace and full Argo CD registration.
 """
@@ -69,6 +72,23 @@ _argocdNamespace = _spec?.argocd?.namespace or option("argocdNamespace") or _par
 _argocdProviderConfigRef = _spec?.argocd?.providerConfigRef or option("argocdProviderConfigRef") or _params?.argocdProviderConfigRef or ""
 _argocdServer = _spec?.argocd?.server or option("argocdServer") or _params?.argocdServer or ""
 
+# Bootstrap template - Argo CD registration defaults ON, with IP/DNS reservation
+# and the platform-profile label set + vault-pki annotations baked in.
+_registerBootstrap = _asBool(_registerRaw, True)
+
+# IP/DNS reservation. Resolve enabled without `or` so an explicit `false` is kept.
+_reservationEnabledOpt = option("reservationEnabled")
+_reservationEnabledRaw = _reservationEnabledOpt if _reservationEnabledOpt != Undefined else (_params?.reservationEnabled if _params?.reservationEnabled != Undefined else _spec?.argocd?.reservation?.enabled)
+_reservationEnabled = _asBool(_reservationEnabledRaw, True)
+_reservationNetworkKey = _spec?.argocd?.reservation?.networkKey or option("reservationNetworkKey") or _params?.reservationNetworkKey or ""
+_reservationProviderConfigRef = _spec?.argocd?.reservation?.providerConfigRef or option("reservationProviderConfigRef") or _params?.reservationProviderConfigRef or ""
+
+# vault-pki ClusterIssuer parameters (stamped as annotations on the cluster Secret).
+_vaultServer = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/vault-server"] or option("vaultServer") or _params?.vaultServer or "https://vault.infra.sthings.lab"
+_vaultPkiPath = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/vault-pki-path"] or option("vaultPkiPath") or _params?.vaultPkiPath or "pki/sign/sthings-lab"
+_vaultTokenSecret = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/vault-token-secret"] or option("vaultTokenSecret") or _params?.vaultTokenSecret or "cert-manager-vault-token"  # pragma: allowlist secret
+_wildcardIssuerName = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/wildcard-issuer-name"] or option("wildcardIssuerName") or _params?.wildcardIssuerName or "vault-pki"
+
 # Minimal Template - only the XRD-required `name` plus the EnvironmentConfig
 # selector. Everything else resolves from the EnvironmentConfig.
 if _templateName == "minimal":
@@ -116,6 +136,85 @@ if _templateName == "harvester":
                     namespace = _argocdNamespace
                 if _argocdProviderConfigRef:
                     providerConfigRef = _argocdProviderConfigRef
+            }
+        }
+    }
+
+# Harvester Bootstrap Template - same Harvester preset as `harvester`, but Argo CD
+# registration is ON by default and the cluster ships with the full platform-profile
+# label set + IP/DNS reservation + vault-pki annotations baked in. Mirrors the
+# crossplane-mgmt showcase XR (k3s-xp): cluster-bootstrap-ready straight away.
+if _templateName == "harvester-bootstrap":
+    rc.RancherCluster {
+        metadata = v1.ObjectMeta {
+            name = _name
+            namespace = _claimNamespace
+        }
+
+        spec = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpec {
+            name = _name
+            environmentConfig = _environmentConfig
+            infrastructure = "harvester"
+            if _distro:
+                distro = _distro
+            if _kubernetesVersion:
+                kubernetesVersion = _kubernetesVersion
+            harvester = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpecHarvester {
+                cpuCount = _cpuCount
+                memorySize = _memorySize
+                diskSize = _diskSize
+                quantity = _quantity
+                if _sshUser:
+                    sshUser = _sshUser
+            }
+            argocd = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpecArgocd {
+                register = _registerBootstrap
+                if _argocdNamespace:
+                    namespace = _argocdNamespace
+                if _argocdProviderConfigRef:
+                    providerConfigRef = _argocdProviderConfigRef
+                if _argocdServer:
+                    server = _argocdServer
+                # IP/DNS reservation via clusterbook-operator. REQUIRED for
+                # network-platform: every network-platform AppSet selector needs the
+                # allocation-ip anchor, only stamped when an IP is reserved.
+                reservation = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpecArgocdReservation {
+                    enabled = _reservationEnabled
+                    createDNS = _reservationEnabled
+                    if _reservationNetworkKey:
+                        networkKey = _reservationNetworkKey
+                    if _reservationProviderConfigRef:
+                        providerConfigRef = _reservationProviderConfigRef
+                }
+                # Platform profile toggles -> copied onto the ClusterbookCluster /
+                # Argo CD cluster Secret; the platforms/<profile> AppSets select on
+                # them. storage-platform (openebs) + security-platform
+                # (external-secrets + kyverno) + network-platform (cert-manager chain
+                # + trust-manager + vault-pki ClusterIssuer). Cilium components stay
+                # OFF (k3s default flannel, not Cilium CNI).
+                labels = {
+                    "storage-platform" = "true"
+                    "storage-platform/openebs" = "true"
+                    "security-platform" = "true"
+                    "security-platform/external-secrets" = "true"
+                    "security-platform/kyverno" = "true"
+                    "network-platform" = "true"
+                    "network-platform/cert-manager-install" = "true"
+                    "network-platform/cert-manager-selfsigned" = "true"
+                    "network-platform/cert-manager-cluster-ca" = "true"
+                    "network-platform/cert-manager-vault-pki" = "true"
+                    "network-platform/trust-manager-install" = "true"
+                    "network-platform/trust-manager-bundle" = "true"
+                }
+                # Component parameters. The vault-pki ClusterIssuer reads these; the
+                # token Secret is provisioned into cert-manager by the
+                # vault-pki-secrets Configuration.
+                annotations = {
+                    "clusterbook.stuttgart-things.com/vault-server" = _vaultServer
+                    "clusterbook.stuttgart-things.com/vault-pki-path" = _vaultPkiPath
+                    "clusterbook.stuttgart-things.com/vault-token-secret" = _vaultTokenSecret
+                    "clusterbook.stuttgart-things.com/wildcard-issuer-name" = _wildcardIssuerName
+                }
             }
         }
     }
