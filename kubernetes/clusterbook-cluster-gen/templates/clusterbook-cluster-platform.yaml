@@ -4,7 +4,7 @@ kind: ClaimTemplate
 metadata:
   name: clusterbook-cluster-platform
   title: Clusterbook Cluster (Platform / Management)
-  description: 'Register a management cluster and select which network- and storage-platform components to enable. Each selected component is stamped as a "<key>: true" label on the ArgoCD cluster Secret, gating the matching ApplicationSet.'
+  description: 'Register a management cluster and select which cicd-, network-, storage- and security-platform components to enable. Each selected component is stamped as a "<key>: true" label on the ArgoCD cluster Secret, gating the matching ApplicationSet.'
   tags:
     - clusterbook
     - cluster
@@ -14,7 +14,7 @@ metadata:
 spec:
   type: clusterbookcluster
   source: oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen
-  tag: 0.4.0
+  tag: 0.5.0
   parameters:
     - name: name
       title: Cluster Name
@@ -86,6 +86,11 @@ spec:
         type: string
       default:
         - auto-project
+        - cicd-platform
+        - cicd-platform/crossplane
+        - cicd-platform/kro
+        - cicd-platform/tekton
+        - cicd-platform/machinery
         - network-platform
         - network-platform/cilium-lb
         - network-platform/cilium-gateway
@@ -97,8 +102,23 @@ spec:
         - network-platform/trust-manager-bundle
         - storage-platform
         - storage-platform/openebs
+        - storage-platform/nfs-csi-install
+        - storage-platform/nfs-csi-storageclasses
+        - storage-platform.stuttgart-things.com/nfs-config
+        - security-platform
+        - security-platform/external-secrets
+        - security-platform/kyverno
       enum:
         - auto-project
+        - cicd-platform
+        - cicd-platform/crossplane
+        - cicd-platform/kro
+        - cicd-platform/tekton
+        - cicd-platform/machinery
+        - cicd-platform/dapr
+        - cicd-platform/kargo
+        - cicd-platform/argo-rollouts
+        - cicd-platform/openebs
         - network-platform
         - network-platform/cilium-lb
         - network-platform/cilium-gateway
@@ -115,3 +135,6 @@ spec:
         - storage-platform/nfs-csi-install
         - storage-platform/nfs-csi-storageclasses
         - storage-platform.stuttgart-things.com/nfs-config
+        - security-platform
+        - security-platform/external-secrets
+        - security-platform/kyverno

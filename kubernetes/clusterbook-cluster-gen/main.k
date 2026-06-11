@@ -118,4 +118,5 @@ _clusterbookCluster = schema.ClusterbookCluster {
     spec = _spec
 }
 
-items = [_clusterbookCluster]
+# Render a single ClusterbookCluster document (not a list/items wrapper)
+_clusterbookCluster

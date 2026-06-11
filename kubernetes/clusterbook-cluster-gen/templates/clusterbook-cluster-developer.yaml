@@ -14,7 +14,7 @@ metadata:
 spec:
   type: clusterbookcluster
   source: oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen
-  tag: 0.4.0
+  tag: 0.5.0
   parameters:
     # ---- the essentials a developer picks ----
     - name: name
