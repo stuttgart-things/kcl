@@ -1,0 +1,119 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: xr-rancher-cluster-harvester-bootstrap
+  title: Rancher Cluster (Harvester, bootstrap-ready)
+  description: Provision a Harvester-backed Rancher cluster that is bootstrap-ready out of the box. Same Harvester preset as the harvester template, but Argo CD registration is ON by default, an IP/DNS reservation is requested, and the full platform-profile label set (storage/security/network) plus vault-pki annotations are baked in. Mirrors the crossplane-mgmt showcase cluster (k3s-xp).
+  tags:
+    - rancher
+    - cluster
+    - harvester
+    - bootstrap
+    - argocd
+    - crossplane
+spec:
+  type: xr-rancher-cluster
+  source: oci://ghcr.io/stuttgart-things/xr-rancher-cluster
+  tag: 0.2.0
+  parameters:
+    # Template selector
+    - name: templateName
+      title: Template
+      type: string
+      default: harvester-bootstrap
+      hidden: true
+
+    - name: name
+      title: Cluster Name
+      type: string
+      required: true
+      default: k3s-xp
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "Name of the Rancher cluster"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      required: true
+      default: default
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+
+    - name: environmentConfig
+      title: EnvironmentConfig
+      type: string
+      default: default
+      description: "Selects the EnvironmentConfig carrying the Harvester infra identity and the Argo CD target"
+
+    - name: cpuCount
+      title: vCPUs per Node
+      type: string
+      default: "6"
+      pattern: "^[0-9]+$"
+
+    - name: memorySize
+      title: Memory per Node (GiB)
+      type: string
+      default: "6"
+      pattern: "^[0-9]+$"
+
+    - name: diskSize
+      title: Root Disk per Node (GiB)
+      type: string
+      default: "40"
+      pattern: "^[0-9]+$"
+
+    - name: quantity
+      title: Node Count
+      type: string
+      default: "1"
+      pattern: "^[0-9]+$"
+      description: "Number of nodes in the machine pool"
+
+    - name: argocdRegister
+      title: Register in Argo CD
+      type: boolean
+      default: true
+      description: "Register the new cluster in Argo CD via clusterbook-operator (server endpoint auto-discovered). ON by default for bootstrap clusters"
+
+    - name: reservationEnabled
+      title: Reserve IP / DNS
+      type: boolean
+      default: true
+      description: "Reserve an IP + create the DNS record via clusterbook-operator. REQUIRED for network-platform AppSets (they need the allocation-ip anchor)"
+
+    - name: reservationNetworkKey
+      title: Reservation Network Key
+      type: string
+      default: ""
+      description: "Network prefix to reserve the IP from (e.g. '192.168.10'). Leave empty to inherit the EnvironmentConfig value"
+
+    - name: reservationProviderConfigRef
+      title: Reservation ProviderConfig
+      type: string
+      default: ""
+      description: "ClusterbookProviderConfig backing the reservation. Leave empty to inherit (default)"
+
+    - name: vaultServer
+      title: Vault Server
+      type: string
+      default: "https://vault.infra.sthings.lab"
+      description: "Vault server URL for the vault-pki ClusterIssuer"
+
+    - name: vaultPkiPath
+      title: Vault PKI Sign Path
+      type: string
+      default: "pki/sign/sthings-lab"
+      description: "Vault PKI sign path for the vault-pki ClusterIssuer"
+
+    - name: vaultTokenSecret
+      title: Vault Token Secret
+      type: string
+      default: "cert-manager-vault-token"
+      description: "Name of the token Secret provisioned into cert-manager by the vault-pki-secrets Configuration"
+
+    - name: wildcardIssuerName
+      title: Wildcard Issuer Name
+      type: string
+      default: "vault-pki"
+      description: "ClusterIssuer name used for the wildcard / gateway-tls certificate"
