@@ -27,6 +27,9 @@ Variables are defined with underscore prefix (private) to prevent them from appe
 | Different mount path | `-D mountBasePath="/data"` |
 | Custom registry mirrors | `-D 'registryMirrors=["https://my-registry.com"]'` |
 | Enable kube-proxy | `-D kubeProxyMode="iptables"` |
+| Change number of workers | `-D workerCount=3` |
+| Enable ingress (ingress-ready + 80/443) | `-D ingressReady=True` |
+| Ingress on non-privileged host ports | `-D ingressReady=True -D ingressHttpHostPort=8080 -D ingressHttpsHostPort=8443` |
 | Use preset config | `kcl run main.k examples/dev-cluster.k` |
 
 ### Basic Configuration
@@ -60,6 +63,22 @@ Variables are defined with underscore prefix (private) to prevent them from appe
 
 **Generated ports**: API server port + range of ports (e.g., 32443-32448)
 
+### Worker Nodes
+
+| Option Name | Default | Description |
+|----------|---------|-------------|
+| `workerCount` | `2` | Number of worker nodes to generate (`0` = control-plane only) |
+
+### Ingress
+
+| Option Name | Default | Description |
+|----------|---------|-------------|
+| `ingressReady` | `False` | Add the `ingress-ready=true` node label (via `kubeadmConfigPatches`) to the control-plane and publish HTTP/HTTPS host ports — required by e.g. ingress-nginx on kind |
+| `ingressHttpHostPort` | `80` | Host port mapped to container port `80` when `ingressReady=True` |
+| `ingressHttpsHostPort` | `443` | Host port mapped to container port `443` when `ingressReady=True` |
+
+> Only one cluster per host can own ports `80`/`443`. To run several clusters, give the extra ones non-privileged host ports, e.g. `-D ingressHttpHostPort=8080 -D ingressHttpsHostPort=8443`.
+
 ### Storage Mounts (Worker Nodes)
 
 | Option Name | Default | Description |
@@ -67,9 +86,9 @@ Variables are defined with underscore prefix (private) to prevent them from appe
 | `mountBasePath` | `"/mnt"` | Base path on the host for mounts |
 | `containerMountPath` | `"/data"` | Path inside the container |
 
-**Generated mount paths**:
+**Generated mount paths** (one per worker, `1..workerCount`):
 - Worker 1: `${mountBasePath}/${clusterName}1` → `${containerMountPath}`
-- Worker 2: `${mountBasePath}/${clusterName}2` → `${containerMountPath}`
+- Worker N: `${mountBasePath}/${clusterName}N` → `${containerMountPath}`
 
 ### Container Registry Mirrors
 

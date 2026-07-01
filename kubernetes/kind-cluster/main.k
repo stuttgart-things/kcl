@@ -23,6 +23,27 @@ _mountBasePath = option("mountBasePath") or "/mnt"
 _clusterName = option("clusterName") or "platform-cluster"
 _containerMountPath = option("containerMountPath") or "/data"
 
+# Worker node count (use != None so workerCount=0 is honoured, not treated as falsy)
+_workerCount = option("workerCount") if option("workerCount") != None else 2
+
+# Ingress: add the `ingress-ready=true` node label (required by e.g. ingress-nginx
+# on kind) and, optionally, publish HTTP/HTTPS host ports on the control-plane node.
+_ingressReady = option("ingressReady") if option("ingressReady") != None else False
+_ingressHttpHostPort = option("ingressHttpHostPort") or 80
+_ingressHttpsHostPort = option("ingressHttpsHostPort") or 443
+
+_ingressReadyPatches = [
+    """kind: InitConfiguration
+nodeRegistration:
+  kubeletExtraArgs:
+    node-labels: "ingress-ready=true"
+"""
+]
+_ingressPortMappings = [
+    {containerPort = 80, hostPort = _ingressHttpHostPort, protocol = "TCP"}
+    {containerPort = 443, hostPort = _ingressHttpsHostPort, protocol = "TCP"}
+] if _ingressReady else []
+
 # Container registry mirror configuration
 _registryMirrors = option("registryMirrors") if option("registryMirrors") != None else [
     "https://registry-1.docker.io"
@@ -45,18 +66,16 @@ _cluster = schema.Cluster {
         {
             role = "control-plane"
             image = _nodeImage
-            extraPortMappings = _extraPortMappings
-        },
+            extraPortMappings = _extraPortMappings + _ingressPortMappings
+            if _ingressReady:
+                kubeadmConfigPatches = _ingressReadyPatches
+        }
+    ] + [
         {
             role = "worker"
             image = _nodeImage
-            extraMounts = [{hostPath = "${_mountBasePath}/${_clusterName}1", containerPath = _containerMountPath}]
-        },
-        {
-            role = "worker"
-            image = _nodeImage
-            extraMounts = [{hostPath = "${_mountBasePath}/${_clusterName}2", containerPath = _containerMountPath}]
-        },
+            extraMounts = [{hostPath = "${_mountBasePath}/${_clusterName}${i + 1}", containerPath = _containerMountPath}]
+        } for i in range(_workerCount)
     ]
     containerdConfigPatches = [
         """[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
