@@ -1,5 +1,6 @@
 # main.k
-import .schema  # Relative import for schema.k in the same directory
+# Relative import for schema.k in the same directory
+import .schema
 
 # Configuration variables (underscore prefix prevents them from being exported)
 _nodeImage = option("nodeImage") or "kindest/node:v1.34.0"
@@ -70,13 +71,11 @@ _cluster = schema.Cluster {
             if _ingressReady:
                 kubeadmConfigPatches = _ingressReadyPatches
         }
-    ] + [
-        {
-            role = "worker"
-            image = _nodeImage
-            extraMounts = [{hostPath = "${_mountBasePath}/${_clusterName}${i + 1}", containerPath = _containerMountPath}]
-        } for i in range(_workerCount)
-    ]
+    ] + [{
+        role = "worker"
+        image = _nodeImage
+        extraMounts = [{hostPath = "${_mountBasePath}/${_clusterName}${i + 1}", containerPath = _containerMountPath}]
+    } for i in range(_workerCount)]
     containerdConfigPatches = [
         """[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
   endpoint = [${_mirrorEndpoints}]"""
