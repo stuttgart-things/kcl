@@ -9,6 +9,7 @@ This directory contains example configuration files demonstrating various cluste
 | [custom-ports.k](custom-ports.k) | Non-standard port requirements | Custom port list (6443, 8080, 8443, 9090, 3000) |
 | [minimal-cluster.k](minimal-cluster.k) | Testing, CI/CD | Only API port, no custom registry |
 | [dev-cluster.k](dev-cluster.k) | Local development | Latest K8s, standard ports, kube-proxy enabled |
+| [ingress-cluster.k](ingress-cluster.k) | Ingress on kind (ingress-nginx) | `ingress-ready=true` label + 80/443 published, 1 worker |
 
 ## Available Examples
 

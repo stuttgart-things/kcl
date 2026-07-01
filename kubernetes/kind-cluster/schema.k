@@ -13,6 +13,7 @@ schema Node:
     image: str
     extraPortMappings?: [PortMapping]
     extraMounts?: [ExtraMount]
+    kubeadmConfigPatches?: [str]
 
 schema Networking:
     apiServerAddress: str
