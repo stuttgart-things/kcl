@@ -196,7 +196,7 @@ if _templateName == "harvester-bootstrap":
                     "storage-platform" = "true"
                     "storage-platform/openebs" = "true"
                     "security-platform" = "true"
-                    "security-platform/external-secrets" = "true"
+                    "security-platform/external-secrets" = "true" # pragma: allowlist secret
                     "security-platform/kyverno" = "true"
                     "network-platform" = "true"
                     "network-platform/cert-manager-install" = "true"
