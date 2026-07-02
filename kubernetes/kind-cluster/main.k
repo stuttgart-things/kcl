@@ -2,12 +2,19 @@
 # Relative import for schema.k in the same directory
 import .schema
 
+# Robustly parse a boolean option: honours an explicit False, accepts both KCL
+# (`True`/`False`) and CLI-string (`"true"`/`"false"`/`"1"`/`"0"`) forms passed via
+# `-D`, and falls back to `default` when the option is unset.
+_toBool = lambda opt, default: bool -> bool {
+    default if opt == None else "${opt}" in ["True", "true", "1"]
+}
+
 # Configuration variables (underscore prefix prevents them from being exported)
 _nodeImage = option("nodeImage") or "kindest/node:v1.34.0"
 _apiServerAddress = option("apiServerAddress") or "0.0.0.0"
-_disableDefaultCNI = option("disableDefaultCNI") or True
+_disableDefaultCNI = _toBool(option("disableDefaultCNI"), True)
 _kubeProxyMode = option("kubeProxyMode") or "none"
-_imageVolumeFeature = option("imageVolumeFeature") or True
+_imageVolumeFeature = _toBool(option("imageVolumeFeature"), True)
 
 # Dynamic port mappings configuration
 _apiServerPort = option("apiServerPort") or 31643
@@ -29,7 +36,7 @@ _workerCount = option("workerCount") if option("workerCount") != None else 2
 
 # Ingress: add the `ingress-ready=true` node label (required by e.g. ingress-nginx
 # on kind) and, optionally, publish HTTP/HTTPS host ports on the control-plane node.
-_ingressReady = option("ingressReady") if option("ingressReady") != None else False
+_ingressReady = _toBool(option("ingressReady"), False)
 _ingressHttpHostPort = option("ingressHttpHostPort") or 80
 _ingressHttpsHostPort = option("ingressHttpsHostPort") or 443
 
