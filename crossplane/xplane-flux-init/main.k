@@ -19,6 +19,8 @@ always win over the EnvironmentConfig, which in turn wins over the hardcoded
 fallbacks below.
 """
 
+import base64
+
 _params = option("params") or {}
 _oxr = _params?.oxr or {}
 _ocds = _params?.ocds or {}
@@ -34,7 +36,7 @@ _k8sPcr = _spec?.kubernetesProviderConfigRef
 
 # --- Resolve values: spec > EnvironmentConfig > hardcoded fallback ---
 _ns = _spec?.namespace or _env?.namespace or "flux-system"
-_version = _spec?.operatorChart?.version or _env?.operatorChart?.version or "0.45.1"
+_version = _spec?.operatorChart?.version or _env?.operatorChart?.version or "0.55.0"
 _repoURL = _spec?.operatorChart?.repoURL or _env?.operatorChart?.repoURL or "oci://ghcr.io/controlplaneio-fluxcd/charts"
 _distribution = _spec?.instance?.distribution or _env?.instance?.distribution or "2.x"
 _components = _spec?.instance?.components or _env?.instance?.components or [
@@ -46,6 +48,39 @@ _components = _spec?.instance?.components or _env?.instance?.components or [
 _sources = _spec?.instance?.sources or []
 _reconcileEvery = _env?.reconcileEvery or "1h"
 _reconcileTimeout = _env?.reconcileTimeout or "5m"
+
+# --- SOPS decryption + kustomize passthrough ---
+# spec.kustomize is passed through verbatim to FluxInstance.spec.kustomize
+# (e.g. controller tuning patches). spec.sops is a convenience layer that
+# auto-injects a decryption patch onto every Flux Kustomization and optionally
+# creates the age key Secret in the flux namespace.
+_kustomize = _spec?.kustomize or {}
+_userPatches = _kustomize?.patches or []
+
+_sops = _spec?.sops or {}
+_sopsEnabled = _sops?.enabled or False
+_sopsSecretName = _sops?.secretName or "sops-age"
+_sopsAgeKey = _sops?.ageKey or ""
+# Preferred: copy the age key from an existing Secret (no plaintext in the XR).
+# The referenced Secret must live on the target cluster (read via the same
+# kubernetesProviderConfigRef). data['<key>'] is base64 and is copied verbatim.
+_sopsKeyRef = _sops?.ageKeySecretRef or {}
+_sopsKeyRefName = _sopsKeyRef?.name or ""
+_sopsKeyRefNs = _sopsKeyRef?.namespace or _ns
+_sopsKeyRefKey = _sopsKeyRef?.key or "age.agekey"
+
+# JSON6902 patch (JSON is valid YAML) adding spec.decryption to every
+# kustomize.toolkit.fluxcd.io/v1 Kustomization the FluxInstance manages.
+_sopsPatch = {
+    target = {
+        group = "kustomize.toolkit.fluxcd.io"
+        version = "v1"
+        kind = "Kustomization"
+    }
+    patch = '[{"op":"add","path":"/spec/decryption","value":{"provider":"sops","secretRef":{"name":"${_sopsSecretName}"}}}]'
+}
+
+_patches = _userPatches + ([_sopsPatch] if _sopsEnabled else [])
 
 # --- Resource names (also the ocds keys used for status) ---
 _operatorName = "{}-flux-operator".format(_name)
@@ -118,6 +153,10 @@ _fluxInstance = {
                         registry = "ghcr.io/fluxcd"
                     }
                     components = _components
+                    if _patches:
+                        kustomize = {
+                            patches = _patches
+                        }
                 }
             }
         }
@@ -203,6 +242,60 @@ _sourceObjects = [
     for s in _sources
 ]
 
+# --- Optional: age decryption Secret in the flux namespace ---
+# Only emitted when sops.enabled and sops.ageKey are set. Omit ageKey to manage
+# the Secret out of band (e.g. sops-secrets-operator) and only inject the patch.
+_sopsSecretObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = "{}-sops-age".format(_name)
+        namespace = _ns
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "{}-sops-age".format(_name)
+        }
+    }
+    spec = {
+        providerConfigRef = {
+            name = _k8sPcr
+            kind = "ClusterProviderConfig"
+        }
+        # Reference-copy: pull data['<key>'] from an existing Secret on the
+        # target cluster into the target Secret's data['age.agekey']. Preferred
+        # over inline ageKey — no plaintext key in the XR.
+        if _sopsKeyRefName:
+            references = [{
+                patchesFrom = {
+                    apiVersion = "v1"
+                    kind = "Secret"
+                    name = _sopsKeyRefName
+                    namespace = _sopsKeyRefNs
+                    fieldPath = "data['" + _sopsKeyRefKey + "']"
+                }
+                toFieldPath = "data['age.agekey']"
+            }]
+        forProvider = {
+            manifest = {
+                apiVersion = "v1"
+                kind = "Secret"
+                type = "Opaque"
+                metadata = {
+                    name = _sopsSecretName
+                    namespace = _ns
+                }
+                # Inline fallback (dev only): base64-encode the plaintext key.
+                # Use data (not stringData) — provider-kubernetes SSA fails to
+                # observe stringData Secrets ("managed fields ... got <nil>").
+                if _sopsAgeKey and not _sopsKeyRefName:
+                    data = {
+                        "age.agekey" = base64.encode(_sopsAgeKey)
+                    }
+            }
+        }
+    }
+}
+_sopsResources = [_sopsSecretObj] if (_sopsEnabled and (_sopsKeyRefName or _sopsAgeKey)) else []
+
 # --- Status: read Ready condition off each composed resource via ocds ---
 _isReady = lambda resourceName: str -> bool {
     _found = resourceName in _ocds
@@ -225,4 +318,4 @@ _xrStatus = _oxr | {
     }
 }
 
-items = [_helmRelease, _fluxInstance, _fluxInstanceUsage] + _sourceObjects + [_xrStatus]
+items = [_helmRelease, _fluxInstance, _fluxInstanceUsage] + _sopsResources + _sourceObjects + [_xrStatus]
