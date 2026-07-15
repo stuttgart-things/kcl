@@ -1,0 +1,12 @@
+kcl_options:
+  - key: params
+    value:
+      oxr: {apiVersion: resources.stuttgart-things.com/v1alpha1, kind: XIPReservation, metadata: {name: t, namespace: crossplane-system}, spec: {clusterName: xplane-test}}
+      ocds:
+        t-observe-rc:
+          Resource: {status: {atProvider: {manifest: {status: {atProvider: {internalNetworkKey: "172.18.0"}}}}}}
+        t-ip:
+          Resource:
+            status:
+              conditions: [{type: Ready, status: "True"}]
+              atProvider: {manifest: {status: {atProvider: {ipAddresses: ["172.18.0.42"], status: "ASSIGNED:DNS", fqdn: "*.t.example.com", zone: "example.com"}}}}
