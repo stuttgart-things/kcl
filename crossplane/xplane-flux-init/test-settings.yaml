@@ -1,0 +1,40 @@
+kcl_options:
+  - key: params
+    value:
+      oxr:
+        apiVersion: platform.stuttgart-things.com/v1alpha1
+        kind: FluxInit
+        metadata:
+          name: test-flux-init
+          namespace: crossplane-system
+        spec:
+          helmProviderConfigRef: xplane-test-helm
+          kubernetesProviderConfigRef: xplane-test-kubernetes
+          instance:
+            sources:
+              - name: flux-infra
+                kind: OCIRepository
+                url: oci://ghcr.io/stuttgart-things/flux-infra
+                ref: latest
+                path: "."
+              - name: flux-apps
+                kind: OCIRepository
+                url: oci://ghcr.io/stuttgart-things/flux-apps
+                ref: latest
+                pullSecret: ghcr-credentials
+      ocds: {}
+      ctx:
+        "apiextensions.crossplane.io/environment":
+          namespace: flux-system
+          operatorChart:
+            version: "0.45.1"
+            repoURL: "oci://ghcr.io/controlplaneio-fluxcd/charts"
+          instance:
+            distribution: "2.x"
+            components:
+              - source-controller
+              - kustomize-controller
+              - helm-controller
+              - notification-controller
+          reconcileEvery: "1h"
+          reconcileTimeout: "5m"
