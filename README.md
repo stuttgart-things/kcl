@@ -35,6 +35,7 @@ This repository contains KCL modules, tests, and documentation for Crossplane, K
 | Module                  | Path                                             | Description                                      |
 |-------------------------|--------------------------------------------------|--------------------------------------------------|
 | xplane-cilium           | crossplane/xplane-cilium/                        | Cilium CNI, L2 announcements, advanced networking|
+| xplane-flux-apps        | crossplane/xplane-flux-apps/                     | Generic Flux app Kustomizations on a target cluster|
 | xplane-helm-release     | crossplane/xplane-helm-release/                  | Helm chart deployment via Crossplane              |
 | xplane-vault-auth       | crossplane/xplane-vault-auth/                    | Vault Kubernetes authentication via Terraform     |
 | xplane-vault-config     | crossplane/xplane-vault-config/                  | Vault, CSI, ESO, RBAC, ServiceAccount tokens      |
