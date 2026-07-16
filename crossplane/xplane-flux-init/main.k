@@ -30,9 +30,55 @@ _spec = _oxr?.spec or {}
 _meta = _oxr?.metadata or {}
 _name = _meta?.name or "flux-init"
 
-# --- Provider config refs (required by the XRD) ---
-_helmPcr = _spec?.helmProviderConfigRef
-_k8sPcr = _spec?.kubernetesProviderConfigRef
+# --- Provider config refs: explicit spec wins, else derived from clusterName ---
+# clusterName derives {clusterName}-helm / {clusterName}-kubernetes — the naming
+# provider-kubeconfig's RemoteCluster creates for the target cluster.
+_clusterName = _spec?.clusterName or ""
+_helmPcr = _spec?.helmProviderConfigRef or ("{}-helm".format(_clusterName) if _clusterName else "")
+_k8sPcr = _spec?.kubernetesProviderConfigRef or ("{}-kubernetes".format(_clusterName) if _clusterName else "")
+# Provider config for the management-cluster Observe (InjectedIdentity).
+_observePcr = _spec?.observeProviderConfigRef or "in-cluster"
+
+# --- Observe RemoteCluster (only when clusterName is set) ---
+# Reads clusterType off the RemoteCluster and gates the Flux install until it
+# resolves — so the derived provider configs exist before we install through them.
+_rcKey = "{}-observe-rc".format(_name)
+_observeResources = []
+_clusterType = ""
+if _clusterName:
+    _observeRC = {
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+        kind = "Object"
+        metadata = {
+            name = _rcKey
+            namespace = _meta?.namespace
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = _rcKey
+            }
+        }
+        spec = {
+            managementPolicies = ["Observe"]
+            forProvider = {
+                manifest = {
+                    apiVersion = "kubeconfig.stuttgart-things.com/v1alpha1"
+                    kind = "RemoteCluster"
+                    metadata = {
+                        name = _clusterName
+                    }
+                }
+            }
+            providerConfigRef = {
+                name = _observePcr
+                kind = "ClusterProviderConfig"
+            }
+        }
+    }
+    _observeResources = [_observeRC]
+    _clusterType = _ocds[_rcKey].Resource?.status?.atProvider?.manifest?.status?.atProvider?.clusterType or "" if _rcKey in _ocds else ""
+
+# Gate: with clusterName, hold Flux resources until the RemoteCluster resolves.
+# Without clusterName the gate is always open (explicit provider refs, no observe).
+_observeReady = bool(_clusterType) if _clusterName else True
 
 # --- Resolve values: spec > EnvironmentConfig > hardcoded fallback ---
 _ns = _spec?.namespace or _env?.namespace or "flux-system"
@@ -313,9 +359,13 @@ _xrStatus = _oxr | {
         operatorReady = _operatorReady
         instanceReady = _instanceReady
         sourcesReady = _sourcesReady
-        ready = _operatorReady and _instanceReady and _sourcesReady
+        ready = _operatorReady and _instanceReady and _sourcesReady and _observeReady
         sourceCount = len(_sources)
+        clusterType = _clusterType
     }
 }
 
-items = [_helmRelease, _fluxInstance, _fluxInstanceUsage] + _sopsResources + _sourceObjects + [_xrStatus]
+# Flux resources are held until the observe gate opens (no-op without clusterName).
+_fluxResources = ([_helmRelease, _fluxInstance, _fluxInstanceUsage] + _sopsResources + _sourceObjects) if _observeReady else []
+
+items = _observeResources + _fluxResources + [_xrStatus]
