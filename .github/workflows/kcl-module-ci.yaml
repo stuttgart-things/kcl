@@ -244,10 +244,19 @@ jobs:
             echo "✅ Version ${{ steps.metadata.outputs.version }} does not exist, will publish"
           fi
 
+      # 'kcl registry login' cannot be used here: it stores the credential via
+      # the oras credential library, which refuses to write a plaintext store
+      # on the runner and fails with "putting plaintext credentials is
+      # disabled" (reported as a misleading "please check registry, username
+      # and password is valid"). 'kcl mod push' reads ~/.docker/config.json,
+      # so writing that file is enough — no kcl-side login required.
       - name: Login to GitHub Container Registry
         if: steps.check-version.outputs.exists == 'false'
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | kcl registry login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push module to OCI registry
         if: steps.check-version.outputs.exists == 'false'
