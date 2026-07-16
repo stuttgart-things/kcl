@@ -1,0 +1,38 @@
+kcl_options:
+  - key: params
+    value:
+      oxr:
+        apiVersion: config.stuttgart-things.com/v1alpha1
+        kind: FluxApps
+        metadata:
+          name: test-flux-apps
+          namespace: crossplane-system
+        spec:
+          kubernetesProviderConfigRef: xplane-test-kubernetes
+          namespace: flux-system
+          sourceRef:
+            kind: GitRepository
+            name: flux-apps
+          apps:
+            - name: tekton
+              path: ./cicd/tekton
+              substitute:
+                TEKTON_NAMESPACE: tekton-pipelines
+                TEKTON_VERSION: "0.76.1"
+            - name: crossplane
+              path: ./apps/crossplane
+              dependsOn:
+                - name: tekton
+              substitute:
+                CROSSPLANE_VERSION: "1.20.0"
+                CROSSPLANE_NAMESPACE: crossplane-system
+      ocds: {}
+      ctx:
+        "apiextensions.crossplane.io/environment":
+          namespace: flux-system
+          interval: "1h"
+          retryInterval: "1m"
+          timeout: "5m"
+          sourceRef:
+            kind: GitRepository
+            name: flux-apps
