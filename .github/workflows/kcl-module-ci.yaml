@@ -7,15 +7,25 @@ on:
       - feat/*
       - fix/*
       - chore/*
-    paths:
-      - 'kcl-*/**'
-      - 'xplane-*/**'
-      - 'crossplane-*/**'
+    paths: &module-paths
+      # Modules live one level down, grouped by domain (crossplane/xplane-foo).
+      # tests/ also holds kcl.mod dirs, but those are fixtures — never published.
+      - 'crossplane/**'
+      - 'flux/**'
+      - 'kubernetes/**'
+      - 'models/**'
   pull_request:
-    paths:
-      - 'kcl-*/**'
-      - 'xplane-*/**'
-      - 'crossplane-*/**'
+    paths: *module-paths
+  # Publish a module on demand. The path-based triggers only fire for modules
+  # touched by a given push, so a module whose version was bumped while the
+  # triggers were broken stays unpublished until someone touches it again.
+  # This drains that backlog without a dummy commit.
+  workflow_dispatch:
+    inputs:
+      module:
+        description: 'Module path to publish, e.g. crossplane/xplane-flux-apps'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -34,19 +44,68 @@ jobs:
 
       - name: Get changed KCL modules
         id: changed-modules
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          INPUT_MODULE: ${{ inputs.module }}
         run: |
-          # Get changed files
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          else
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          set -euo pipefail
+
+          # Manual run: publish exactly the requested module, no diff involved.
+          if [ "${EVENT}" = "workflow_dispatch" ]; then
+            MODULE="${INPUT_MODULE%/}"
+            if [ ! -f "${MODULE}/kcl.mod" ]; then
+              echo "❌ '${MODULE}' has no kcl.mod — pass a module path like crossplane/xplane-flux-apps"
+              exit 1
+            fi
+            MODULES=$(printf '%s' "${MODULE}" | jq -R -s -c 'split("\n")')
+            echo "Detected modules: ${MODULES}"
+            echo "modules=${MODULES}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          # Extract unique module directories
-          MODULES=$(echo "$CHANGED_FILES" | grep -E '^(kcl-|xplane-|crossplane-)' | cut -d/ -f1 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          # Resolve the diff base. On a branch's first push github.event.before
+          # is all-zeros (no predecessor), which git cannot resolve — fall back
+          # to the first parent so the run reports changes instead of erroring.
+          if [ "${EVENT}" = "pull_request" ]; then
+            BASE="${BASE_SHA}"
+          else
+            BASE="${BEFORE_SHA}"
+            if [ -z "${BASE}" ] || [ "${BASE}" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+              BASE=$(git rev-parse "${HEAD_SHA}^" 2>/dev/null || echo "")
+            fi
+          fi
 
-          echo "Detected modules: $MODULES"
-          echo "modules=$MODULES" >> $GITHUB_OUTPUT
+          if [ -z "${BASE}" ]; then
+            CHANGED_FILES=$(git ls-tree -r --name-only "${HEAD_SHA}")
+          else
+            CHANGED_FILES=$(git diff --name-only "${BASE}" "${HEAD_SHA}")
+          fi
+
+          # Map each changed file to the module that owns it: the nearest
+          # ancestor directory holding a kcl.mod. Keying off kcl.mod rather than
+          # a directory-name pattern keeps this correct when the layout moves —
+          # the previous 'xplane-*/**' filters silently matched nothing after
+          # modules were regrouped under crossplane/, flux/, kubernetes/, models/.
+          MODULES=$(
+            printf '%s\n' "${CHANGED_FILES}" | while IFS= read -r f; do
+              [ -n "${f}" ] || continue
+              d=$(dirname "${f}")
+              while [ "${d}" != "." ] && [ "${d}" != "/" ]; do
+                if [ -f "${d}/kcl.mod" ]; then
+                  printf '%s\n' "${d}"
+                  break
+                fi
+                d=$(dirname "${d}")
+              done
+            done | sort -u | awk '!/^tests\//' | jq -R -s -c 'split("\n")[:-1]'
+          )
+
+          echo "Detected modules: ${MODULES}"
+          echo "modules=${MODULES}" >> "$GITHUB_OUTPUT"
 
   lint-and-test:
     needs: detect-changed-modules
@@ -144,7 +203,9 @@ jobs:
 
   publish-to-oci:
     needs: [detect-changed-modules, lint-and-test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       matrix:
