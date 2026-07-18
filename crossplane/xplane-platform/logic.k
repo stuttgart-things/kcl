@@ -1,0 +1,104 @@
+"""
+Pure logic for the platform Configuration — no option("params"), so every rule
+here is unit-testable with `kcl test`. main.k is the thin render entry point.
+
+The reason this module exists: stuttgart-things/flux publishes ONE OCI ARTIFACT
+PER APP, so a Flux source name and an app are the same fact. Enabling an app
+therefore has to produce BOTH an OCIRepository source (on the FluxInit child)
+and a Kustomization entry (on the FluxApps child). Keeping those two in sync by
+hand is the error this module removes.
+"""
+
+import xplane_flux_catalog as cat
+
+resolveShared = lambda spec: {str:} -> {str:} {
+    """The shared cluster contract, resolved once and handed to every component.
+
+    clusterName derives {clusterName}-helm / {clusterName}-kubernetes — the names
+    provider-kubeconfig's RemoteCluster creates. Explicit refs always win.
+    Unresolved fields are OMITTED, never emitted as "", so a consumer can test
+    `if shared.clusterType` and trust it.
+    """
+    _cn = spec?.clusterName or ""
+    {
+        if _cn:
+            clusterName = _cn
+        helmProviderConfigRef = spec?.helmProviderConfigRef or ("{}-helm".format(_cn) if _cn else "")
+        kubernetesProviderConfigRef = spec?.kubernetesProviderConfigRef or ("{}-kubernetes".format(_cn) if _cn else "")
+        observeProviderConfigRef = spec?.observeProviderConfigRef or "in-cluster"
+        namespace = spec?.namespace or "flux-system"
+    }
+}
+
+isEnabled = lambda block: {str:} -> bool {
+    """`or True` would swallow an explicit false, so test for the key."""
+    block.enabled if "enabled" in block else True
+}
+
+enabledApps = lambda spec: {str:} -> {str:} {
+    """spec.apps entries that are enabled. Map, not list, so overrides merge."""
+    {k: v for k, v in (spec?.apps or {}) if isEnabled(v or {})}
+}
+
+fluxInitEnabled = lambda spec: {str:} -> bool {
+    isEnabled(spec?.fluxInit or {})
+}
+
+appSources = lambda spec: {str:} -> [{str:}] {
+    """OCIRepository sources for the FluxInit child — one per enabled app.
+
+    The source is named after the app, which is what lets appEntries() reference
+    it without the user restating the name.
+    """
+    [{
+        name = _n
+        kind = "OCIRepository"
+        url = cat.get(_n).artifact
+        ref = (_a?.version or cat.get(_n).defaultVersion)
+    } for _n, _a in enabledApps(spec)]
+}
+
+appEntries = lambda spec: {str:} -> [{str:}] {
+    """FluxApps `apps[]` entries — one per enabled component of each enabled app.
+
+    An app is not necessarily one Kustomization (dapr ships control-plane +
+    template-execution), so components are expanded here and dependsOn is
+    rewritten to the emitted '{app}-{component}' names.
+    """
+    sum([[{
+        name = "{}-{}".format(_n, _c.name)
+        path = _c.path
+        sourceRef = {kind = "OCIRepository", name = _n}
+        if _c.dependsOn:
+            dependsOn = [{name = "{}-{}".format(_n, _d)} for _d in _c.dependsOn]
+        if (((_a?.components or {})[_c.name] or {})?.timeout or _c.timeout):
+            timeout = ((_a?.components or {})[_c.name] or {})?.timeout or _c.timeout
+        if (_a?.substitute or {}) | (((_a?.components or {})[_c.name] or {})?.substitute or {}):
+            substitute = (_a?.substitute or {}) | (((_a?.components or {})[_c.name] or {})?.substitute or {})
+        if ((_a?.components or {})[_c.name] or {})?.substituteFrom:
+            substituteFrom = ((_a?.components or {})[_c.name] or {}).substituteFrom
+        if (((_a?.components or {})[_c.name] or {})?.targetNamespace or _a?.targetNamespace):
+            targetNamespace = ((_a?.components or {})[_c.name] or {})?.targetNamespace or _a?.targetNamespace
+    } for _c in cat.get(_n).components if isEnabled((_a?.components or {})[_c.name] or {})] for _n, _a in enabledApps(spec)], [])
+}
+
+validate = lambda spec: {str:} -> bool {
+    """Rules that must hold before anything is emitted.
+
+    The fluxInit rule is also a CEL rule on the XRD (which fails at apply time,
+    a much better signal); it is repeated here so the module is safe for any
+    caller, not only that XRD.
+    """
+    _apps = enabledApps(spec)
+    assert fluxInitEnabled(spec) or len(_apps) == 0, "apps are enabled but fluxInit is disabled — fluxInit creates the Flux sources every app references; enable fluxInit or disable all apps"
+
+    # A component depending on a disabled sibling would sit in DependencyNotReady
+    # forever; fail at render instead. Flattened rather than nested `all`, which
+    # does not capture the outer loop binding.
+    _badDeps = sum([["{}-{}".format(_n, _c.name) for _c in cat.get(_n).components if isEnabled((_a?.components or {})[_c.name] or {}) and len([_d for _d in _c.dependsOn if not isEnabled((_a?.components or {})[_d] or {})]) > 0] for _n, _a in _apps], [])
+
+    # KCL does NOT interpolate ${} inside assert messages — it prints the
+    # placeholder literally. Concatenate so the message names the offenders.
+    assert len(_badDeps) == 0, "these components depend on a disabled component: " + ", ".join(_badDeps)
+    True
+}
