@@ -15,7 +15,6 @@ schema Component:
     An app is NOT necessarily a single Kustomization: dapr ships a control-plane
     and a template-execution component, the second depending on the first.
     """
-
     name: str
     """Kustomization name suffix — the emitted name is '{app}-{name}'"""
 
@@ -36,7 +35,6 @@ schema Component:
 
 schema App:
     """A deployable app, published as one OCI artifact by stuttgart-things/flux."""
-
     artifact: str
     """oci:// URL of the artifact — one artifact per app, so the source name
     and the app name are the same fact. This is what lets platform emit both
@@ -51,3 +49,4 @@ schema App:
     check:
         artifact.startswith("oci://"), "artifact must be an oci:// URL"
         len(components) > 0, "an app needs at least one component"
+
