@@ -82,6 +82,30 @@ appEntries = lambda spec: {str:} -> [{str:}] {
     } for _c in cat.get(_n).components if isEnabled((_a?.components or {})[_c.name] or {})] for _n, _a in enabledApps(spec)], [])
 }
 
+_compOverride = lambda app: {str:}, name: str -> {str:} {
+    (app?.components or {})[name] or {}
+}
+
+_appMissing = lambda name: str, app: {str:} -> [str] {
+    """Required vars of one app that nothing supplies. A component carrying
+    substituteFrom is skipped — its values come from a ConfigMap/Secret resolved
+    at build time, which cannot be checked statically."""
+    _supplied = lambda cname: str -> {str:} {
+        (app?.substitute or {}) | (_compOverride(app, cname)?.substitute or {})
+    }
+    _checked = [c for c in cat.get(name).components if isEnabled(_compOverride(app, c.name)) and not _compOverride(app, c.name)?.substituteFrom]
+    sum([[name + "-" + c.name + ": " + v for v in c.requiredSubstitutions if v not in _supplied(c.name)] for c in _checked], [])
+}
+
+missingSubstitutions = lambda spec: {str:} -> [str] {
+    """Required substitution variables that nothing supplies.
+
+    Flux replaces an undefined variable with an empty string instead of failing,
+    so a missing one is a silently broken deploy — that is what this catches.
+    """
+    sum([_appMissing(n, a) for n, a in enabledApps(spec)], [])
+}
+
 validate = lambda spec: {str:} -> bool {
     """Rules that must hold before anything is emitted.
 
@@ -100,5 +124,7 @@ validate = lambda spec: {str:} -> bool {
     # KCL does NOT interpolate ${} inside assert messages — it prints the
     # placeholder literally. Concatenate so the message names the offenders.
     assert len(_badDeps) == 0, "these components depend on a disabled component: " + ", ".join(_badDeps)
+    _missing = missingSubstitutions(spec)
+    assert len(_missing) == 0, "required substitution variables are not supplied (Flux substitutes empty strings rather than failing, so this would deploy silently broken): " + ", ".join(_missing)
     True
 }

@@ -28,7 +28,14 @@ Here, one toggle produces both:
 spec:
   clusterName: kind1
   apps:
-    dapr: {}
+    dapr:
+      components:
+        template-execution:
+          # requires GITHUB_TOKEN / BACKSTAGE_AUTH_TOKEN / REDIS_PASSWORD —
+          # either point at a Secret as here, or set enabled: false
+          substituteFrom:
+            - kind: Secret
+              name: dapr-backstage-template-execution-vars
 ```
 
 → an `OCIRepository` named `dapr` on the FluxInit child, **and** a
@@ -57,6 +64,7 @@ where it could not be tested at all.
 | apps enabled while `fluxInit.enabled: false` | rejected — fluxInit creates the sources apps reference |
 | a component depending on a **disabled** sibling | rejected, naming the offenders — it would otherwise sit in `DependencyNotReady` forever |
 | unknown app name | rejected by the catalog |
+| required substitution variable not supplied | rejected — Flux substitutes empty strings rather than failing, so this would deploy silently broken. Satisfied by `substitute` keys, or skipped when the component carries a `substituteFrom` (resolved at build time, not statically checkable) |
 | disabling an app | prunes it — the entry stops being emitted, and flux-apps' Objects use `managementPolicies: ["*"]`, so the Kustomization and its workload are removed |
 
 ## Overrides
