@@ -76,3 +76,19 @@ app.components       # [control-plane, template-execution]
 `substituteFrom`. Deliver it with sops-secrets-operator **before** that component
 reconciles — `substituteFrom` resolves at build time, so a Secret applied by the
 same Kustomization is too late.
+
+## Consuming from another module
+
+Add it as a `kcl.mod` dependency (the pattern `xplane-platform` uses):
+
+```toml
+[dependencies]
+xplane-flux-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-flux-catalog", tag = "0.1.1" }
+```
+
+**Use `0.1.1` or later.** In 0.1.0 the components in `apps/*.k` were plain dict
+literals; KCL coerces those inside the module (so `kcl test` passed) but NOT when
+the module is imported as a package, where any consumer hit
+`expect [xplane_flux_catalog.Component], got list`. App files must instantiate
+`s.Component { ... }` explicitly. In-module tests cannot catch this — only an
+actual cross-package import can, so verify new app files against a consumer.
