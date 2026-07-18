@@ -1,6 +1,6 @@
 # Unit tests for the catalog. Run with `kcl test`.
 # These validate the catalog's own invariants — no Crossplane, no cluster.
-import .catalog as c
+import .main as c
 
 test_dapr_is_registered = lambda {
     assert "dapr" in c.catalog

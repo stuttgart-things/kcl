@@ -27,20 +27,20 @@ EnvironmentConfig.
 
 ```
 schema.k          App / Component definitions
-catalog.k         the registry: name -> App, plus get(name)
+main.k            the registry: name -> App, plus get(name)
 apps/<name>.k     one file per app
 catalog_test.k    invariants — run with `kcl test`
 ```
 
 KCL has no file globbing, so apps are registered explicitly. Adding one is a
-two-line diff in `catalog.k` plus the new file.
+two-line diff in `main.k` plus the new file.
 
 ## Adding an app
 
 1. `apps/<name>.k` — declare the artifact, default tag and components. Paths are
    relative to the **artifact root** (the artifact *is* the app directory), so
    `./components/control-plane`, not `./apps/<name>/components/control-plane`.
-2. Register it in `catalog.k` (one import, one entry).
+2. Register it in `main.k` (one import, one entry).
 3. `kcl test` — the invariants below run automatically.
 4. Bump `version` in `kcl.mod`, publish, then bump the pin in platform's
    Composition.
@@ -61,7 +61,7 @@ Each was verified to fail on the mistake it describes, not merely to pass.
 ## Consuming
 
 ```python
-import xplane_flux_catalog.catalog as c
+import xplane_flux_catalog as c
 
 app = c.get("dapr")
 app.artifact         # oci://ghcr.io/stuttgart-things/flux/apps/dapr
