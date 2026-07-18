@@ -2,9 +2,17 @@
 # These are the rules that would otherwise only be observable on a live cluster.
 import .logic as l
 
+# template-execution requires GITHUB_TOKEN / BACKSTAGE_AUTH_TOKEN / REDIS_PASSWORD,
+# so a bare {dapr = {}} is now correctly rejected — supply them via substituteFrom.
 _dapr = {
     apps = {
-        dapr = {}
+        dapr = {
+            components = {
+                "template-execution" = {
+                    substituteFrom = [{kind = "Secret", name = "dapr-vars"}]
+                }
+            }
+        }
     }
 }
 
@@ -112,4 +120,40 @@ test_apps_without_fluxinit_is_rejected = lambda {
     assert l.validate({
         fluxInit = {enabled = False}
     })
+}
+
+# A component whose required vars are neither in substitute nor covered by a
+# substituteFrom must be rejected — Flux would substitute empty strings and
+# deploy something broken without ever failing.
+test_missing_required_substitutions_detected = lambda {
+    m = l.missingSubstitutions({
+        apps = {
+            dapr = {}
+        }
+    })
+    assert len(m) == 3, "dapr template-execution has 3 required vars"
+    assert "dapr-template-execution: GITHUB_TOKEN" in m
+}
+
+test_substitutefrom_satisfies_required = lambda {
+    assert len(l.missingSubstitutions(_dapr)) == 0
+}
+
+test_explicit_substitute_satisfies_required = lambda {
+    spec = {
+        apps = {
+            headlamp = {
+                substitute = {DOMAIN = "d", HOSTNAME = "h", GATEWAY_NAME = "g"}
+            }
+        }
+    }
+    assert len(l.missingSubstitutions(spec)) == 0
+}
+
+test_headlamp_missing_vars_detected = lambda {
+    assert len(l.missingSubstitutions({
+        apps = {
+            headlamp = {}
+        }
+    })) == 3
 }
