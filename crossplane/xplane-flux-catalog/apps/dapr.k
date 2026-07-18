@@ -25,6 +25,7 @@ dapr: s.App = {
             name = "template-execution"
             path = "./components/template-execution"
             dependsOn = ["control-plane"]
+            requiredSubstitutions = ["GITHUB_TOKEN", "BACKSTAGE_AUTH_TOKEN", "REDIS_PASSWORD"]
         }
     ]
 }
