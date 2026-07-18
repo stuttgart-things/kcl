@@ -29,6 +29,14 @@ schema Component:
     """Overrides the FluxApps default. Set 15m on components that wrap a
     HelmRelease — chart pull + rollout regularly exceeds the 10m default"""
 
+    requiredSubstitutions?: [str] = []
+    """Substitution variables this component's manifests use WITHOUT a default.
+
+    Flux replaces an undefined variable with an empty string rather than failing,
+    so a missing one is a silently broken deploy. Consumers should reject an app
+    whose required vars are neither in `substitute` nor plausibly supplied by a
+    `substituteFrom` source."""
+
     wrapsHelmRelease?: bool = False
     """Documentation flag: this component installs a HelmRelease. Explains why
     timeout is raised and signals that readiness depends on a chart rollout"""

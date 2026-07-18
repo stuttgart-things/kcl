@@ -41,3 +41,16 @@ test_helmrelease_components_raise_timeout = lambda {
         }
     }, "a component that wraps a HelmRelease must raise its timeout"
 }
+
+test_headlamp_is_registered = lambda {
+    h = c.get("headlamp")
+    assert h.artifact == "oci://ghcr.io/stuttgart-things/flux/apps/headlamp"
+    assert len(h.components) == 1
+    assert h.components[0].path == "./", "single-component apps reconcile the artifact root"
+}
+
+# Vars without a manifest default must be declared, or Flux substitutes an empty
+# string and deploys something silently broken.
+test_headlamp_declares_required_substitutions = lambda {
+    assert c.get("headlamp").components[0].requiredSubstitutions == ["DOMAIN", "HOSTNAME", "GATEWAY_NAME"]
+}

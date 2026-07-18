@@ -6,6 +6,7 @@ Bootstraps Flux on a target cluster via the flux-operator:
   2. kubernetes.m.crossplane.io Object — FluxInstance CR (uses operator)
   3. protection.crossplane.io Usage — FluxInstance deletes before operator
   4. kubernetes.m.crossplane.io Object(s) — one OCIRepository/GitRepository per source
+  5. protection.crossplane.io Usage(s) — each source deletes before the FluxInstance
 
 Render and status are done in a single pass: the module emits the managed
 resources AND patches the XR status from `ocds` (observed composed resources).
@@ -107,6 +108,7 @@ _sops = _spec?.sops or {}
 _sopsEnabled = _sops?.enabled or False
 _sopsSecretName = _sops?.secretName or "sops-age"
 _sopsAgeKey = _sops?.ageKey or ""
+
 # Preferred: copy the age key from an existing Secret (no plaintext in the XR).
 # The referenced Secret must live on the target cluster (read via the same
 # kubernetesProviderConfigRef). data['<key>'] is base64 and is copied verbatim.
@@ -245,48 +247,47 @@ _fluxInstanceUsage = {
 _sourceName = lambda s: {str:} -> str {
     "{}-source-{}".format(_name, s.name)
 }
-_sourceObjects = [
-    {
-        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-        kind = "Object"
-        metadata = {
-            name = _sourceName(s)
-            namespace = _ns
-            annotations = {
-                "krm.kcl.dev/composition-resource-name" = _sourceName(s)
-                "crossplane.io/uses" = _instanceName
-            }
-        }
-        spec = {
-            providerConfigRef = {
-                name = _k8sPcr
-                kind = "ClusterProviderConfig"
-            }
-            forProvider = {
-                manifest = {
-                    apiVersion = "source.toolkit.fluxcd.io/v1"
-                    kind = s?.kind or "OCIRepository"
-                    metadata = {
-                        name = s.name
-                        namespace = _ns
-                    }
-                    spec = {
-                        interval = _reconcileEvery
-                        url = s.url
-                        ref = {
-                            tag = s?.ref or "latest"
-                        }
-                        **({secretRef = {name = s.pullSecret}} if s?.pullSecret else {})
-                    }
-                }
-            }
-            readiness = {
-                policy = "DeriveFromObject"
-            }
+_sourceObjects = [{
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = _sourceName(s)
+        namespace = _ns
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = _sourceName(s)
+            "crossplane.io/uses" = _instanceName
         }
     }
-    for s in _sources
-]
+    spec = {
+        providerConfigRef = {
+            name = _k8sPcr
+            kind = "ClusterProviderConfig"
+        }
+        forProvider = {
+            manifest = {
+                apiVersion = "source.toolkit.fluxcd.io/v1"
+                kind = s?.kind or "OCIRepository"
+                metadata = {
+                    name = s.name
+                    namespace = _ns
+                }
+                spec = {
+                    interval = _reconcileEvery
+                    url = s.url
+                    ref = {
+                        tag = s?.ref or "latest"
+                    }
+                    **({
+                        secretRef = {name = s.pullSecret}
+                    } if s?.pullSecret else {})
+                }
+            }
+        }
+        readiness = {
+            policy = "DeriveFromObject"
+        }
+    }
+} for s in _sources]
 
 # --- Optional: age decryption Secret in the flux namespace ---
 # Only emitted when sops.enabled and sops.ageKey are set. Omit ageKey to manage
@@ -366,6 +367,43 @@ _xrStatus = _oxr | {
 }
 
 # Flux resources are held until the observe gate opens (no-op without clusterName).
-_fluxResources = ([_helmRelease, _fluxInstance, _fluxInstanceUsage] + _sopsResources + _sourceObjects) if _observeReady else []
+# --- Usages: each source must be deleted BEFORE the FluxInstance ---
+# Without these, deleting a FluxInit removes the composed resources in parallel.
+# If the FluxInstance goes first it takes Flux's CRDs with it, and
+# provider-kubernetes can then no longer observe an OCIRepository to finalise its
+# Object — which hangs on finalizer.managedresource.crossplane.io with
+#   observe failed: cannot get object: no matches for kind "OCIRepository"
+# and has to be unstuck by hand. Chaining source -> instance -> operator makes
+# teardown deterministic. (The crossplane.io/uses annotation on the source
+# Objects is decorative; a Usage is what actually orders deletion.)
+_sourceUsages = [{
+    apiVersion = "protection.crossplane.io/v1beta1"
+    kind = "Usage"
+    metadata = {
+        name = "{}-uses-flux-instance".format(_sourceName(s))
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "{}-uses-flux-instance".format(_sourceName(s))
+        }
+    }
+    spec = {
+        replayDeletion = True
+        of = {
+            apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+            kind = "Object"
+            resourceRef = {
+                name = _instanceName
+            }
+        }
+        by = {
+            apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+            kind = "Object"
+            resourceRef = {
+                name = _sourceName(s)
+            }
+        }
+    }
+} for s in _sources]
+
+_fluxResources = ([_helmRelease, _fluxInstance, _fluxInstanceUsage] + _sopsResources + _sourceObjects + _sourceUsages) if _observeReady else []
 
 items = _observeResources + _fluxResources + [_xrStatus]
