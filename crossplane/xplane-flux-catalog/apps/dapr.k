@@ -15,13 +15,13 @@ dapr: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/dapr"
     defaultVersion = "v1.18.1"
     components = [
-        {
+        s.Component {
             name = "control-plane"
             path = "./components/control-plane"
             wrapsHelmRelease = True
             timeout = "15m"
         }
-        {
+        s.Component {
             name = "template-execution"
             path = "./components/template-execution"
             dependsOn = ["control-plane"]
