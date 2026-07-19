@@ -64,6 +64,9 @@ where it could not be tested at all.
 | apps enabled while `fluxInit.enabled: false` | rejected — fluxInit creates the sources apps reference |
 | a component depending on a **disabled** sibling | rejected, naming the offenders — it would otherwise sit in `DependencyNotReady` forever |
 | unknown app name | rejected by the catalog |
+| a dependency's app is not enabled | rejected, naming what to add: `trust-manager-install depends on cert-manager:install, but app 'cert-manager' is not enabled — add it to spec.apps`. Deliberately **not** auto-enabled: a toggle that silently installs artifacts you did not list gets confusing with transitive chains, and conflicts with disable-prunes |
+| a dependency's component is disabled | rejected the same way |
+| catalog `optional` components | not deployed unless the XR enables them explicitly |
 | required substitution variable not supplied | rejected — Flux substitutes empty strings rather than failing, so this would deploy silently broken. Satisfied by `substitute` keys, or skipped when the component carries a `substituteFrom` (resolved at build time, not statically checkable) |
 | disabling an app | prunes it — the entry stops being emitted, and flux-apps' Objects use `managementPolicies: ["*"]`, so the Kustomization and its workload are removed |
 
