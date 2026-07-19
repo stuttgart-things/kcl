@@ -11,17 +11,33 @@ test_get_returns_app = lambda {
     assert c.get("dapr").defaultVersion == "v1.18.1"
 }
 
-# Every dependsOn must name a component that exists in the SAME app — a typo
-# here would otherwise surface as a Kustomization stuck in DependencyNotReady
-# on a live cluster, which is a slow and confusing way to find it.
+# Every dependsOn must resolve to a component that actually exists — either a
+# sibling in the same app, or "app:component" in another app. A typo would
+# otherwise surface only as a Kustomization stuck in DependencyNotReady on a
+# live cluster, which is a slow and confusing way to find it.
+_depApp = lambda owner: str, dep: str -> str {
+    dep.split(":")[0] if ":" in dep else owner
+}
+_depComponent = lambda dep: str -> str {
+    dep.split(":")[1] if ":" in dep else dep
+}
+
 test_dependson_targets_exist = lambda {
     assert all _n, app in c.catalog {
         all comp in app.components {
             all dep in comp.dependsOn {
-                dep in [x.name for x in app.components]
+                _depApp(_n, dep) in c.catalog and _depComponent(dep) in [x.name for x in c.catalog[_depApp(_n, dep)].components]
             }
         }
-    }, "a dependsOn entry names a component that does not exist in its app"
+    }, "a dependsOn entry names a component that does not exist"
+}
+
+# The first cross-artifact dependency: trust-manager cannot reconcile before
+# cert-manager's CRDs exist.
+test_cross_artifact_dependson = lambda {
+    tm = c.get("trust-manager").components[0]
+    assert tm.dependsOn == ["cert-manager:install"]
+    assert "install" in [x.name for x in c.get("cert-manager").components]
 }
 
 # Component names must be unique within an app; duplicates would collide on the
@@ -53,4 +69,12 @@ test_headlamp_is_registered = lambda {
 # string and deploys something silently broken.
 test_headlamp_declares_required_substitutions = lambda {
     assert c.get("headlamp").components[0].requiredSubstitutions == ["DOMAIN", "HOSTNAME", "GATEWAY_NAME"]
+}
+
+# Opt-in extras must not default to enabled: cert-manager's selfsigned issuer
+# needs a domain, and requiring it just to install cert-manager would be wrong.
+test_optional_components_are_marked = lambda {
+    cm = {x.name: x for x in c.get("cert-manager").components}
+    assert not cm["install"].optional, "the base install is not optional"
+    assert cm["selfsigned"].optional
 }

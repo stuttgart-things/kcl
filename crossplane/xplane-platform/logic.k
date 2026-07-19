@@ -35,6 +35,13 @@ isEnabled = lambda block: {str:} -> bool {
     block.enabled if "enabled" in block else True
 }
 
+compEnabled = lambda comp: any, override: {str:} -> bool {
+    """A component's enablement. Catalog `optional` components are opt-in: they
+    are not deployed unless the XR names them, because they ship variables the
+    base app does not need (cert-manager's selfsigned issuer wants a domain)."""
+    override.enabled if "enabled" in override else not comp.optional
+}
+
 enabledApps = lambda spec: {str:} -> {str:} {
     """spec.apps entries that are enabled. Map, not list, so overrides merge."""
     {k: v for k, v in (spec?.apps or {}) if isEnabled(v or {})}
@@ -42,6 +49,21 @@ enabledApps = lambda spec: {str:} -> {str:} {
 
 fluxInitEnabled = lambda spec: {str:} -> bool {
     isEnabled(spec?.fluxInit or {})
+}
+
+depApp = lambda owner: str, dep: str -> str {
+    """Owning app of a dependsOn reference. "cert-manager:install" is
+    cross-artifact; a bare name is a sibling in the same app."""
+    dep.split(":")[0] if ":" in dep else owner
+}
+
+depComponent = lambda dep: str -> str {
+    dep.split(":")[1] if ":" in dep else dep
+}
+
+depName = lambda owner: str, dep: str -> str {
+    """The emitted Kustomization name — globally unique, since app names are."""
+    depApp(owner, dep) + "-" + depComponent(dep)
 }
 
 appSources = lambda spec: {str:} -> [{str:}] {
@@ -70,7 +92,7 @@ appEntries = lambda spec: {str:} -> [{str:}] {
         path = _c.path
         sourceRef = {kind = "OCIRepository", name = _n}
         if _c.dependsOn:
-            dependsOn = [{name = "{}-{}".format(_n, _d)} for _d in _c.dependsOn]
+            dependsOn = [{name = depName(_n, _d)} for _d in _c.dependsOn]
         if (((_a?.components or {})[_c.name] or {})?.timeout or _c.timeout):
             timeout = ((_a?.components or {})[_c.name] or {})?.timeout or _c.timeout
         if (_a?.substitute or {}) | (((_a?.components or {})[_c.name] or {})?.substitute or {}):
@@ -79,7 +101,7 @@ appEntries = lambda spec: {str:} -> [{str:}] {
             substituteFrom = ((_a?.components or {})[_c.name] or {}).substituteFrom
         if (((_a?.components or {})[_c.name] or {})?.targetNamespace or _a?.targetNamespace):
             targetNamespace = ((_a?.components or {})[_c.name] or {})?.targetNamespace or _a?.targetNamespace
-    } for _c in cat.get(_n).components if isEnabled((_a?.components or {})[_c.name] or {})] for _n, _a in enabledApps(spec)], [])
+    } for _c in cat.get(_n).components if compEnabled(_c, (_a?.components or {})[_c.name] or {})] for _n, _a in enabledApps(spec)], [])
 }
 
 _compOverride = lambda app: {str:}, name: str -> {str:} {
@@ -93,7 +115,7 @@ _appMissing = lambda name: str, app: {str:} -> [str] {
     _supplied = lambda cname: str -> {str:} {
         (app?.substitute or {}) | (_compOverride(app, cname)?.substitute or {})
     }
-    _checked = [c for c in cat.get(name).components if isEnabled(_compOverride(app, c.name)) and not _compOverride(app, c.name)?.substituteFrom]
+    _checked = [c for c in cat.get(name).components if compEnabled(c, _compOverride(app, c.name)) and not _compOverride(app, c.name)?.substituteFrom]
     sum([[name + "-" + c.name + ": " + v for v in c.requiredSubstitutions if v not in _supplied(c.name)] for c in _checked], [])
 }
 
@@ -106,6 +128,32 @@ missingSubstitutions = lambda spec: {str:} -> [str] {
     sum([_appMissing(n, a) for n, a in enabledApps(spec)], [])
 }
 
+_compEnabled = lambda apps: {str:}, appName: str, compName: str -> bool {
+    """Is a (possibly cross-app) component enabled in this XR?"""
+    _match = [c for c in cat.get(appName).components if c.name == compName]
+    len(_match) > 0 and compEnabled(_match[0], ((apps[appName] or {})?.components or {})[compName] or {})
+}
+
+appDepProblems = lambda name: str, app: {str:}, apps: {str:} -> [str] {
+    """Dependencies of one app that cannot be satisfied by this XR.
+
+    Deliberately rejects rather than auto-enabling the missing app: a toggle that
+    silently installs artifacts you did not list gets confusing with transitive
+    chains, and it conflicts with disable-prunes. The message names what to add.
+    """
+    _checked = [c for c in cat.get(name).components if compEnabled(c, _compOverride(app, c.name))]
+    _pairs = sum([[{owner = c.name, dep = d} for d in c.dependsOn] for c in _checked], [])
+    _noApp = [name + "-" + p.owner + " depends on " + p.dep + ", but app '" + depApp(name, p.dep) + "' is not enabled — add it to spec.apps" for p in _pairs if depApp(name, p.dep) not in apps]
+    _offComp = [name + "-" + p.owner + " depends on " + p.dep + ", but component '" + depComponent(p.dep) + "' of app '" + depApp(name, p.dep) + "' is disabled — enable it or drop the dependency" for p in _pairs if depApp(name, p.dep) in apps and not _compEnabled(apps, depApp(name, p.dep), depComponent(p.dep))]
+    _noApp + _offComp
+}
+
+depProblems = lambda spec: {str:} -> [str] {
+    """Every unsatisfiable dependency in this XR, as human-readable messages."""
+    _apps = enabledApps(spec)
+    sum([appDepProblems(_n, _a, _apps) for _n, _a in _apps], [])
+}
+
 validate = lambda spec: {str:} -> bool {
     """Rules that must hold before anything is emitted.
 
@@ -116,14 +164,13 @@ validate = lambda spec: {str:} -> bool {
     _apps = enabledApps(spec)
     assert fluxInitEnabled(spec) or len(_apps) == 0, "apps are enabled but fluxInit is disabled — fluxInit creates the Flux sources every app references; enable fluxInit or disable all apps"
 
-    # A component depending on a disabled sibling would sit in DependencyNotReady
-    # forever; fail at render instead. Flattened rather than nested `all`, which
-    # does not capture the outer loop binding.
-    _badDeps = sum([["{}-{}".format(_n, _c.name) for _c in cat.get(_n).components if isEnabled((_a?.components or {})[_c.name] or {}) and len([_d for _d in _c.dependsOn if not isEnabled((_a?.components or {})[_d] or {})]) > 0] for _n, _a in _apps], [])
-
+    # An unsatisfiable dependency would sit in DependencyNotReady forever; fail at
+    # render instead, naming what to add. Covers cross-artifact references
+    # ("cert-manager:install") as well as siblings.
     # KCL does NOT interpolate ${} inside assert messages — it prints the
-    # placeholder literally. Concatenate so the message names the offenders.
-    assert len(_badDeps) == 0, "these components depend on a disabled component: " + ", ".join(_badDeps)
+    # placeholder literally — so the messages are concatenated.
+    _depProblems = depProblems(spec)
+    assert len(_depProblems) == 0, "unsatisfiable dependencies — " + "; ".join(_depProblems)
     _missing = missingSubstitutions(spec)
     assert len(_missing) == 0, "required substitution variables are not supplied (Flux substitutes empty strings rather than failing, so this would deploy silently broken): " + ", ".join(_missing)
     True

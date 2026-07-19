@@ -35,6 +35,30 @@ catalog_test.k    invariants — run with `kcl test`
 KCL has no file globbing, so apps are registered explicitly. Adding one is a
 two-line diff in `main.k` plus the new file.
 
+## Dependencies
+
+`Component.dependsOn` takes two forms:
+
+```kcl
+dependsOn = ["control-plane"]           # a sibling component of this app
+dependsOn = ["cert-manager:install"]    # a component of ANOTHER app
+```
+
+Both resolve to the emitted Kustomization name `{app}-{component}`, which is
+globally unique because app names are. Cross-artifact dependencies are real:
+`trust-manager` cannot reconcile before cert-manager's CRDs exist.
+
+A consumer must **reject** a reference whose target app or component is not
+enabled — `xplane-platform` does, naming what to add. Flux would otherwise leave
+the Kustomization in `DependencyNotReady` indefinitely.
+
+## Optional components
+
+`Component.optional = True` marks an opt-in extra that is **not** deployed unless
+the XR names it. cert-manager's `selfsigned` issuer needs a domain; defaulting it
+to enabled would make installing cert-manager at all require an unrelated
+variable.
+
 ## Adding an app
 
 1. `apps/<name>.k` — declare the artifact, default tag and components. Paths are

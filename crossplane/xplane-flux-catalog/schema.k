@@ -23,7 +23,19 @@ schema Component:
     so this is './components/control-plane', not './apps/dapr/components/...'"""
 
     dependsOn?: [str] = []
-    """Other component names (within this app) that must be Ready first"""
+    """Components that must be Ready first.
+
+    Two forms:
+      "control-plane"          another component of THIS app
+      "cert-manager:install"   a component of ANOTHER app (cross-artifact)
+
+    Both resolve to the emitted Kustomization name '{app}-{component}', which is
+    globally unique because app names are. Cross-artifact dependencies are real:
+    trust-manager cannot reconcile before cert-manager's CRDs exist.
+
+    A consumer must reject a reference whose target app or component is not
+    enabled — Flux would otherwise leave the Kustomization in DependencyNotReady
+    indefinitely."""
 
     timeout?: str
     """Overrides the FluxApps default. Set 15m on components that wrap a
@@ -36,6 +48,13 @@ schema Component:
     so a missing one is a silently broken deploy. Consumers should reject an app
     whose required vars are neither in `substitute` nor plausibly supplied by a
     `substituteFrom` source."""
+
+    optional?: bool = False
+    """Opt-in extra: NOT deployed unless the XR enables it explicitly.
+
+    Some artifacts ship pieces most clusters do not want — cert-manager's
+    selfsigned issuer, extra certificates. Defaulting those to enabled would make
+    the base app unusable without supplying their variables."""
 
     wrapsHelmRelease?: bool = False
     """Documentation flag: this component installs a HelmRelease. Explains why

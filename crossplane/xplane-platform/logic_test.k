@@ -157,3 +157,80 @@ test_headlamp_missing_vars_detected = lambda {
         }
     })) == 3
 }
+
+# --- cross-artifact dependsOn -------------------------------------------------
+
+# trust-manager cannot reconcile before cert-manager's CRDs exist; the reference
+# must resolve to cert-manager's emitted Kustomization name, not trust-manager's.
+test_cross_artifact_dependson_resolves = lambda {
+    e = [x for x in l.appEntries({
+        apps = {"trust-manager" = {}, "cert-manager" = {}}
+    }) if x.name == "trust-manager-install"][0]
+    assert e.dependsOn == [{name = "cert-manager-install"}]
+}
+
+# Rejected, not auto-enabled: a toggle that silently installs artifacts you did
+# not list gets confusing with transitive chains.
+test_missing_dependency_app_is_reported = lambda {
+    p = l.depProblems({
+        apps = {
+            "trust-manager" = {}
+        }
+    })
+    assert len(p) == 1
+    assert "add it to spec.apps" in p[0], "the message must name the fix"
+    assert "cert-manager" in p[0]
+}
+
+test_disabled_dependency_component_is_reported = lambda {
+    p = l.depProblems({
+        apps = {"trust-manager" = {}, "cert-manager" = {
+            components = {
+                install = {enabled = False}
+            }
+        }}
+    })
+    assert len([x for x in p if "is disabled" in x]) > 0
+}
+
+test_satisfied_dependency_has_no_problems = lambda {
+    assert len(l.depProblems({
+        apps = {"trust-manager" = {}, "cert-manager" = {}}
+    })) == 0
+}
+
+# --- optional components ------------------------------------------------------
+
+# cert-manager's selfsigned issuer needs a domain; requiring it just to install
+# cert-manager would make the base app unusable.
+test_optional_component_not_emitted_by_default = lambda {
+    names = [e.name for e in l.appEntries({
+        apps = {
+            "cert-manager" = {}
+        }
+    })]
+    assert "cert-manager-install" in names
+    assert "cert-manager-selfsigned" not in names
+}
+
+test_optional_component_emitted_when_enabled = lambda {
+    spec = {
+        apps = {
+            "cert-manager" = {
+                components = {
+                    selfsigned = {enabled = True, substitute = {CERT_MANAGER_SELFSIGNED_DOMAIN = "example.com"}}
+                }
+            }
+        }
+    }
+    assert "cert-manager-selfsigned" in [e.name for e in l.appEntries(spec)]
+}
+
+# An optional component that is off must not have its required vars demanded.
+test_optional_component_vars_not_required_when_off = lambda {
+    assert len(l.missingSubstitutions({
+        apps = {
+            "cert-manager" = {}
+        }
+    })) == 0
+}
