@@ -51,6 +51,29 @@ fluxInitEnabled = lambda spec: {str:} -> bool {
     isEnabled(spec?.fluxInit or {})
 }
 
+cniEnabled = lambda spec: {str:} -> bool {
+    """Opt-IN, unlike every other component.
+
+    Most clusters already have a CNI and installing a second one breaks them, so
+    the default has to be off — the inverse of fluxInit. Only clusters built
+    deliberately blank (this fleet's ansible-provisioned kind clusters) enable it.
+    """
+    (spec?.cni or {})?.enabled or False
+}
+
+gateOpen = lambda ready: bool, exists: bool -> bool {
+    """Should a gated child be emitted?
+
+    `ready` is the gate (e.g. the CNI is up). `exists` says the child is already
+    in ocds, and makes the gate ONE-WAY on purpose: not emitting a child that
+    exists means Crossplane deletes it, so a gate that could re-close would tear
+    Flux down the moment the CNI Release blipped not-Ready during a chart
+    upgrade. The gate is about install ordering, not about continuously
+    enforcing a dependency.
+    """
+    ready or exists
+}
+
 depApp = lambda owner: str, dep: str -> str {
     """Owning app of a dependsOn reference. "cert-manager:install" is
     cross-artifact; a bare name is a sibling in the same app."""

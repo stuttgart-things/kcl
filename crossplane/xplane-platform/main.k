@@ -2,6 +2,9 @@
 xplane-platform — function-kcl module for the platform Crossplane Configuration.
 
 Composes one child XR per enabled component of a cluster's platform:
+  0. Cni       (cni Configuration)        — cluster networking; opt-in, and the
+     other children are gated on it, because a cluster with no CNI has NotReady
+     nodes and a Helm install aimed at it times out rather than failing fast
   1. FluxInit  (flux-init Configuration)  — Flux itself, plus one OCIRepository
      source per enabled app
   2. FluxApps  (flux-apps Configuration)  — one Kustomization per enabled
@@ -32,9 +35,61 @@ _shared = l.resolveShared(_spec)
 _fluxEnabled = l.fluxInitEnabled(_spec)
 _apps = l.enabledApps(_spec)
 _appsEnabled = len(_apps) > 0
+_cniEnabled = l.cniEnabled(_spec)
 
+_cniKey = "{}-cni".format(_name)
 _fluxKey = "{}-flux-init".format(_name)
 _appsKey = "{}-flux-apps".format(_name)
+
+# --- Read child status back (needed by the CNI gate below, so defined early) ---
+_readStatus = lambda key: str -> {str:} {
+    (_ocds[key].Resource?.status or {}) if key in _ocds else {}
+}
+_isReady = lambda st: {str:} -> bool {
+    len([c for c in (st?.conditions or []) if c.type == "Ready" and c.status == "True"]) > 0
+}
+
+# --- Child 0: Cni ---
+# Not just another component: until it is Ready the target cluster's nodes are
+# NotReady, so nothing schedules — and a Helm install aimed at such a cluster
+# does not fail fast, it times out and retries. So the other children are held
+# until this one reports ready.
+_cniSpec = _spec?.cni or {}
+_cniStatus = _readStatus(_cniKey)
+_cniReady = _isReady(_cniStatus)
+
+_cniXR = {
+    apiVersion = "config.stuttgart-things.com/v1alpha1"
+    kind = "Cni"
+    metadata = {
+        name = _cniKey
+        namespace = _namespace
+        annotations = {"krm.kcl.dev/composition-resource-name" = _cniKey}
+    }
+    spec = {
+        if _shared?.clusterName:
+            clusterName = _shared.clusterName
+        if _shared.helmProviderConfigRef:
+            helmProviderConfigRef = _shared.helmProviderConfigRef
+        observeProviderConfigRef = _shared.observeProviderConfigRef
+        if _cniSpec?.provider:
+            provider = _cniSpec.provider
+        # NOT _shared.namespace: that is the Flux namespace. A CNI belongs in
+        # kube-system, which the cni Configuration defaults to on its own.
+        if _cniSpec?.namespace:
+            namespace = _cniSpec.namespace
+        if _cniSpec?.chart:
+            chart = _cniSpec.chart
+        if _cniSpec?.cilium:
+            cilium = _cniSpec.cilium
+        if _cniSpec?.values:
+            values = _cniSpec.values
+    }
+}
+
+# One-way gate: once a child exists, keep emitting it even if the CNI blips
+# not-Ready during a chart upgrade — otherwise Crossplane would delete it.
+_networkReady = _cniReady if _cniEnabled else True
 
 # --- Child 1: FluxInit ---
 # Sources are the union of what the XR declared and what enabling an app
@@ -89,15 +144,9 @@ _fluxAppsXR = {
     }
 }
 
-_children = ([_fluxInitXR] if _fluxEnabled else []) + ([_fluxAppsXR] if _appsEnabled else [])
-
-# --- Read child status back ---
-_readStatus = lambda key: str -> {str:} {
-    (_ocds[key].Resource?.status or {}) if key in _ocds else {}
-}
-_isReady = lambda st: {str:} -> bool {
-    len([c for c in (st?.conditions or []) if c.type == "Ready" and c.status == "True"]) > 0
-}
+_children = ([_cniXR] if _cniEnabled else []) \
+    + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) \
+    + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else [])
 
 _fluxStatus = _readStatus(_fluxKey)
 _fluxReady = _isReady(_fluxStatus)
@@ -108,13 +157,19 @@ _appsReady = _isReady(_appsStatus)
 # it into shared status keeps later components from re-observing it.
 _clusterType = _fluxStatus?.clusterType or ""
 
-_enabledReady = ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else [])
+_enabledReady = ([_cniReady] if _cniEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else [])
 _readyComponents = len([r for r in _enabledReady if r])
 
 _xrStatus = _oxr | {
     status = {
         shared = _shared | ({clusterType = _clusterType} if _clusterType else {})
         components = {
+            cni = {
+                enabled = _cniEnabled
+                ready = _cniReady
+                provider = _cniStatus?.provider or ""
+                version = _cniStatus?.version or ""
+            }
             fluxInit = {
                 enabled = _fluxEnabled
                 ready = _fluxReady
