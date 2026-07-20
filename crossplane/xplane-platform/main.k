@@ -144,9 +144,7 @@ _fluxAppsXR = {
     }
 }
 
-_children = ([_cniXR] if _cniEnabled else []) \
-    + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) \
-    + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else [])
+_children = ([_cniXR] if _cniEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else [])
 
 _fluxStatus = _readStatus(_fluxKey)
 _fluxReady = _isReady(_fluxStatus)

@@ -13,7 +13,9 @@ test_chart_defaults = lambda {
 }
 
 test_chart_overrides = lambda {
-    _c = l.chart({chart = {version = "1.20.0", repository = "oci://example.test/charts"}})
+    _c = l.chart({
+        chart = {version = "1.20.0", repository = "oci://example.test/charts"}
+    })
     assert _c.version == "1.20.0"
     assert _c.repository == "oci://example.test/charts"
     # name is not overridable — it identifies the provider
@@ -34,7 +36,9 @@ test_kube_proxy_replacement_defaults_on = lambda {
 
 test_explicit_false_is_not_swallowed = lambda {
     # The `or True` trap: an explicit false must survive.
-    assert l.kubeProxyReplacement({cilium = {kubeProxyReplacement = False}}) == False
+    assert l.kubeProxyReplacement({
+        cilium = {kubeProxyReplacement = False}
+    }) == False
 }
 
 test_values_wire_the_api_server = lambda {
