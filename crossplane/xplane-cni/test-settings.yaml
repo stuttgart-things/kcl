@@ -1,0 +1,20 @@
+kcl_options:
+  - key: params
+    value:
+      oxr:
+        apiVersion: config.stuttgart-things.com/v1alpha1
+        kind: Cni
+        metadata:
+          name: test-cni
+          namespace: crossplane-system
+        spec:
+          clusterName: kind-test1
+          provider: cilium
+          namespace: kube-system
+          chart:
+            version: "1.19.6"
+          cilium:
+            kubeProxyReplacement: true
+            operatorReplicas: 1
+      ocds: {}
+      ctx: {}

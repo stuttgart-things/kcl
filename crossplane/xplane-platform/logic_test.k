@@ -234,3 +234,29 @@ test_optional_component_vars_not_required_when_off = lambda {
         }
     })) == 0
 }
+
+test_cni_is_opt_in = lambda {
+    # Inverse default from every other component: most clusters already have a
+    # CNI and a second one breaks them.
+    assert l.cniEnabled({}) == False
+    assert l.cniEnabled({
+        cni = {}
+    }) == False
+    assert l.cniEnabled({
+        cni = {enabled = True}
+    }) == True
+    assert l.cniEnabled({
+        cni = {enabled = False}
+    }) == False
+}
+
+test_gate_holds_children_until_ready = lambda {
+    assert l.gateOpen(False, False) == False
+    assert l.gateOpen(True, False) == True
+}
+
+test_gate_is_one_way = lambda {
+    # A CNI blipping not-Ready mid chart-upgrade must NOT drop an existing child
+    # — not emitting it is what makes Crossplane delete it.
+    assert l.gateOpen(False, True) == True
+}
