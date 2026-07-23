@@ -1,0 +1,17 @@
+[dependencies]
+  [dependencies.k8s]
+    name = "k8s"
+    full_name = "k8s_1.32.4"
+    version = "1.32.4"
+    sum = "WrltC/mTXtdzmhBZxlvM71wJL5C/UZ/vW+bF3nFvNbM="
+    reg = "ghcr.io"
+    repo = "kcl-lang/k8s"
+    oci_tag = "1.32.4"
+  [dependencies.tekton-pipelines]
+    name = "tekton-pipelines"
+    full_name = "tekton-pipelines_1.0.0"
+    version = "1.0.0"
+    sum = "0nPHi/qA9Gqd+P06YrrD/35IDbv3hAVP59SgtXnDb2U="
+    reg = "ghcr.io"
+    repo = "kcl-lang/tekton-pipelines"
+    oci_tag = "1.0.0"
