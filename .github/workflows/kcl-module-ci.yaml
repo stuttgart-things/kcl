@@ -234,14 +234,27 @@ jobs:
 
       - name: Check if version exists in registry
         id: check-version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Try to pull the specific version
-          if kcl mod metadata ${{ steps.metadata.outputs.oci_ref }} --tag ${{ steps.metadata.outputs.version }} 2>/dev/null; then
+          # Ask the packages API which tags exist. The previous check ran
+          #   kcl mod metadata <ref> --tag <version>
+          # which fails with "unknown flag: --tag" — 'kcl mod metadata' has no
+          # such flag — so it ALWAYS reported exists=false. That went unnoticed
+          # while CI was the only publisher (the version was always new), and
+          # surfaced the first time a module was pushed from a workstation:
+          # the merge run then tried to republish and 'kcl mod push' exits 1
+          # with "package version 'x.y.z' already exists".
+          NAME="${{ steps.metadata.outputs.name }}"
+          VERSION="${{ steps.metadata.outputs.version }}"
+          TAGS=$(gh api "/orgs/${{ github.repository_owner }}/packages/container/${NAME}/versions" \
+                   --jq '.[].metadata.container.tags[]' 2>/dev/null || true)
+          if echo "${TAGS}" | grep -qx "${VERSION}"; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "⚠️  Version ${{ steps.metadata.outputs.version }} already exists in registry"
+            echo "⚠️  Version ${VERSION} already exists in registry — skipping publish"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "✅ Version ${{ steps.metadata.outputs.version }} does not exist, will publish"
+            echo "✅ Version ${VERSION} does not exist, will publish"
           fi
 
       # 'kcl registry login' cannot be used here: it stores the credential via
