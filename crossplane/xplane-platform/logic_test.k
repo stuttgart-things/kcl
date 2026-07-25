@@ -260,3 +260,11 @@ test_gate_is_one_way = lambda {
     # — not emitting it is what makes Crossplane delete it.
     assert l.gateOpen(False, True) == True
 }
+
+test_cilium_and_ipreservation_are_opt_in = lambda {
+    assert l.ciliumEnabled({}) == False
+    assert l.ipReservationEnabled({}) == False
+    assert l.ciliumEnabled({cilium = {enabled = True}}) == True
+    assert l.ipReservationEnabled({ipReservation = {enabled = True}}) == True
+    assert l.ciliumEnabled({cilium = {enabled = False}}) == False
+}
