@@ -1,56 +1,66 @@
 import main as vault_auth
 
-# Test simple authentication backend
-simpleAuth = vault_auth.simpleVaultK8sAuth("test-app", "test-cluster", "https://vault.test.com")
-
-# Test assertions for simple auth (returns list with one workspace)
-assert len(simpleAuth) == 1
-workspace = simpleAuth[0]
-assert workspace.apiVersion == "tf.upbound.io/v1beta1"
-assert workspace.kind == "Workspace"
-assert workspace.metadata.name == "test-cluster-test-app-vault-auth"
-assert workspace.spec.forProvider.source == "Inline"
-assert "vault_auth_backend" in workspace.spec.forProvider.module
-assert "provider \"vault\"" in workspace.spec.forProvider.module
-
-# Test auth with policies
-authWithPolicies = vault_auth.simpleVaultK8sAuthWithPolicies(
-    "cicd-app",
-    "prod-cluster",
-    "https://vault.prod.com",
-    ["read-policy", "write-policy"]
-)
-
-assert len(authWithPolicies) == 1
-policyWorkspace = authWithPolicies[0]
-assert policyWorkspace.metadata.name == "prod-cluster-cicd-app-vault-auth"
-assert "token_policies                   = var.token_policies" in policyWorkspace.spec.forProvider.module
-assert "token_ttl                        = var.token_ttl" in policyWorkspace.spec.forProvider.module
-
-# Validate variables in workspace
-vars = policyWorkspace.spec.forProvider.vars
-tokenPoliciesVar = [v for v in vars if v.key == "token_policies"][0]
-assert tokenPoliciesVar.value == "[read-policy, write-policy]"# Test advanced auth configuration
-advancedAuth = vault_auth.advancedVaultK8sAuth(
-    "advanced-app",
-    "staging",
-    "https://vault.staging.com",
-    ["advanced-policy"],
-    1800
-)
-
-assert len(advancedAuth) == 1
-advancedWorkspace = advancedAuth[0]
-assert advancedWorkspace.metadata.name == "staging-advanced-app-vault-auth"
-
-# Test single workspace creation directly
-directAuth = vault_auth.K8sAuth {
-    name = "direct-app"
-    clusterName = "direct-cluster"
-    vaultAddr = "https://vault.direct.com"
+# --- Config with two auths: one plain, one with backendConfig ---
+_config = vault_auth.VaultConfig {
+    clusterName = "test-cluster"
+    vaultAddr = "https://vault.test.com"
+    skipTlsVerify = True
+    namespace = "default"
+    kubernetesHost = "https://10.0.0.1:6443"
+    k8sAuths = [
+        vault_auth.K8sAuth {
+            name = "certmanager"
+            clusterName = "test-cluster"
+            vaultAddr = "https://vault.test.com"
+            tokenPolicies = ["pki-issue"]
+            boundServiceAccountNames = ["cert-manager"]
+            boundServiceAccountNamespaces = ["cert-manager"]
+        }
+        vault_auth.K8sAuth {
+            name = "cicd"
+            clusterName = "test-cluster"
+            vaultAddr = "https://vault.test.com"
+            tokenPolicies = ["read-secrets"]
+            backendConfig = vault_auth.K8sAuthBackendConfig {
+                secretName = "reviewer-token"
+                secretNamespace = "kube-system"
+            }
+        }
+    ]
 }
-singleAuth = vault_auth.createSingleVaultAuth(directAuth)
-assert len(singleAuth) == 1
-assert singleAuth[0].metadata.name == "direct-cluster-direct-app-vault-auth"
+
+_workspaces = vault_auth.vaultK8sAuth(_config)
+assert len(_workspaces) == 2
+
+_plain = [w for w in _workspaces if w.metadata.name == "test-cluster-certmanager-vault-auth"][0]
+_withCfg = [w for w in _workspaces if w.metadata.name == "test-cluster-cicd-vault-auth"][0]
+
+# --- AppRole login, NOT a static token ---
+_pm = _plain.spec.forProvider.module
+assert "auth_login {" in _pm, "provider must use auth_login (AppRole)"
+assert 'path = "auth/approle/login"' in _pm
+assert "skip_child_token = true" in _pm
+assert "var.vault_role_id" in _pm
+assert "var.vault_secret_id" in _pm
+assert "token           = var.vault_token" not in _pm, "static token block must be gone"
+assert 'variable "vault_role_id"' in _pm
+assert 'variable "vault_secret_id"' in _pm
+
+# --- required_providers pins vault ~> 3.25 ---
+assert "required_providers" in _pm
+assert 'version = "~> 3.25"' in _pm
+# plain auth pulls no kubernetes provider
+assert "hashicorp/kubernetes" not in _pm
+
+# --- credentials still injected via the tfvars SecretKey varFile ---
+_vf = _plain.spec.forProvider.varFiles[0]
+assert _vf.source == "SecretKey"
+assert _vf.secretKeyRef.key == "terraform.tfvars"
+
+# --- backendConfig auth adds the kubernetes provider + backend_config resource ---
+_cm = _withCfg.spec.forProvider.module
+assert "hashicorp/kubernetes" in _cm, "backendConfig must pull the kubernetes provider"
+assert "vault_kubernetes_auth_backend_config" in _cm
+assert "token_reviewer_jwt" in _cm
 
 print("All tests passed! ✓")

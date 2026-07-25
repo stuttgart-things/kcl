@@ -43,11 +43,32 @@ schema VaultConfig:
     # Required if any K8sAuth in k8sAuths has backendConfig set.
     kubernetesHost?: str
 
-# Base HCL: vault provider + auth_backend + auth_backend_role.
+# Base HCL: vault provider (AppRole login) + auth_backend + auth_backend_role.
+#
+# Auth is AppRole, NOT a static token: each tofu apply exchanges
+# role_id/secret_id for a short-lived Vault token carrying only the
+# vault-k8sauth-bootstrap policy. This is why the continuously-reconciling
+# Workspace no longer wedges — a static token expires (768h cap) and 403s every
+# reconcile in both create and delete; an AppRole login mints a fresh token each
+# run. role_id/secret_id arrive via the tfvars varFile (SecretKey), same slot
+# the old static vault_token used.
+#
+# skip_child_token = true: the provider would otherwise mint a child token via
+# auth/token/create, which the least-privilege bootstrap policy need not allow.
+# Pin vault ~> 3.25: v5.x reworked the auth_login block ("Blocks of type
+# auth_login are not expected here").
 _baseHcl = r"""provider "vault" {
-  address         = var.vault_addr
-  skip_tls_verify = var.skip_tls_verify
-  token           = var.vault_token
+  address          = var.vault_addr
+  skip_tls_verify  = var.skip_tls_verify
+  skip_child_token = true
+
+  auth_login {
+    path = "auth/approle/login"
+    parameters = {
+      role_id   = var.vault_role_id
+      secret_id = var.vault_secret_id
+    }
+  }
 }
 
 resource "vault_auth_backend" "kubernetes" {
@@ -81,7 +102,12 @@ variable "skip_tls_verify" {
   default = false
 }
 
-variable "vault_token" {
+variable "vault_role_id" {
+  type      = string
+  sensitive = true
+}
+
+variable "vault_secret_id" {
   type      = string
   sensitive = true
 }
@@ -170,6 +196,14 @@ variable "disable_local_ca_jwt" {
 }
 """
 
+# required_providers: pin vault to ~> 3.25 (v5 reworked auth_login). Add the
+# kubernetes provider only when a backend_config is rendered (it reads the
+# reviewer JWT / CA via data "kubernetes_secret").
+_terraformBlock = lambda hasBackendConfig: bool -> str {
+    _k8s = '\n    kubernetes = {\n      source  = "hashicorp/kubernetes"\n      version = "~> 2.0"\n    }' if hasBackendConfig else ""
+    'terraform {\n  required_providers {\n    vault = {\n      source  = "hashicorp/vault"\n      version = "~> 3.25"\n    }' + _k8s + '\n  }\n}\n\n'
+}
+
 _listToJson = lambda items: [str] -> str {
     '["' + '","'.join(items) + '"]'
 }
@@ -202,7 +236,7 @@ _backendConfigVars = lambda auth: K8sAuth, config: VaultConfig -> [{str:str}] {
 
 # Build one Workspace for a single K8sAuth entry.
 createSingleVaultAuth = lambda auth: K8sAuth, config: VaultConfig -> otf.Workspace {
-    _module = _baseHcl + (_backendConfigHcl if auth.backendConfig else "")
+    _module = _terraformBlock(auth.backendConfig != Undefined) + _baseHcl + (_backendConfigHcl if auth.backendConfig else "")
     _vars = _baseVars(auth) + _backendConfigVars(auth, config)
     otf.Workspace {
         metadata = {

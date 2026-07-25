@@ -56,9 +56,12 @@ items = vault_auth.vaultK8sAuth(config)
 | `boundServiceAccountNamespaces` | `["default"]` |
 | `labels` / `annotations` | — |
 
-## Vault token Secret
+## Vault AppRole Secret
 
-The generated `varFiles` entry references a Secret in the **same namespace** as the Workspace:
+The generated `varFiles` entry references a Secret in the **same namespace** as
+the Workspace. Auth is **AppRole**, not a static token — each tofu apply
+exchanges `role_id`/`secret_id` for a short-lived Vault token, so the
+continuously-reconciling Workspace never wedges on an expired token:
 
 ```yaml
 apiVersion: v1
@@ -69,12 +72,27 @@ metadata:
 type: Opaque
 stringData:
   terraform.tfvars: |
-    vault_token = "hvs..."
+    vault_role_id   = "..."
+    vault_secret_id = "..."
 ```
+
+The AppRole must be bound to a policy that can manage the kubernetes auth mount
+(e.g. `vault-k8sauth-bootstrap`: `sys/auth/*`, `auth/+/config`, `auth/+/role/*`).
+
+## Migration from 0.7.x
+
+0.8.0 is a breaking change:
+
+- Vault provider now authenticates via **AppRole `auth_login`** instead of a
+  static `token`. The tfvars Secret must supply `vault_role_id` +
+  `vault_secret_id` (was `vault_token`). `skip_child_token = true` is set.
+- A `terraform { required_providers }` block now pins vault to `~> 3.25`
+  (v5.x reworked `auth_login`); the kubernetes provider (`~> 2.0`) is added only
+  when a `backendConfig` is rendered.
 
 ## Migration from 0.4.x
 
-0.5.0 is a breaking change:
+0.5.0 was a breaking change:
 
 - Switched dependency from `crossplane-provider-terraform` to `crossplane-provider-opentofu`.
 - Workspace `apiVersion` changed to `opentofu.m.upbound.io/v1beta1`.
