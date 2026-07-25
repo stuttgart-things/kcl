@@ -26,22 +26,20 @@ _buildBackendConfig = lambda bc: any -> vault_auth.K8sAuthBackendConfig {
     } if bc else Undefined
 }
 
-_k8sAuths = [
-    vault_auth.K8sAuth {
-        name = auth?.name or "default"
-        clusterName = auth?.clusterName or _clusterName
-        vaultAddr = auth?.vaultAddr or _vaultAddr
-        skipTlsVerify = auth.skipTlsVerify if "skipTlsVerify" in auth else _skipTlsVerify
-        tokenPolicies = auth?.tokenPolicies or ["read-secrets"]
-        tokenTtl = auth?.tokenTtl or 3600
-        boundServiceAccountNames = auth?.boundServiceAccountNames or ["default"]
-        boundServiceAccountNamespaces = auth?.boundServiceAccountNamespaces or ["default"]
-        backendConfig = _buildBackendConfig(auth?.backendConfig)
-    } for auth in (_spec?.k8sAuths or [
-        {"name": "frontend", "tokenPolicies": ["read-secrets"], "tokenTtl": 7200},
-        {"name": "backend", "tokenPolicies": ["read-secrets", "write-logs"], "tokenTtl": 3600},
-    ])
-]
+_k8sAuths = [vault_auth.K8sAuth {
+    name = auth?.name or "default"
+    clusterName = auth?.clusterName or _clusterName
+    vaultAddr = auth?.vaultAddr or _vaultAddr
+    skipTlsVerify = auth.skipTlsVerify if "skipTlsVerify" in auth else _skipTlsVerify
+    tokenPolicies = auth?.tokenPolicies or ["read-secrets"]
+    tokenTtl = auth?.tokenTtl or 3600
+    boundServiceAccountNames = auth?.boundServiceAccountNames or ["default"]
+    boundServiceAccountNamespaces = auth?.boundServiceAccountNamespaces or ["default"]
+    backendConfig = _buildBackendConfig(auth?.backendConfig)
+} for auth in (_spec?.k8sAuths or [
+    {"name": "frontend", "tokenPolicies": ["read-secrets"], "tokenTtl": 7200}
+    {"name": "backend", "tokenPolicies": ["read-secrets", "write-logs"], "tokenTtl": 3600}
+])]
 
 _config = vault_auth.VaultConfig {
     k8sAuths = _k8sAuths
