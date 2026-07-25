@@ -1,7 +1,6 @@
 # Library module — not runnable standalone.
 # Generates Crossplane v2 namespaced OpenTofu Workspaces that configure
 # Vault Kubernetes auth backends (optionally with backend_config).
-
 import v1beta1 as otf
 
 schema K8sAuthBackendConfig:
@@ -10,7 +9,8 @@ schema K8sAuthBackendConfig:
     # via the kubernetes TF provider `data "kubernetes_secret"` from a
     # Secret in the cluster running opentofu-provider.
     secretName: str
-    secretNamespace?: str   # defaults to the Workspace namespace
+    # defaults to the Workspace namespace
+    secretNamespace?: str
     caCertKey?: str = "ca.crt"
     tokenKey?: str = "token"
     disableIssValidation?: bool = True
@@ -27,8 +27,8 @@ schema K8sAuth:
     boundServiceAccountNamespaces?: [str] = ["default"]
     # If set, the generated Workspace also renders vault_kubernetes_auth_backend_config.
     backendConfig?: K8sAuthBackendConfig
-    labels?: {str: str}
-    annotations?: {str: str}
+    labels?: {str:str}
+    annotations?: {str:str}
 
 schema VaultConfig:
     k8sAuths: [K8sAuth]
@@ -210,27 +210,27 @@ _listToJson = lambda items: [str] -> str {
 
 _baseVars = lambda auth: K8sAuth -> [{str:str}] {
     [
-        {key = "auth_name",                         value = auth.name}
-        {key = "cluster_name",                      value = auth.clusterName}
-        {key = "vault_addr",                        value = auth.vaultAddr}
-        {key = "skip_tls_verify",                   value = "true" if auth.skipTlsVerify else "false"}
-        {key = "token_policies",                    value = _listToJson(auth.tokenPolicies)}
-        {key = "token_ttl",                         value = str(auth.tokenTtl)}
-        {key = "bound_service_account_names",       value = _listToJson(auth.boundServiceAccountNames)}
-        {key = "bound_service_account_namespaces",  value = _listToJson(auth.boundServiceAccountNamespaces)}
+        {key = "auth_name", value = auth.name}
+        {key = "cluster_name", value = auth.clusterName}
+        {key = "vault_addr", value = auth.vaultAddr}
+        {key = "skip_tls_verify", value = "true" if auth.skipTlsVerify else "false"}
+        {key = "token_policies", value = _listToJson(auth.tokenPolicies)}
+        {key = "token_ttl", value = str(auth.tokenTtl)}
+        {key = "bound_service_account_names", value = _listToJson(auth.boundServiceAccountNames)}
+        {key = "bound_service_account_namespaces", value = _listToJson(auth.boundServiceAccountNamespaces)}
     ]
 }
 
 _backendConfigVars = lambda auth: K8sAuth, config: VaultConfig -> [{str:str}] {
     bc = auth.backendConfig
     [
-        {key = "kubernetes_host",        value = config.kubernetesHost or ""}
-        {key = "sa_secret_name",         value = bc.secretName}
-        {key = "sa_secret_namespace",    value = bc.secretNamespace or config.namespace}
-        {key = "sa_ca_cert_key",         value = bc.caCertKey}
-        {key = "sa_token_key",           value = bc.tokenKey}
+        {key = "kubernetes_host", value = config.kubernetesHost or ""}
+        {key = "sa_secret_name", value = bc.secretName}
+        {key = "sa_secret_namespace", value = bc.secretNamespace or config.namespace}
+        {key = "sa_ca_cert_key", value = bc.caCertKey}
+        {key = "sa_token_key", value = bc.tokenKey}
         {key = "disable_iss_validation", value = "true" if bc.disableIssValidation else "false"}
-        {key = "disable_local_ca_jwt",   value = "true" if bc.disableLocalCaJwt else "false"}
+        {key = "disable_local_ca_jwt", value = "true" if bc.disableLocalCaJwt else "false"}
     ] if bc else []
 }
 
