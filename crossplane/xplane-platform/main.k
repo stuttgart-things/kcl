@@ -38,12 +38,17 @@ _appsEnabled = len(_apps) > 0
 _cniEnabled = l.cniEnabled(_spec)
 _ciliumEnabled = l.ciliumEnabled(_spec)
 _ipResEnabled = l.ipReservationEnabled(_spec)
+_vaultIssuerEnabled = l.vaultIssuerEnabled(_spec)
 
 _cniKey = "{}-cni".format(_name)
 _fluxKey = "{}-flux-init".format(_name)
 _appsKey = "{}-flux-apps".format(_name)
 _ciliumKey = "{}-cilium".format(_name)
 _ipResKey = "{}-ip-reservation".format(_name)
+_vaultAuthKey = "{}-vault-auth".format(_name)
+_vaultPkiKey = "{}-vault-pki".format(_name)
+_issuerKey = "{}-cluster-issuer".format(_name)
+_tokenReqKey = "{}-cert-manager-tokenrequest".format(_name)
 
 # --- Read child status back (needed by the CNI gate below, so defined early) ---
 _readStatus = lambda key: str -> {str:} {
@@ -211,7 +216,118 @@ _ciliumXR = {
     }
 }
 
-_children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else [])
+# --- Vault-issuer children (tokenless cert-manager -> Vault-PKI) ---
+# 5 resources: VaultK8sAuth (Vault mount, opentofu Workspace via AppRole),
+# VaultPkiSecret (CA bundle -> target cert-manager ns), and three
+# provider-kubernetes Objects on the target (k8s-auth ClusterIssuer +
+# TokenRequest Role/RoleBinding). cert-manager's CONTROLLER comes via
+# apps.cert-manager (FluxApps); this only wires the tokenless issuer.
+# Prereqs on the mgmt cluster in _namespace: the AppRole tfvars secret, the
+# reviewer backendConfig secret, and the source CA secret.
+_viSpec = _spec?.vaultIssuer or {}
+_viAuthName = _viSpec?.authName or "certmanager"
+_viCmNs = _viSpec?.certManagerNamespace or "cert-manager"
+_viPkiMount = _viSpec?.pkiMount or "pki"
+_viIssuerName = _viSpec?.issuerName or "vault-pki-k8s"
+_viCaSecret = _viSpec?.caSecretName or "vault-pki-ca"
+_viTargetRef = _shared.kubernetesProviderConfigRef
+
+_vaultK8sAuthXR = {
+    apiVersion = "config.stuttgart-things.com/v1alpha1"
+    kind = "VaultK8sAuth"
+    metadata = {name = _vaultAuthKey, namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = _vaultAuthKey}}
+    spec = {
+        if _shared?.clusterName:
+            clusterName = _shared.clusterName
+        vaultAddr = _viSpec?.vaultAddr or ""
+        skipTlsVerify = _viSpec.skipTlsVerify if "skipTlsVerify" in _viSpec else True
+        if _viSpec?.kubernetesHost:
+            kubernetesHost = _viSpec.kubernetesHost
+        vaultTokenSecret = _viSpec?.approleSecret or "vault-approle"
+        providerConfigName = _viSpec?.opentofuProviderConfigRef or "in-cluster"
+        providerConfigKind = "ClusterProviderConfig"
+        k8sAuths = [{
+            name = _viAuthName
+            tokenPolicies = _viSpec?.tokenPolicies or ["pki-issue"]
+            boundServiceAccountNames = ["cert-manager"]
+            boundServiceAccountNamespaces = [_viCmNs]
+            if _viSpec?.reviewerSecret:
+                backendConfig = {secretName = _viSpec.reviewerSecret, secretNamespace = _namespace}
+        }]
+    }
+}
+
+_vaultPkiSecretXR = {
+    apiVersion = "config.stuttgart-things.com/v1alpha1"
+    kind = "VaultPkiSecret"
+    metadata = {name = _vaultPkiKey, namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = _vaultPkiKey}}
+    spec = {
+        providerConfigRef = _viTargetRef
+        providerConfigKind = "ClusterProviderConfig"
+        namespace = _viCmNs
+        caSecretName = _viCaSecret
+        caBundleSecretRef = {name = _viSpec?.caSourceSecret or "vault-pki-source-ca", namespace = _namespace}
+    }
+}
+
+_issuerObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = _issuerKey, namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = _issuerKey}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "cert-manager.io/v1"
+            kind = "ClusterIssuer"
+            metadata.name = _viIssuerName
+            spec.vault = {
+                server = _viSpec?.vaultAddr or ""
+                path = "{}/sign/{}".format(_viPkiMount, _viSpec?.pkiRole or "")
+                caBundleSecretRef = {name = _viCaSecret, key = "ca.crt"}
+                auth.kubernetes = {
+                    mountPath = "/v1/auth/{}-{}".format(_shared?.clusterName or "", _viAuthName)
+                    role = _viAuthName
+                    serviceAccountRef.name = "cert-manager"
+                }
+            }
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+
+_tokenReqRoleObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-role".format(_tokenReqKey), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-role".format(_tokenReqKey)}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "rbac.authorization.k8s.io/v1"
+            kind = "Role"
+            metadata = {name = "cert-manager-tokenrequest", namespace = _viCmNs}
+            rules = [{apiGroups = [""], resources = ["serviceaccounts/token"], resourceNames = ["cert-manager"], verbs = ["create"]}]
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+
+_tokenReqBindingObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-binding".format(_tokenReqKey), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-binding".format(_tokenReqKey)}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "rbac.authorization.k8s.io/v1"
+            kind = "RoleBinding"
+            metadata = {name = "cert-manager-tokenrequest", namespace = _viCmNs}
+            roleRef = {apiGroup = "rbac.authorization.k8s.io", kind = "Role", name = "cert-manager-tokenrequest"}
+            subjects = [{kind = "ServiceAccount", name = "cert-manager", namespace = _viCmNs}]
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+
+_vaultIssuerChildren = [_vaultK8sAuthXR, _vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj] if _vaultIssuerEnabled else []
+
+_children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else []) + _vaultIssuerChildren
 
 _fluxStatus = _readStatus(_fluxKey)
 _fluxReady = _isReady(_fluxStatus)
@@ -221,12 +337,16 @@ _ciliumStatus = _readStatus(_ciliumKey)
 _ciliumReady = _isReady(_ciliumStatus)
 _ipResStatus = _readStatus(_ipResKey)
 _ipResReady = _isReady(_ipResStatus)
+_vaultAuthReady = _isReady(_readStatus(_vaultAuthKey))
+_vaultPkiReady = _isReady(_readStatus(_vaultPkiKey))
+_issuerReady = _isReady(_readStatus(_issuerKey))
+_vaultIssuerReady = _vaultAuthReady and _vaultPkiReady and _issuerReady
 
 # clusterType is discovered by the FluxInit child from the RemoteCluster; lifting
 # it into shared status keeps later components from re-observing it.
 _clusterType = _fluxStatus?.clusterType or ""
 
-_enabledReady = ([_cniReady] if _cniEnabled else []) + ([_ipResReady] if _ipResEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else []) + ([_ciliumReady] if _ciliumEnabled else [])
+_enabledReady = ([_cniReady] if _cniEnabled else []) + ([_ipResReady] if _ipResEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else []) + ([_ciliumReady] if _ciliumEnabled else []) + ([_vaultIssuerReady] if _vaultIssuerEnabled else [])
 _readyComponents = len([r for r in _enabledReady if r])
 
 _xrStatus = _oxr | {
@@ -265,6 +385,13 @@ _xrStatus = _oxr | {
                 loadBalancerReady = _ciliumStatus?.loadBalancerReady or False
                 gatewayReady = _ciliumStatus?.gatewayReady or False
                 networkKey = _ciliumStatus?.networkKey or ""
+            }
+            vaultIssuer = {
+                enabled = _vaultIssuerEnabled
+                ready = _vaultIssuerReady
+                authReady = _vaultAuthReady
+                caReady = _vaultPkiReady
+                issuerReady = _issuerReady
             }
         }
         componentCount = len(_enabledReady)

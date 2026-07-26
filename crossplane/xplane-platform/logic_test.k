@@ -274,3 +274,13 @@ test_cilium_and_ipreservation_are_opt_in = lambda {
         cilium = {enabled = False}
     }) == False
 }
+
+test_vault_issuer_is_opt_in = lambda {
+    assert l.vaultIssuerEnabled({}) == False
+    assert l.vaultIssuerEnabled({
+        vaultIssuer = {enabled = True}
+    }) == True
+    assert l.vaultIssuerEnabled({
+        vaultIssuer = {enabled = False}
+    }) == False
+}

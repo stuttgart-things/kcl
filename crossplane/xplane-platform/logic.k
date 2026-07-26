@@ -78,6 +78,17 @@ ipReservationEnabled = lambda spec: {str:} -> bool {
     (spec?.ipReservation or {})?.enabled or False
 }
 
+vaultIssuerEnabled = lambda spec: {str:} -> bool {
+    """Opt-IN. Provisions the TOKENLESS cert-manager -> Vault-PKI path: a Vault
+    Kubernetes-auth mount (VaultK8sAuth), the CA bundle on the target
+    (VaultPkiSecret), and the k8s-auth ClusterIssuer + TokenRequest RBAC. The
+    cert-manager CONTROLLER itself comes via FluxApps (apps.cert-manager); this
+    only wires the tokenless issuer on top. Prereqs (per cluster, on the mgmt
+    cluster, in the Platform namespace): an AppRole tfvars secret + a reviewer
+    backendConfig secret (target CA + reviewer JWT) + a source CA secret."""
+    (spec?.vaultIssuer or {})?.enabled or False
+}
+
 gateOpen = lambda ready: bool, exists: bool -> bool {
     """Should a gated child be emitted?
 
