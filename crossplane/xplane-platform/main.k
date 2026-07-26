@@ -232,6 +232,27 @@ _viIssuerName = _viSpec?.issuerName or "vault-pki-k8s"
 _viCaSecret = _viSpec?.caSecretName or "vault-pki-ca"
 _viTargetRef = _shared.kubernetesProviderConfigRef
 
+# --- Reviewer JWT provisioning (auto) ---
+# Vault's k8s-auth mount needs a token_reviewer_jwt from the TARGET (an
+# auth-delegator SA), which the VaultK8sAuth Workspace reads from a secret on
+# the MGMT cluster. autoReviewer provisions the whole chain: an auth-delegator
+# SA + long-lived token Secret on the target, an Observe of that Secret, and a
+# copy of its ca.crt+token into a mgmt Secret. An explicit reviewerSecret skips
+# it. Verified: provider-kubernetes Observe exposes a Secret's data, so the copy
+# needs no external step.
+_viReviewerObserveKey = "{}-reviewer-observe".format(_name)
+_viReviewerMgmtSecret = "{}-reviewer".format(_name)
+_viAutoReviewer = _viSpec.autoReviewer if "autoReviewer" in _viSpec else (not _viSpec?.reviewerSecret)
+
+# Observed reviewer ca.crt + token from the target Secret (empty until observed).
+_viRevData = (_ocds[_viReviewerObserveKey].Resource?.status?.atProvider?.manifest?.data or {}) if _viReviewerObserveKey in _ocds else {}
+_viRevToken = _viRevData?.token or ""
+_viRevCa = _viRevData["ca.crt"] if "ca.crt" in _viRevData else ""
+
+# The reviewer secret the Workspace reads, and whether it is available yet.
+_viEffReviewerSecret = _viReviewerMgmtSecret if _viAutoReviewer else (_viSpec?.reviewerSecret or "")
+_viReviewerAvailable = (_viRevToken != "") if _viAutoReviewer else (_viSpec?.reviewerSecret != None)
+
 _vaultK8sAuthXR = {
     apiVersion = "config.stuttgart-things.com/v1alpha1"
     kind = "VaultK8sAuth"
@@ -251,8 +272,11 @@ _vaultK8sAuthXR = {
             tokenPolicies = _viSpec?.tokenPolicies or ["pki-issue"]
             boundServiceAccountNames = ["cert-manager"]
             boundServiceAccountNamespaces = [_viCmNs]
-            if _viSpec?.reviewerSecret:
-                backendConfig = {secretName = _viSpec.reviewerSecret, secretNamespace = _namespace}
+            # Config the mount only once a reviewer secret exists (auto or
+            # explicit); until then the Workspace just creates the mount+role and
+            # adds the backend_config on a later reconcile.
+            if _viReviewerAvailable:
+                backendConfig = {secretName = _viEffReviewerSecret, secretNamespace = _namespace}
         }]
     }
 }
@@ -325,7 +349,84 @@ _tokenReqBindingObj = {
     }
 }
 
-_vaultIssuerChildren = [_vaultK8sAuthXR, _vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj] if _vaultIssuerEnabled else []
+# --- auto-reviewer Objects (only when autoReviewer) ---
+_viRevSAObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-reviewer-sa".format(_name), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-reviewer-sa".format(_name)}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "v1"
+            kind = "ServiceAccount"
+            metadata = {name = "vault-auth-reviewer", namespace = "kube-system"}
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+_viRevCRBObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-reviewer-crb".format(_name), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-reviewer-crb".format(_name)}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "rbac.authorization.k8s.io/v1"
+            kind = "ClusterRoleBinding"
+            metadata.name = "vault-auth-reviewer"
+            roleRef = {apiGroup = "rbac.authorization.k8s.io", kind = "ClusterRole", name = "system:auth-delegator"}
+            subjects = [{kind = "ServiceAccount", name = "vault-auth-reviewer", namespace = "kube-system"}]
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+_viRevTokenObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-reviewer-token".format(_name), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-reviewer-token".format(_name)}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "v1"
+            kind = "Secret"
+            metadata = {name = "vault-auth-reviewer-token", namespace = "kube-system", annotations = {"kubernetes.io/service-account.name" = "vault-auth-reviewer"}}
+            type = "kubernetes.io/service-account-token"
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+_viRevObserveObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = _viReviewerObserveKey, namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = _viReviewerObserveKey}}
+    spec = {
+        managementPolicies = ["Observe"]
+        forProvider.manifest = {
+            apiVersion = "v1"
+            kind = "Secret"
+            metadata = {name = "vault-auth-reviewer-token", namespace = "kube-system"}
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+
+# Copy the observed ca.crt + token into a mgmt Secret the Workspace reads. Only
+# emitted once the token is observed (base64 values pass straight through).
+_viRevMgmtObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-reviewer-secret".format(_name), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-reviewer-secret".format(_name)}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "v1"
+            kind = "Secret"
+            metadata = {name = _viReviewerMgmtSecret, namespace = _namespace}
+            type = "Opaque"
+            data = {"ca.crt" = _viRevCa, token = _viRevToken}
+        }
+        providerConfigRef = {name = "in-cluster", kind = "ClusterProviderConfig"}
+    }
+}
+_viReviewerObjects = ([_viRevSAObj, _viRevCRBObj, _viRevTokenObj, _viRevObserveObj] if _viAutoReviewer else []) + ([_viRevMgmtObj] if (_viAutoReviewer and _viRevToken != "") else [])
+
+_vaultIssuerChildren = ([_vaultK8sAuthXR, _vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj] + _viReviewerObjects) if _vaultIssuerEnabled else []
 
 _children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else []) + _vaultIssuerChildren
 

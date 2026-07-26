@@ -284,3 +284,9 @@ test_vault_issuer_is_opt_in = lambda {
         vaultIssuer = {enabled = False}
     }) == False
 }
+
+test_vault_issuer_still_opt_in = lambda {
+    assert l.vaultIssuerEnabled({
+        vaultIssuer = {enabled = True}
+    }) == True
+}
