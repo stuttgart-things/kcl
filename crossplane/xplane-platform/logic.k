@@ -61,6 +61,23 @@ cniEnabled = lambda spec: {str:} -> bool {
     (spec?.cni or {})?.enabled or False
 }
 
+ciliumEnabled = lambda spec: {str:} -> bool {
+    """Opt-IN. The cilium Configuration adds Cilium LoadBalancer + Gateway on top
+    of the CNI (a superset of `cni`). Off by default — only clusters that want an
+    advertised LB VIP / Gateway enable it. In the platform it defaults to
+    install.enabled=false (the CNI is `cni`'s job or already on the cluster); it
+    only layers the LB/Gateway services, so it is gated on the network being up."""
+    (spec?.cilium or {})?.enabled or False
+}
+
+ipReservationEnabled = lambda spec: {str:} -> bool {
+    """Opt-IN. Composes an XIPReservation (ip-reservation Configuration) that
+    reserves a clusterbook IP for this cluster. Off by default. When both this and
+    cilium (dynamic LB) are enabled, cilium's reservationRef auto-wires to this
+    child so the reserved IP becomes the LB pool block."""
+    (spec?.ipReservation or {})?.enabled or False
+}
+
 gateOpen = lambda ready: bool, exists: bool -> bool {
     """Should a gated child be emitted?
 

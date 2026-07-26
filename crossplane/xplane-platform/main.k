@@ -36,10 +36,14 @@ _fluxEnabled = l.fluxInitEnabled(_spec)
 _apps = l.enabledApps(_spec)
 _appsEnabled = len(_apps) > 0
 _cniEnabled = l.cniEnabled(_spec)
+_ciliumEnabled = l.ciliumEnabled(_spec)
+_ipResEnabled = l.ipReservationEnabled(_spec)
 
 _cniKey = "{}-cni".format(_name)
 _fluxKey = "{}-flux-init".format(_name)
 _appsKey = "{}-flux-apps".format(_name)
+_ciliumKey = "{}-cilium".format(_name)
+_ipResKey = "{}-ip-reservation".format(_name)
 
 # --- Read child status back (needed by the CNI gate below, so defined early) ---
 _readStatus = lambda key: str -> {str:} {
@@ -144,18 +148,85 @@ _fluxAppsXR = {
     }
 }
 
-_children = ([_cniXR] if _cniEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else [])
+# --- Child 3: XIPReservation ---
+# Reserves a clusterbook IP on the MANAGEMENT cluster (independent of the target
+# CNI, so not network-gated). When cilium's dynamic LB is also enabled its
+# reservationRef auto-wires to this child.
+_ipResSpec = _spec?.ipReservation or {}
+_ipReservationXR = {
+    apiVersion = "resources.stuttgart-things.com/v1alpha1"
+    kind = "XIPReservation"
+    metadata = {
+        name = _ipResKey
+        namespace = _namespace
+        annotations = {"krm.kcl.dev/composition-resource-name" = _ipResKey}
+    }
+    spec = {
+        if _shared?.clusterName:
+            clusterName = _shared.clusterName
+        if _ipResSpec?.count:
+            count = _ipResSpec.count
+        if _ipResSpec?.ip:
+            ip = _ipResSpec.ip
+        if "createDNS" in _ipResSpec:
+            createDNS = _ipResSpec.createDNS
+        if _ipResSpec?.clusterbookProviderConfigRef:
+            clusterbookProviderConfigRef = _ipResSpec.clusterbookProviderConfigRef
+        # the XIPReservation observes the RemoteCluster in-cluster on the mgmt cluster
+        kubernetesProviderConfigRef = _shared.observeProviderConfigRef
+    }
+}
+
+# --- Child 4: Cilium (LoadBalancer + Gateway) ---
+# Superset services on top of the CNI: LB pool + L2 announcement + Gateway.
+# Defaults install.enabled=false (the CNI is `cni`'s job / already present) — it
+# only layers the services, so it is gated on the network being up. When dynamic
+# LB is requested and no reservationRef is set, auto-wire it to the ipReservation
+# child so the reserved IP becomes the pool block.
+_ciliumSpec = _spec?.cilium or {}
+_ciliumInstall = _ciliumSpec?.install or {enabled = False}
+_ciliumLB = _ciliumSpec?.loadBalancer or {}
+_wantAutoRef = _ipResEnabled and (_ciliumLB?.ipMode or "static") == "dynamic" and not _ciliumLB?.reservationRef
+_ciliumLBOut = _ciliumLB | ({reservationRef = _ipResKey} if _wantAutoRef else {})
+_ciliumXR = {
+    apiVersion = "config.stuttgart-things.com/v1alpha1"
+    kind = "Cilium"
+    metadata = {
+        name = _ciliumKey
+        namespace = _namespace
+        annotations = {"krm.kcl.dev/composition-resource-name" = _ciliumKey}
+    }
+    spec = {
+        if _shared?.clusterName:
+            clusterName = _shared.clusterName
+        if _shared.helmProviderConfigRef:
+            helmProviderConfigRef = _shared.helmProviderConfigRef
+        if _shared.kubernetesProviderConfigRef:
+            kubernetesProviderConfigRef = _shared.kubernetesProviderConfigRef
+        install = _ciliumInstall
+        if _ciliumLBOut:
+            loadBalancer = _ciliumLBOut
+        if _ciliumSpec?.gateway:
+            gateway = _ciliumSpec.gateway
+    }
+}
+
+_children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else [])
 
 _fluxStatus = _readStatus(_fluxKey)
 _fluxReady = _isReady(_fluxStatus)
 _appsStatus = _readStatus(_appsKey)
 _appsReady = _isReady(_appsStatus)
+_ciliumStatus = _readStatus(_ciliumKey)
+_ciliumReady = _isReady(_ciliumStatus)
+_ipResStatus = _readStatus(_ipResKey)
+_ipResReady = _isReady(_ipResStatus)
 
 # clusterType is discovered by the FluxInit child from the RemoteCluster; lifting
 # it into shared status keeps later components from re-observing it.
 _clusterType = _fluxStatus?.clusterType or ""
 
-_enabledReady = ([_cniReady] if _cniEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else [])
+_enabledReady = ([_cniReady] if _cniEnabled else []) + ([_ipResReady] if _ipResEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else []) + ([_ciliumReady] if _ciliumEnabled else [])
 _readyComponents = len([r for r in _enabledReady if r])
 
 _xrStatus = _oxr | {
@@ -181,6 +252,19 @@ _xrStatus = _oxr | {
                 ready = _appsReady
                 appCount = _appsStatus?.appCount or 0
                 readyCount = _appsStatus?.readyCount or 0
+            }
+            ipReservation = {
+                enabled = _ipResEnabled
+                ready = _ipResReady
+                ipAddresses = _ipResStatus?.ipAddresses or []
+                networkKey = _ipResStatus?.networkKey or ""
+            }
+            cilium = {
+                enabled = _ciliumEnabled
+                ready = _ciliumReady
+                loadBalancerReady = _ciliumStatus?.loadBalancerReady or False
+                gatewayReady = _ciliumStatus?.gatewayReady or False
+                networkKey = _ciliumStatus?.networkKey or ""
             }
         }
         componentCount = len(_enabledReady)
