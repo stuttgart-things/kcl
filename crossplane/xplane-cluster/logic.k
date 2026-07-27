@@ -201,7 +201,8 @@ clusterAccess = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
 # itself; a kind cluster is deliberately built without one).
 platformChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
     _cluster = spec?.clusterName or name
-    _passthrough = {k: v for k, v in (spec?.platform or {}) if k not in ["enabled", "clusterName", "cni"]}
+    # `enabled` is no longer filtered here — it lives on spec.platformEnabled.
+    _passthrough = {k: v for k, v in (spec?.platform or {}) if k not in ["clusterName", "cni"]}
     _userCni = (spec?.platform or {})?.cni or {}
     _cniEnabled = cat.platformCniEnabled(spec?.distribution or "k3s")
     {

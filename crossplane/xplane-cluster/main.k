@@ -43,7 +43,11 @@ _size = cat.getSize(_spec?.size or "medium")
 _dist = cat.getDistribution(_spec?.distribution or "k3s")
 _supported = cat.assertSizeSupported(_spec?.distribution or "k3s", _spec?.size or "medium")
 
-_platformEnabled = (_spec?.platform or {})?.enabled if "enabled" in (_spec?.platform or {}) else True
+# A SIBLING of spec.platform, not a key inside it: `platform` is a verbatim
+# passthrough of the Platform XRD's spec, and a preserve-unknown-fields block
+# that also declares known properties makes schema converters emit
+# additionalProperties:false and reject every passthrough key.
+_platformEnabled = _spec?.platformEnabled if "platformEnabled" in _spec else True
 
 # --- observed children -----------------------------------------------------
 _byKind = lambda kind: str -> [any] {
