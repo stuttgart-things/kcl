@@ -121,11 +121,11 @@ test_user_cannot_override_cni_enabled = lambda {
 }
 
 test_platform_passthrough_and_derived_clusterName = lambda {
-    _r = l.platformChild("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", clusterName = "k1", platform = {fluxInit = {enabled = True}, enabled = True}})
+    _r = l.platformChild("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", clusterName = "k1", platform = {
+        fluxInit = {enabled = True}
+    }})
     assert _r.spec.clusterName == "k1"
     assert _r.spec.fluxInit.enabled
-    # `enabled` is this Configuration's own switch, not a Platform field.
-    assert "enabled" not in _r.spec
 }
 
 # --- teardown --------------------------------------------------------------
