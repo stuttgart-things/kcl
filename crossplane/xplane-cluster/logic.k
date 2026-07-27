@@ -40,21 +40,44 @@ renderInventory = lambda groups: [str], ip: str -> [str] {
     [('{}+["{}"]'.format(g, ip) if g == groups[0] else "{}+[]".format(g)) for g in groups]
 }
 
+# Per-stage ansible overrides. `ansible.extraCollections` is the shared list; a
+# stage entry is MERGED OVER it rather than replacing it, so the common case
+# stays a single list.
+#
+# Why per stage at all: the shared list is passed to every run, so pinning one
+# collection for the base-OS stage silently replaced the default set for the k3s
+# stage too. On the first live build that meant restating sthings-rke — needed
+# only by the distribution stage — in order to bump sthings-baseos, needed only
+# by the base-OS stage.
+stageAnsible = lambda spec: {str:any}, stage: str -> {str:any} {
+    _ans = spec?.ansible or {}
+    _stages = _ans?.stages or {}
+    _over = _stages[stage] if stage in _stages else {}
+    _shared = {k: v for k, v in _ans if k not in ["stages"]}
+    _shared | _over
+}
+
 # --- the VM child ----------------------------------------------------------
 vmChild = lambda name: str, ns: str, spec: {str:any}, size: any -> {str:any} {
     _provider = spec?.provider or "proxmox"
     _cluster = spec?.clusterName or name
     _vm = spec?.vm or {}
-    _ans = spec?.ansible or {}
+    _ans = stageAnsible(spec, "baseos")
 
     # Base-OS stage. vm_hostname is not cosmetic on Proxmox: bpg cloud-init
     # cannot set the guest hostname without a snippets datastore, so
     # sthings.baseos.setup does it from this var.
+    # setHostname defaults TRUE, but is a knob rather than a hard-wire: the var
+    # needs sthings-baseos >= 26.5.695, and on an older collection set it is
+    # SILENTLY IGNORED — the guest simply keeps the template hostname with no
+    # error anywhere. A fleet still on an older pin can turn it off and know why
+    # the hostname is not set, instead of wondering.
+    _setHostname = _ans?.setHostname if "setHostname" in _ans else True
+    _hostnameVars = ["vm_hostname+-{}".format(_cluster)] if _setHostname else []
     _baseVars = [
         "manage_filesystem+-true"
         "update_packages+-true"
-        "vm_hostname+-{}".format(_cluster)
-    ] + (_ans?.extraVars or [])
+    ] + _hostnameVars + (_ans?.extraVars or [])
 
     _ansible = {
         enabled = True
@@ -131,7 +154,7 @@ runIDFor = lambda spec: {str:any}, stage: str -> str {
 }
 
 _ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str], vaultSecret: str -> {str:any} {
-    _ans = spec?.ansible or {}
+    _ans = stageAnsible(spec, stage)
     _runID = runIDFor(spec, stage)
     _suffix = "-{}".format(_runID) if _runID else ""
     _runName = "{}-{}{}".format(name, stage, _suffix)
@@ -169,7 +192,7 @@ _ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks:
 distributionRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any} {
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
-    _vars = renderVars(_dist.vars) + ["cluster_name+-{}".format(_cluster)] + (spec?.ansible?.extraVars or [])
+    _vars = renderVars(_dist.vars) + ["cluster_name+-{}".format(_cluster)] + (stageAnsible(spec, "distribution")?.extraVars or [])
     _ansibleRun(name, ns, "distribution", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip), "")
 }
 
