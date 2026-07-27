@@ -57,6 +57,26 @@ A single global `runID` was the first design and it is a footgun by construction
 
 The base-OS stage is deliberately absent from the map: it runs from the VM XR's own `spec.ansible`, whose XRD has no re-run knob, so it is not expressible from here.
 
+## Per-stage ansible overrides
+
+`ansible` is the shared block; `ansible.stages.<stage>` is **merged over** it, so the common case stays a single list:
+
+```yaml
+ansible:
+  extraCollections: [...]                 # every stage
+  stages:
+    baseos:       {extraCollections: [...]}   # this stage only
+    distribution: {extraCollections: [...]}
+```
+
+Why it exists: the shared list reaches every run, so pinning one collection for the base-OS stage silently replaced the set the k3s stage needed. On the first live build that meant restating `sthings-rke` — required only by the distribution stage — in order to bump `sthings-baseos`, required only by the base-OS stage.
+
+### `setHostname`
+
+The base-OS stage sets `vm_hostname` by default; on Proxmox that is what actually names the guest, since bpg cloud-init cannot without a snippets datastore.
+
+It needs **`sthings-baseos >= 26.5.695`**. On an older collection set the var is **silently ignored** — the guest keeps the template's hostname and nothing reports an error. `ansible.setHostname: false` turns it off, so a fleet still on an older pin can make that explicit rather than wonder why the hostname is unset.
+
 ## What the user cannot set
 
 `Platform.cni.enabled` comes from the catalog's `cniOwnership`, never from `spec.platform.cni.enabled`. A k3s role installs cilium itself; a kind cluster is built without one. Setting it by hand is how a cluster ends up with two CNIs. The user's other `cni` keys (chart version, values) pass through untouched — only `enabled` is overridden, and a test covers both halves.

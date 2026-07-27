@@ -190,3 +190,52 @@ test_distribution_run_carries_the_version_pins = lambda {
     assert "k3s_k8s_version+-1.35.1" in _r.spec.ansibleVarsFile
     assert "k3s_release_kind+-k3s1" in _r.spec.ansibleVarsFile
 }
+
+# --- per-stage ansible overrides -------------------------------------------
+# The shared list reaches every stage; a stage entry is merged OVER it. Without
+# this, pinning a collection for the base-OS stage silently replaced the set the
+# k3s stage needed -- on the first live build that forced restating sthings-rke
+# in order to bump sthings-baseos.
+test_stage_overrides_merge_over_the_shared_ansible_block = lambda {
+    _spec = {
+        provider = "proxmox"
+        distribution = "k3s"
+        size = "medium"
+        ansible = {
+            extraCollections = ["shared:1"]
+            pipelineNamespace = "tekton-ci"
+            stages = {
+                baseos = {extraCollections = ["baseos:2"]}
+            }
+        }
+    }
+    # the base-OS stage sees its own list...
+    assert l.vmChild("c", "ns", _spec, cat.getSize("small")).spec.ansible.extraCollections == ["baseos:2"]
+    # ...the distribution stage still sees the shared one...
+    assert l.distributionRun("c", "ns", _spec, "10.0.0.1").spec.ansibleExtraCollections == ["shared:1"]
+    # ...and unrelated shared keys survive the merge.
+    assert l.distributionRun("c", "ns", _spec, "10.0.0.1").spec.namespace == "tekton-ci"
+}
+
+test_no_stage_overrides_keeps_the_shared_list_everywhere = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", ansible = {extraCollections = ["only:1"]}}
+    assert l.vmChild("c", "ns", _spec, cat.getSize("small")).spec.ansible.extraCollections == ["only:1"]
+    assert l.kubeconfigRun("c", "ns", _spec, "10.0.0.1").spec.ansibleExtraCollections == ["only:1"]
+}
+
+# --- the hostname floor ----------------------------------------------------
+# vm_hostname needs sthings-baseos >= 26.5.695. On an older set it is silently
+# ignored, so this is a knob rather than a hard-wire -- a fleet on an older pin
+# can turn it off and know why, instead of wondering why the hostname is unset.
+test_hostname_var_is_set_by_default = lambda {
+    _r = l.vmChild("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", clusterName = "k1"}, cat.getSize("small"))
+    assert "vm_hostname+-k1" in _r.spec.ansible.varsFile
+}
+
+test_hostname_var_can_be_turned_off = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", clusterName = "k1", ansible = {setHostname = False}}
+    _r = l.vmChild("c", "ns", _spec, cat.getSize("small"))
+    assert len([v for v in _r.spec.ansible.varsFile if "vm_hostname" in v]) == 0
+    # the other base-OS vars must survive
+    assert "manage_filesystem+-true" in _r.spec.ansible.varsFile
+}
