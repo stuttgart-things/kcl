@@ -143,3 +143,26 @@ test_usage_resolves_the_group_per_kind = lambda {
     assert l.usage("NativeVsphereVM", "a", "Platform", "b", "u").spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
     assert l.usage("ClusterAccess", "a", "Platform", "b", "u").spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
 }
+
+# --- the kubeconfigs Vault -------------------------------------------------
+# ansible-run defaults vaultSecretName to `vault`, which in this fleet points at
+# the INFRA Vault and carries no AppRole; the kubeconfigs KV mount lives in a
+# different Vault. Leaving it unset failed the first live cluster build with
+# "failed to determine alias name from login request" — a failure no render can
+# see, so it is pinned here instead.
+test_kubeconfig_run_targets_the_kubeconfigs_vault = lambda {
+    _r = l.kubeconfigRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}, "10.0.0.1")
+    assert _r.spec.vaultSecretName == "vault-kubeconfigs"
+}
+
+test_kubeconfig_vault_secret_is_overridable = lambda {
+    _r = l.kubeconfigRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", kubeconfig = {vaultSecretName = "other-vault"}}, "10.0.0.1")
+    assert _r.spec.vaultSecretName == "other-vault"
+}
+
+# The distribution run talks to no Vault, so it must not carry a secret name at
+# all — an unset field keeps the rendered params byte-identical to before.
+test_distribution_run_has_no_vault_secret = lambda {
+    _r = l.distributionRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}, "10.0.0.1")
+    assert "vaultSecretName" not in _r.spec
+}

@@ -110,8 +110,15 @@ _reemit = lambda prev: any, stage: str -> {str:any} {
     }
 }
 
-_distChild = _reemit(_distRun, "distribution") if _distObs else l.distributionRun(_name, _ns, _spec, _vmIP)
-_kcChild = _reemit(_kcRun, "kubeconfig") if _kcObs else l.kubeconfigRun(_name, _ns, _spec, _vmIP)
+# Verbatim re-emission is a FLAP guard, not a freeze: it applies only while the
+# live IP is missing, which is the exact condition that would corrupt a rebuilt
+# inventory. With the IP present the spec is rebuilt normally, so a genuine fix
+# (a corrected vaultSecretName, a catalog change) can still land — the derived
+# names are stable, so nothing re-runs until runID is bumped. Freezing
+# unconditionally, as this did first, made a broken stage unfixable without
+# deleting the child.
+_distChild = _reemit(_distRun, "distribution") if (len(_distObs) > 0 and _vmIP == "") else l.distributionRun(_name, _ns, _spec, _vmIP)
+_kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and _vmIP == "") else l.kubeconfigRun(_name, _ns, _spec, _vmIP)
 
 # --- teardown ordering -----------------------------------------------------
 # Only the pairs that matter. Usage is not transitive, so a full mesh would be

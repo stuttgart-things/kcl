@@ -118,7 +118,7 @@ vmChild = lambda name: str, ns: str, spec: {str:any}, size: any -> {str:any} {
 }
 
 # --- the two ansible stages ------------------------------------------------
-_ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str] -> {str:any} {
+_ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str], vaultSecret: str -> {str:any} {
     _ans = spec?.ansible or {}
     _runID = spec?.runID or ""
     _suffix = "-{}".format(_runID) if _runID else ""
@@ -140,6 +140,10 @@ _ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks:
             crossplaneObjectName = _runName
             crossplaneNamespace = ns
             crossplaneProviderConfig = _ans?.crossplaneProviderConfig or "in-cluster"
+            # Emitted only when non-empty, so the distribution run's params stay
+            # byte-identical to before this field existed.
+            if vaultSecret:
+                vaultSecretName = vaultSecret
             if _ans?.extraCollections:
                 ansibleExtraCollections = _ans.extraCollections
             if _ans?.extraCollections:
@@ -154,7 +158,7 @@ distributionRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:an
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
     _vars = renderVars(_dist.vars) + ["cluster_name+-{}".format(_cluster)] + (spec?.ansible?.extraVars or [])
-    _ansibleRun(name, ns, "distribution", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip))
+    _ansibleRun(name, ns, "distribution", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip), "")
 }
 
 kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any} {
@@ -167,7 +171,15 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
     # user's home. Only k3s needs the override.
     _paths = ["kubeconfig_path+-/etc/rancher/k3s/k3s.yaml"] if (spec?.distribution or "k3s") == "k3s" else []
     _vars = renderVars(_stage.vars) + ["cluster_name+-{}".format(_cluster)] + _paths
-    _ansibleRun(name, ns, "kubeconfig", spec, _stage.playbooks, _vars, renderInventory(_stage.inventoryGroups, ip))
+
+    # THE KUBECONFIGS VAULT IS NOT THE INFRA VAULT. ansible-run defaults
+    # vaultSecretName to `vault`, which in this fleet points at the infra Vault
+    # and carries no AppRole; the kubeconfigs KV mount lives in a different
+    # Vault entirely. Leaving it unset fails the upload with
+    # "failed to determine alias name from login request" — found on the first
+    # live cluster build, invisible to render.
+    _vaultSecret = (spec?.kubeconfig or {})?.vaultSecretName or "vault-kubeconfigs"
+    _ansibleRun(name, ns, "kubeconfig", spec, _stage.playbooks, _vars, renderInventory(_stage.inventoryGroups, ip), _vaultSecret)
 }
 
 # --- the two downstream XRs ------------------------------------------------
