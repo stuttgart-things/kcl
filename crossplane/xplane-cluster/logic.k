@@ -118,9 +118,21 @@ vmChild = lambda name: str, ns: str, spec: {str:any}, size: any -> {str:any} {
 }
 
 # --- the two ansible stages ------------------------------------------------
+# Per-stage re-run IDs. NOT one global runID: bumping that renamed EVERY stage,
+# so repairing the kubeconfig upload also re-ran the k3s install against a live
+# cluster — observed on the first live build, and exactly the hazard the fleet's
+# hand-written XRs warn about in their headers. A re-run has to name its stage.
+#
+# The base-OS stage is deliberately absent: it runs from the VM XR's own
+# spec.ansible, whose XRD has no runID, so it is not expressible from here.
+runIDFor = lambda spec: {str:any}, stage: str -> str {
+    _ids = spec?.runIDs or {}
+    str(_ids[stage]) if stage in _ids else ""
+}
+
 _ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str], vaultSecret: str -> {str:any} {
     _ans = spec?.ansible or {}
-    _runID = spec?.runID or ""
+    _runID = runIDFor(spec, stage)
     _suffix = "-{}".format(_runID) if _runID else ""
     _runName = "{}-{}{}".format(name, stage, _suffix)
     {

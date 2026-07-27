@@ -87,7 +87,7 @@ test_kubeconfig_run_is_a_separate_run_with_the_k3s_path = lambda {
 # derived names, because provider-kubernetes only creates a new PipelineRun for
 # a new Object.
 test_runid_suffixes_both_names = lambda {
-    _r = l.distributionRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", runID = "2"}, "10.0.0.1")
+    _r = l.distributionRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", runIDs = {distribution = "2"}}, "10.0.0.1")
     assert _r.spec.pipelineRunName == "c-distribution-2"
     assert _r.spec.crossplaneObjectName == "c-distribution-2"
 
@@ -165,4 +165,20 @@ test_kubeconfig_vault_secret_is_overridable = lambda {
 test_distribution_run_has_no_vault_secret = lambda {
     _r = l.distributionRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}, "10.0.0.1")
     assert "vaultSecretName" not in _r.spec
+}
+
+# A re-run must not spread. Bumping one stage's id renames that stage only —
+# the first live build proved the alternative: a single global runID re-ran the
+# k3s install while repairing the kubeconfig upload.
+test_runid_is_per_stage = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", runIDs = {kubeconfig = "3"}}
+    assert l.kubeconfigRun("c", "ns", _spec, "10.0.0.1").spec.pipelineRunName == "c-kubeconfig-3"
+    assert l.distributionRun("c", "ns", _spec, "10.0.0.1").spec.pipelineRunName == "c-distribution"
+}
+
+test_runid_lookup_tolerates_missing_stage = lambda {
+    assert l.runIDFor({}, "distribution") == ""
+    assert l.runIDFor({
+        runIDs = {kubeconfig = "1"}
+    }, "distribution") == ""
 }
