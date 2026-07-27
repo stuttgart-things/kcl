@@ -44,6 +44,19 @@ Three `Usage` resources, only the pairs whose absence strands a finalizer:
 
 `vm.memory` (Proxmox) vs `vm.ram` (vSphere), plus the fact that only Proxmox has a `cloudInit` block. Staging, gating and everything downstream are identical — that is option **A** of crossplane-configurations#168. A unit test asserts there is no second difference; if one appears, the "provider is a one-word switch" claim is no longer true and the README should stop saying it.
 
+## Re-runs are per stage
+
+`spec.runIDs` is a map, not a single value:
+
+```yaml
+runIDs:
+  kubeconfig: "2"    # re-runs the upload only
+```
+
+A single global `runID` was the first design and it is a footgun by construction: bumping it renames **every** stage, so repairing the kubeconfig upload also re-ran the k3s install against a live cluster. That happened on the first live build, and it is exactly the hazard the fleet's hand-written XRs warn about in their headers. A re-run has to name its stage.
+
+The base-OS stage is deliberately absent from the map: it runs from the VM XR's own `spec.ansible`, whose XRD has no re-run knob, so it is not expressible from here.
+
 ## What the user cannot set
 
 `Platform.cni.enabled` comes from the catalog's `cniOwnership`, never from `spec.platform.cni.enabled`. A k3s role installs cilium itself; a kind cluster is built without one. Setting it by hand is how a cluster ends up with two CNIs. The user's other `cni` keys (chart version, values) pass through untouched — only `enabled` is overridden, and a test covers both halves.
