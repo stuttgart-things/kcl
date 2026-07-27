@@ -10,6 +10,13 @@ k3s: s.Distribution = s.Distribution {
     vars = {
         install_k3s = "true"
         k3s_state = "present"
+        # PINNED. Without these the role installs whatever its own default is —
+        # a live build produced v1.36.1 while the hand-written XR this catalog
+        # replaces pins 1.35.1, so two clusters from the same profile could
+        # differ by build date. A profile that does not pin its Kubernetes
+        # version is not really a profile.
+        k3s_k8s_version = "1.35.1"
+        k3s_release_kind = "k3s1"
         cluster_setup = "singlenode"
         # MANDATORY. The role's k3s_config default writes flannel-backend=none,
         # disable-kube-proxy=true and disable-network-policy=true — k3s comes up

@@ -8,6 +8,14 @@ kind: s.Distribution = s.Distribution {
     vars = {
         install_kind = "true"
         create_kind_cluster = "true"
+        # PINNED — but note what is pinned: kind takes a KIND BINARY version,
+        # not a Kubernetes version (the k8s version comes from the node image
+        # that binary defaults to). This is why the catalog pins per
+        # distribution rather than exposing one `kubernetesVersion` field: the
+        # two distributions genuinely pin different things, and a shared field
+        # would be a lie for one of them.
+        kind_version = "0.31.0"
+        kubectl_version = "1.35.0"
         # false, so re-reconciles are idempotent instead of destroying and
         # rebuilding the cluster (and moving the API port) on every run.
         rebuild_kind_cluster = "false"

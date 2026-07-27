@@ -38,6 +38,7 @@ All values are **strings** — both VM XRDs take strings, and emitting ints fail
 | | `k3s` | `kind` |
 |---|---|---|
 | playbook | `sthings.rke.k3s_cluster` | `sthings.container.kind` |
+| version pin | `k3s_k8s_version 1.35.1`, `k3s_release_kind k3s1` | `kind_version 0.31.0`, `kubectl_version 1.35.0` |
 | CNI ownership | `self` — the role installs cilium | `platform` — built deliberately without one |
 | inventory groups | `initial_master_node`, `additional_master_nodes`, `workers` | `all` |
 | multi-node | no | no |
@@ -46,6 +47,17 @@ Every var in the tables is load-bearing, with the incident history in the commen
 
 - **k3s `install_cilium: "true"` is mandatory.** The role's `k3s_config` default writes `flannel-backend=none`, `disable-kube-proxy=true` and `disable-network-policy=true` — k3s comes up deliberately without a CNI *and* without kube-proxy. With it false the cluster has no working pod network at all.
 - **k3s's three inventory groups are not cosmetic.** `sthings.rke.deploy_configure_rke` branches on `groups['initial_master_node']` and `groups['additional_master_nodes']`; a flat `all+[...]` inventory fails with an undefined-group error. Empty groups render as header-only INI sections, which ansible registers as existing-but-empty — exactly what the role's `in groups[...]` tests need.
+
+### Versions are pinned per distribution, not globally
+
+Each distribution pins its own versions, and a test asserts that none is left unpinned. Unpinned meant real drift: a live build produced k3s **v1.36.1** while the hand-written XR this catalog replaces pins **1.35.1**, so two clusters from the same profile could differ by build date.
+
+There is deliberately **no shared `kubernetesVersion` field**, because the two distributions do not pin the same thing:
+
+- `k3s` pins **Kubernetes** (`k3s_k8s_version` + `k3s_release_kind`);
+- `kind` pins the **kind binary** (`kind_version`) — its Kubernetes version follows from the node image that binary defaults to.
+
+One field mapped onto both would be accurate for one and a lie for the other. If a per-cluster override is ever wanted, it belongs per distribution and only once *changing* it is supported — today a version change re-runs the install play against a live cluster, which is [#172](https://github.com/stuttgart-things/crossplane-configurations/issues/172) territory.
 
 **`rke2` is deliberately absent.** The fleet runs multinode rke2 through ansible (`exec/labul/sthings-infra-rke2`), but no Crossplane path has ever built one, so an entry here would be a guess wearing the same clothes as a verified fact. Add it after a reference run — a unit test currently asserts its absence, so adding it forces updating that test in the same commit.
 
