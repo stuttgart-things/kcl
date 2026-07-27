@@ -43,7 +43,8 @@ getSize = lambda name: str -> s.Size {
 # A SEPARATE stage, not appended to the distribution playbooks: a completed
 # Tekton PipelineRun is immutable, so folding the upload into the distribution
 # run would mean re-running the whole cluster build (including `cilium install`
-# against a live cluster) to redo an upload. cluster_name and the Vault path are
+# against a live cluster) to redo an upload. This is option A of
+# crossplane-configurations#168, decided — not an open assumption. cluster_name and the Vault path are
 # supplied by the consumer, not the catalog — they are per-cluster values.
 kubeconfigStage: s.Stage = s.Stage {
     playbooks = ["sthings.container.upload_kubeconfig_vault"]

@@ -53,7 +53,7 @@ Every var in the tables is load-bearing, with the incident history in the commen
 
 `kubeconfigStage` is shared across distributions and deliberately **separate** from the distribution playbooks. A completed Tekton `PipelineRun` is immutable, so folding the upload into the distribution run would mean re-running the whole cluster build — including `cilium install` against a live cluster — to redo an upload. A unit test asserts no distribution absorbs it.
 
-> **Assumption:** this per-stage split follows option **A** of crossplane-configurations#168 (normalize both providers onto per-stage runs). If option B is chosen instead, `Distribution` needs a `staging: combined|per-stage` key.
+> **Decided:** this per-stage split is option **A** of crossplane-configurations#168 — normalize both providers onto per-stage runs — chosen 2026-07-27, staggered: the `cluster` Configuration emits per-stage runs for both providers from the start, while `machinery/vspherevm`'s own combined-run path stays as it is for direct users. So `Distribution` needs no `staging` key.
 
 ## API
 
