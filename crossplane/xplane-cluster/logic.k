@@ -54,7 +54,13 @@ stageAnsible = lambda spec: {str:any}, stage: str -> {str:any} {
     _stages = _ans?.stages or {}
     _over = _stages[stage] if stage in _stages else {}
     _shared = {k: v for k, v in _ans if k not in ["stages"]}
-    _shared | _over
+
+    # KCL's `|` UNIFIES, it does not override: a key holding a list on BOTH
+    # sides is a conflict ("conflicting values on the attribute ..."), not a
+    # replacement. Drop the overridden keys from the shared side first, so the
+    # union has nothing to conflict about. Unit tests with literal dicts did not
+    # catch this — it only surfaced rendering a real XR.
+    {k: v for k, v in _shared if k not in _over} | _over
 }
 
 # --- the VM child ----------------------------------------------------------

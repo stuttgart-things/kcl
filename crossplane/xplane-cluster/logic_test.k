@@ -239,3 +239,25 @@ test_hostname_var_can_be_turned_off = lambda {
     # the other base-OS vars must survive
     assert "manage_filesystem+-true" in _r.spec.ansible.varsFile
 }
+
+# Regression: `|` unifies rather than overrides, so a key holding a LIST on both
+# sides raised "conflicting values on the attribute extraCollections" — but only
+# when rendering a real XR, not with the literal dicts the other tests use.
+# Asserting the winning value is not enough; the merge must not raise at all.
+test_stage_override_replaces_a_list_without_conflict = lambda {
+    _spec = {
+        provider = "proxmox"
+        distribution = "k3s"
+        size = "medium"
+        ansible = {
+            extraCollections = ["shared:1", "shared:2"]
+            extraVars = ["a+-1"]
+            stages = {
+                distribution = {extraCollections = ["dist:1"]}
+            }
+        }
+    }
+    _d = l.stageAnsible(_spec, "distribution")
+    assert _d.extraCollections == ["dist:1"]
+    assert _d.extraVars == ["a+-1"]
+}
