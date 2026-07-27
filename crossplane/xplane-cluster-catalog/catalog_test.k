@@ -92,3 +92,27 @@ test_kubeconfig_upload_is_a_separate_stage = lambda {
 test_size_values_are_strings = lambda {
     assert len([1 for _, s in c.sizes if typeof(s.cpu) != "str" or typeof(s.memory) != "str" or typeof(s.disk) != "str"]) == 0
 }
+
+# --- version pinning -------------------------------------------------------
+# An unpinned distribution means two clusters built from the same profile can
+# run different Kubernetes versions depending on the day they were built. A
+# live build produced v1.36.1 where the hand-written XR pins 1.35.1.
+test_k3s_pins_its_kubernetes_version = lambda {
+    _v = c.getDistribution("k3s").vars
+    assert _v["k3s_k8s_version"] == "1.35.1"
+    assert _v["k3s_release_kind"] == "k3s1"
+}
+
+# kind pins the KIND BINARY, not Kubernetes — the k8s version follows from the
+# node image. Asserted separately so nobody "harmonises" the two into one field.
+test_kind_pins_the_kind_binary_not_kubernetes = lambda {
+    _v = c.getDistribution("kind").vars
+    assert "kind_version" in _v
+    assert "k3s_k8s_version" not in _v
+}
+
+# Every distribution must pin something; an entry with no version at all is the
+# drift this catalog exists to remove.
+test_every_distribution_pins_a_version = lambda {
+    assert len([1 for _, d in c.distributions if len([k for k, _ in d.vars if "version" in k]) == 0]) == 0
+}
