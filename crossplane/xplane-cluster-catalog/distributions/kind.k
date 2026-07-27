@@ -1,0 +1,28 @@
+# kind — a Kubernetes-in-Docker cluster on a provisioned VM.
+#
+# Mirrors what nativevspherevm-kind-test1.yaml runs today.
+import ..schema as s
+
+kind: s.Distribution = s.Distribution {
+    playbooks = ["sthings.container.kind"]
+    vars = {
+        install_kind = "true"
+        create_kind_cluster = "true"
+        # false, so re-reconciles are idempotent instead of destroying and
+        # rebuilding the cluster (and moving the API port) on every run.
+        rebuild_kind_cluster = "false"
+        # `kind export kubeconfig` emits 0.0.0.0, which the API server
+        # certificate is not valid for — rewrite it to the VM's external IP.
+        update_kubeconfig_ip = "true"
+        fetch_kubeconfig = "true"
+        ansible_become = "true"
+        ansible_become_method = "sudo"
+    }
+    # The kind role targets the VM directly; no master/worker split (the kind
+    # NODES are containers on that one VM, expressed via count_* vars).
+    inventoryGroups = ["all"]
+    # kind is built deliberately WITHOUT a CNI, so the Platform's Cni component
+    # is required — the mirror image of k3s.
+    cniOwnership = "platform"
+    multiNode = False
+}
