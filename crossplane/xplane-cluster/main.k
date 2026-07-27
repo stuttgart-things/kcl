@@ -181,7 +181,7 @@ _groups = [
     [_distChild] if _distOpen else []
     [_kcChild] if _kcOpen else []
     [l.clusterAccess(_name, _ns, _spec)] if _accessOpen else []
-    [l.platformChild(_name, _ns, _spec)] if _platOpen else []
+    [l.platformChild(_name, _ns, _spec, _accessShare?.apiEndpoint or "")] if _platOpen else []
     _usages
     [_dxrPatched]
 ]

@@ -252,12 +252,34 @@ clusterAccess = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
 # user: cni.enabled follows from the distribution's CNI ownership, and setting it
 # by hand is how a cluster ends up with two CNIs (a k3s role installs cilium
 # itself; a kind cluster is deliberately built without one).
-platformChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
+platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> {str:any} {
     _cluster = spec?.clusterName or name
     # `enabled` is no longer filtered here — it lives on spec.platformEnabled.
-    _passthrough = {k: v for k, v in (spec?.platform or {}) if k not in ["clusterName", "cni"]}
+    _passthrough = {k: v for k, v in (spec?.platform or {}) if k not in ["clusterName", "cni", "vaultIssuer"]}
     _userCni = (spec?.platform or {})?.cni or {}
     _cniEnabled = cat.platformCniEnabled(spec?.distribution or "k3s")
+
+    # vaultIssuer.kubernetesHost is the API server address Vault's Kubernetes
+    # auth mount is configured with. Every Platform in the fleet states it by
+    # hand today (`https://10.31.102.108:6443`), which is a copied node IP: it
+    # goes stale the moment the machine is rebuilt, and nothing notices until an
+    # issuer stops working.
+    #
+    # ClusterAccess DISCOVERS it from the running cluster, so derive it — but
+    # only when the user did not set it, because an explicit value may
+    # deliberately differ (a VIP or a load balancer in front of the API).
+    #
+    # NOTE this does not make the endpoint highly available: it is still one
+    # node's address. It removes the hand-copied-value failure, not the SPOF.
+    # See crossplane-configurations#171.
+    _userVault = (spec?.platform or {})?.vaultIssuer or {}
+    _wantVault = _userVault?.enabled or False
+    _hasHost = (_userVault?.kubernetesHost or "") != ""
+    _deriveHost = _wantVault and not _hasHost and apiEndpoint != ""
+    _vaultDerived = {k: v for k, v in _userVault if k != "kubernetesHost"} | {kubernetesHost = apiEndpoint}
+    _vaultPassthrough = {vaultIssuer = _userVault} if _userVault else {}
+    _vaultBlock = {vaultIssuer = _vaultDerived} if _deriveHost else _vaultPassthrough
+
     {
         apiVersion = "config.stuttgart-things.com/v1alpha1"
         kind = "Platform"
@@ -266,7 +288,7 @@ platformChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
             namespace = ns
             annotations = {"krm.kcl.dev/composition-resource-name" = "platform"}
         }
-        spec = _passthrough | {
+        spec = _passthrough | _vaultBlock | {
             clusterName = _cluster
             cni = _userCni | {enabled = _cniEnabled}
         }
