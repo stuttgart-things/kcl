@@ -77,6 +77,14 @@ The base-OS stage sets `vm_hostname` by default; on Proxmox that is what actuall
 
 It needs **`sthings-baseos >= 26.5.695`**. On an older collection set the var is **silently ignored** — the guest keeps the template's hostname and nothing reports an error. `ansible.setHostname: false` turns it off, so a fleet still on an older pin can make that explicit rather than wonder why the hostname is unset.
 
+## The API endpoint is derived, not copied
+
+Every `Platform` in the fleet states `vaultIssuer.kubernetesHost` by hand today — a copied node IP such as `https://10.31.102.108:6443`. It goes stale the moment the machine is rebuilt, and nothing notices until an issuer stops working.
+
+`ClusterAccess` **discovers** the endpoint from the running cluster, so when `vaultIssuer` is enabled and `kubernetesHost` is not set, it is injected from `status.share.apiEndpoint`. An explicit value always wins — it may deliberately differ, e.g. a VIP or a load balancer in front of the API.
+
+**This does not make the endpoint highly available.** It is still one node's address. It removes the hand-copied-value failure, not the single point of failure — see [crossplane-configurations#171](https://github.com/stuttgart-things/crossplane-configurations/issues/171), which also carries the finding that the fleet's ansible layer has no `tls-san` or kube-vip support today, so a real VIP needs work there first.
+
 ## What the user cannot set
 
 `Platform.cni.enabled` comes from the catalog's `cniOwnership`, never from `spec.platform.cni.enabled`. A k3s role installs cilium itself; a kind cluster is built without one. Setting it by hand is how a cluster ends up with two CNIs. The user's other `cni` keys (chart version, values) pass through untouched — only `enabled` is overridden, and a test covers both halves.

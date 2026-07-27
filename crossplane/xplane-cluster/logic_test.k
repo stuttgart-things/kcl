@@ -106,14 +106,14 @@ test_no_runid_keeps_the_plain_names = lambda {
 # distribution, never from the user. A k3s role installs cilium itself; setting
 # it by hand is how a cluster ends up with two CNIs.
 test_platform_cni_follows_the_distribution = lambda {
-    assert not l.platformChild("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}).spec.cni.enabled
-    assert l.platformChild("c", "ns", {provider = "proxmox", distribution = "kind", size = "medium"}).spec.cni.enabled
+    assert not l.platformChild("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}, "").spec.cni.enabled
+    assert l.platformChild("c", "ns", {provider = "proxmox", distribution = "kind", size = "medium"}, "").spec.cni.enabled
 }
 
 test_user_cannot_override_cni_enabled = lambda {
     _r = l.platformChild("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", platform = {
         cni = {enabled = True, chart = {version = "1.19.6"}}
-    }})
+    }}, "")
     # The user's enabled is discarded...
     assert not _r.spec.cni.enabled
     # ...but the rest of their cni block survives.
@@ -123,7 +123,7 @@ test_user_cannot_override_cni_enabled = lambda {
 test_platform_passthrough_and_derived_clusterName = lambda {
     _r = l.platformChild("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium", clusterName = "k1", platform = {
         fluxInit = {enabled = True}
-    }})
+    }}, "")
     assert _r.spec.clusterName == "k1"
     assert _r.spec.fluxInit.enabled
 }
@@ -260,4 +260,48 @@ test_stage_override_replaces_a_list_without_conflict = lambda {
     _d = l.stageAnsible(_spec, "distribution")
     assert _d.extraCollections == ["dist:1"]
     assert _d.extraVars == ["a+-1"]
+}
+
+# --- the API endpoint (#171) -----------------------------------------------
+# Every Platform in the fleet states vaultIssuer.kubernetesHost by hand today --
+# a copied node IP that goes stale the moment the machine is rebuilt, with
+# nothing noticing until an issuer breaks. ClusterAccess discovers it, so derive
+# it. This does NOT make the endpoint highly available; it removes the
+# hand-copied value, not the single point of failure.
+test_kubernetes_host_is_derived_when_unset = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", platform = {
+        vaultIssuer = {enabled = True, pkiRole = "sthings-vsphere"}
+    }}
+    _r = l.platformChild("c", "ns", _spec, "https://10.0.0.9:6443")
+    assert _r.spec.vaultIssuer.kubernetesHost == "https://10.0.0.9:6443"
+    # the rest of the user's block survives
+    assert _r.spec.vaultIssuer.pkiRole == "sthings-vsphere"
+}
+
+# An explicit value may deliberately differ -- a VIP or a load balancer in front
+# of the API. Deriving over it would silently undo that.
+test_explicit_kubernetes_host_wins = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", platform = {
+        vaultIssuer = {enabled = True, kubernetesHost = "https://api.example.com:6443"}
+    }}
+    _r = l.platformChild("c", "ns", _spec, "https://10.0.0.9:6443")
+    assert _r.spec.vaultIssuer.kubernetesHost == "https://api.example.com:6443"
+}
+
+test_no_vault_issuer_means_no_injection = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", platform = {
+        fluxInit = {enabled = True}
+    }}
+    _r = l.platformChild("c", "ns", _spec, "https://10.0.0.9:6443")
+    assert "vaultIssuer" not in _r.spec
+}
+
+# No endpoint discovered yet (ClusterAccess not ready) must not inject an empty
+# host -- that would be worse than leaving it unset.
+test_no_endpoint_means_no_injection = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", platform = {
+        vaultIssuer = {enabled = True}
+    }}
+    _r = l.platformChild("c", "ns", _spec, "")
+    assert "kubernetesHost" not in _r.spec.vaultIssuer
 }
