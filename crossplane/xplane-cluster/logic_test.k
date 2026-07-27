@@ -182,3 +182,11 @@ test_runid_lookup_tolerates_missing_stage = lambda {
         runIDs = {kubeconfig = "1"}
     }, "distribution") == ""
 }
+
+# The catalog's version pins must actually reach the rendered run. A pin nobody
+# passes through is decoration — and this is the drift #186 was about.
+test_distribution_run_carries_the_version_pins = lambda {
+    _r = l.distributionRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}, "10.0.0.1")
+    assert "k3s_k8s_version+-1.35.1" in _r.spec.ansibleVarsFile
+    assert "k3s_release_kind+-k3s1" in _r.spec.ansibleVarsFile
+}
