@@ -41,12 +41,21 @@ All values are **strings** — both VM XRDs take strings, and emitting ints fail
 | version pin | `k3s_k8s_version 1.35.1`, `k3s_release_kind k3s1` | `kind_version 0.31.0`, `kubectl_version 1.35.0` |
 | CNI ownership | `self` — the role installs cilium | `platform` — built deliberately without one |
 | inventory groups | `initial_master_node`, `additional_master_nodes`, `workers` | `all` |
+| cluster-name vars | — (`cluster_name` only) | `kind_cluster_name` |
 | multi-node | no | no |
 
 Every var in the tables is load-bearing, with the incident history in the comments. Two worth repeating:
 
 - **k3s `install_cilium: "true"` is mandatory.** The role's `k3s_config` default writes `flannel-backend=none`, `disable-kube-proxy=true` and `disable-network-policy=true` — k3s comes up deliberately without a CNI *and* without kube-proxy. With it false the cluster has no working pod network at all.
 - **k3s's three inventory groups are not cosmetic.** `sthings.rke.deploy_configure_rke` branches on `groups['initial_master_node']` and `groups['additional_master_nodes']`; a flat `all+[...]` inventory fails with an undefined-group error. Empty groups render as header-only INI sections, which ansible registers as existing-but-empty — exactly what the role's `in groups[...]` tests need.
+
+### The cluster name is not one var
+
+`cluster_name` is what the consumer passes to every stage, but it is **not** a universal handle. `sthings.container.kind` never reads it: the cluster is named from `kind_cluster_name`, which the play defaults to `dev`. A `ClusterStack` asking for `kindstack-test` therefore built a kind cluster called `dev`, and the Platform's `Cni` child — whose `k8sServiceHost` defaults to `<clusterName>-control-plane` — aimed cilium at a container that was never created. With `kubeProxyReplacement: true` that is a **deadlock**, not a slow failure: cilium cannot fall back to the `10.96.0.1` VIP either, because nothing programs that VIP until cilium is up. All nodes stay `NotReady`, the operator crashloops, the agents sit in `Init:0/6` ([crossplane-configurations#232](https://github.com/stuttgart-things/crossplane-configurations/issues/232)).
+
+So `clusterNameVars` names the extra keys that must carry the cluster name, and the consumer applies them to **every** stage — not just the distribution one. That second half is load-bearing: `sthings.container.upload_kubeconfig_vault` derives `kubeconfig_path` from `kind_cluster_name` as well, so before this field both plays independently defaulted to `dev` and agreed *by accident*. Setting the name in the distribution stage alone would have broken an upload that used to work.
+
+With the name set, `kind_cluster_name == clusterName` and the `Cni` XRD's default becomes correct by construction — the fix is one fact, not two derivations kept in sync.
 
 ### Versions are pinned per distribution, not globally
 
@@ -83,7 +92,7 @@ cat.sizeNames, cat.distributionNames        # sorted names, for error messages
 ## Test
 
 ```bash
-kcl test .     # 11 tests, no Crossplane and no cluster required
+kcl test .     # 16 tests, no Crossplane and no cluster required
 ```
 
 The tests are the point: these rules — CNI ownership, the mandatory cilium var, the inventory groups, the separate upload stage — are exactly what should fail in CI rather than on a live cluster.
