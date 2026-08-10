@@ -91,13 +91,23 @@ Every `Platform` in the fleet states `vaultIssuer.kubernetesHost` by hand today 
 
 `Platform.clusterName` is likewise supplied, not passed through.
 
+## The cluster name goes into every var that names the cluster
+
+`cluster_name` is passed to every stage, but it is not the handle every play reads. `sthings.container.kind` ignores it and names the cluster from **`kind_cluster_name`**, which its play defaults to `dev` — so a `ClusterStack` for `kindstack-test` built a kind cluster called `dev`, and the `Cni` child's `k8sServiceHost` (`<clusterName>-control-plane`) named a container that never existed. With `kubeProxyReplacement: true` that deadlocks: nothing programs the `10.96.0.1` VIP until cilium is up, so there is no fallback route to the API and every node stays `NotReady` ([crossplane-configurations#232](https://github.com/stuttgart-things/crossplane-configurations/issues/232)).
+
+Which extra keys a distribution needs is a **catalog fact** (`Distribution.clusterNameVars`), not a branch on the distribution name here: this module states *"the name goes everywhere it is read"*, the catalog states where that is.
+
+They are applied to **both** ansible stages, deliberately. `upload_kubeconfig_vault` derives `kubeconfig_path` from `kind_cluster_name` too, and before this fix both plays independently defaulted to `dev` and therefore agreed *by accident* — the upload worked only because the cluster was also wrongly named. Setting the name in the distribution stage alone would have broken it.
+
+**Existing stacks are not retro-fixed.** The AnsibleRun children are re-emitted verbatim while the VM's IP is momentarily missing, and a completed Tekton `PipelineRun` is immutable — a cluster already built as `dev` stays `dev` until its stage is re-run with a bumped `runIDs.distribution` (`rebuild_kind_cluster` is `false`, so that re-run does not by itself rename a live cluster either). The fix applies to clusters built from here on.
+
 ## Layout
 
 | file | role |
 |---|---|
 | `logic.k` | pure resource construction — explicit args in, dict out, unit-tested |
 | `main.k` | wiring: reads `option("params")`, decides which gates are open, patches status |
-| `logic_test.k` | 15 tests, no Crossplane and no cluster required |
+| `logic_test.k` | 33 tests, no Crossplane and no cluster required |
 
 `main.k` is deliberately thin and untested-by-unit: it is exercised by the Configuration's `crossplane render` with synthetic `--observed-resources`, which is the only way to test gate transitions honestly.
 
