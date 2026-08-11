@@ -83,6 +83,46 @@ test_kubeconfig_run_is_a_separate_run_with_the_k3s_path = lambda {
     assert "kubeconfig_path+-/etc/rancher/k3s/k3s.yaml" not in _k.spec.ansibleVarsFile
 }
 
+# THE kind BUG (crossplane-configurations#232). sthings.container.kind ignores
+# `cluster_name` and names the cluster from `kind_cluster_name`, defaulting it to
+# `dev` — so the XR's identity never reached the cluster, and the Cni child then
+# aimed cilium at `<clusterName>-control-plane`, a container that never existed.
+test_kind_gets_its_cluster_name_in_the_var_the_play_reads = lambda {
+    _spec = {provider = "proxmox", distribution = "kind", size = "medium", clusterName = "kindstack-test"}
+    _d = l.distributionRun("c", "ns", _spec, "10.0.0.1")
+    assert "kind_cluster_name+-kindstack-test" in _d.spec.ansibleVarsFile
+    # cluster_name stays: the upload stage uses it as the Vault secret name.
+    assert "cluster_name+-kindstack-test" in _d.spec.ansibleVarsFile
+
+    # BOTH stages, or the accidental agreement breaks: upload_kubeconfig_vault
+    # derives kubeconfig_path from kind_cluster_name and would keep defaulting to
+    # /home/sthings/.kube/dev while the cluster moved to the real name.
+    _k = l.kubeconfigRun("c", "ns", _spec, "10.0.0.1")
+    assert "kind_cluster_name+-kindstack-test" in _k.spec.ansibleVarsFile
+    assert "cluster_name+-kindstack-test" in _k.spec.ansibleVarsFile
+}
+
+# The kind cluster name must equal the name the Cni child derives its
+# k8sServiceHost from, or cilium deadlocks — that equality IS the fix, so assert
+# it against the Platform child rather than trusting two separate constants.
+test_kind_cluster_name_matches_the_platform_cluster_name = lambda {
+    _spec = {provider = "proxmox", distribution = "kind", size = "medium", clusterName = "kindstack-test"}
+    _p = l.platformChild("c", "ns", _spec, "")
+    assert "kind_cluster_name+-{}".format(_p.spec.clusterName) in l.distributionRun("c", "ns", _spec, "10.0.0.1").spec.ansibleVarsFile
+    # Same when clusterName is defaulted from the XR name.
+    _bare = {provider = "proxmox", distribution = "kind", size = "medium"}
+    assert "kind_cluster_name+-c" in l.distributionRun("c", "ns", _bare, "10.0.0.1").spec.ansibleVarsFile
+    assert l.platformChild("c", "ns", _bare, "").spec.clusterName == "c"
+}
+
+# k3s takes the name through cluster_name, which every stage already carries; an
+# alias there would emit a var no play reads.
+test_k3s_gets_no_kind_cluster_name = lambda {
+    _spec = {provider = "proxmox", distribution = "k3s", size = "medium", clusterName = "k1"}
+    assert len([1 for v in l.distributionRun("c", "ns", _spec, "10.0.0.1").spec.ansibleVarsFile if v.startswith("kind_cluster_name")]) == 0
+    assert len([1 for v in l.kubeconfigRun("c", "ns", _spec, "10.0.0.1").spec.ansibleVarsFile if v.startswith("kind_cluster_name")]) == 0
+}
+
 # runID is the supported way to force a deliberate re-run; it must reach BOTH
 # derived names, because provider-kubernetes only creates a new PipelineRun for
 # a new Object.

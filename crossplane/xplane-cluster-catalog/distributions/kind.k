@@ -26,6 +26,14 @@ kind: s.Distribution = s.Distribution {
         ansible_become = "true"
         ansible_become_method = "sudo"
     }
+    # THE CLUSTER NAME DOES NOT ARRIVE AS `cluster_name`. The kind play reads
+    # `kind_cluster_name` and defaults it to `dev`; `cluster_name` reaches only
+    # the upload play, where it is the Vault secret name. Without this the
+    # cluster is called `dev` no matter what the XR asked for, and the Cni
+    # child's k8sServiceHost (`<clusterName>-control-plane`) names a container
+    # that was never created — see crossplane-configurations#232 and the field
+    # docs on Distribution.clusterNameVars.
+    clusterNameVars = ["kind_cluster_name"]
     # The kind role targets the VM directly; no master/worker split (the kind
     # NODES are containers on that one VM, expressed via count_* vars).
     inventoryGroups = ["all"]

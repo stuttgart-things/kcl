@@ -62,6 +62,25 @@ test_kind_is_reconcile_safe = lambda {
     assert _v["update_kubeconfig_ip"] == "true"
 }
 
+# The kind play names its cluster from `kind_cluster_name`, NOT `cluster_name` —
+# with only the latter set it silently built `dev` and the Platform's Cni child
+# then aimed cilium at `<clusterName>-control-plane`, a container that does not
+# exist (crossplane-configurations#232).
+test_kind_declares_its_own_cluster_name_var = lambda {
+    assert c.getDistribution("kind").clusterNameVars == ["kind_cluster_name"]
+
+    # k3s takes the name through `cluster_name`, which every stage already
+    # carries — an extra alias there would be noise, not safety.
+    assert c.getDistribution("k3s").clusterNameVars == []
+}
+
+# `cluster_name` is added by the consumer for the Vault path; a distribution
+# re-declaring it here would emit the same key twice into one varsFile.
+test_cluster_name_is_never_restated_as_an_alias = lambda {
+    assert len([1 for _, d in c.distributions if "cluster_name" in d.clusterNameVars]) == 0
+    assert len([1 for _, d in c.distributions if len([k for k in d.clusterNameVars if k in d.vars]) > 0]) == 0
+}
+
 # --- Multi-node gating -----------------------------------------------------
 test_multi_node_sizes_are_rejected_by_single_node_distributions = lambda {
     # Both current distributions are single-node only, so every size with

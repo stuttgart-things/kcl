@@ -88,6 +88,27 @@ schema Distribution:
     is not a statement about the upstream distribution — it means the fleet has
     no verified multi-node path for it here yet."""
 
+    clusterNameVars: [str] = []
+    """Extra varsFile keys that must carry the CLUSTER NAME, on top of the
+    `cluster_name` every stage already gets.
+
+    `cluster_name` is not a universal handle: `sthings.container.kind` never
+    reads it — it names the cluster from `kind_cluster_name` and otherwise falls
+    back to its own play default, `dev`. So a ClusterStack asking for
+    `kindstack-test` built a kind cluster called `dev`, and the Cni child's
+    `k8sServiceHost` (`<clusterName>-control-plane`) pointed at a container that
+    does not exist. With `kubeProxyReplacement: true` that is a deadlock, not a
+    slow failure: cilium cannot reach the API through the 10.96.0.1 VIP either,
+    because nothing programs that VIP until cilium is up
+    (crossplane-configurations#232).
+
+    A LIST, and applied to EVERY stage, because the same name is read by more
+    than one play: `sthings.container.upload_kubeconfig_vault` derives
+    `kubeconfig_path` from `kind_cluster_name` too. Before this field both sides
+    independently defaulted to `dev` and therefore agreed by accident — setting
+    the name in the distribution stage alone would break that agreement and the
+    upload would fetch a path that does not exist."""
+
     check:
         len(playbooks) > 0, "a distribution needs at least one playbook"
         cniOwnership in ["self", "platform"], "cniOwnership must be 'self' or 'platform'"
@@ -98,4 +119,3 @@ schema Stage:
     playbooks: [str]
     vars: {str:str}
     inventoryGroups: [str]
-

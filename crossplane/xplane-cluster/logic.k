@@ -40,6 +40,29 @@ renderInventory = lambda groups: [str], ip: str -> [str] {
     [('{}+["{}"]'.format(g, ip) if g == groups[0] else "{}+[]".format(g)) for g in groups]
 }
 
+# Every varsFile entry that must carry the cluster name, for EVERY stage.
+#
+# `cluster_name` alone is not enough and never was: sthings.container.kind does
+# not read it — it names the cluster from `kind_cluster_name` and otherwise uses
+# the play's own default, `dev`. So a ClusterStack for `kindstack-test` built a
+# kind cluster called `dev`, and the Platform's Cni child pointed cilium at
+# `kindstack-test-control-plane`, a container that does not exist. With
+# kubeProxyReplacement that deadlocks rather than degrades: the 10.96.0.1 VIP is
+# not programmed until cilium is up, so there is no fallback path to the API
+# (crossplane-configurations#232).
+#
+# APPLIED TO BOTH STAGES, deliberately. upload_kubeconfig_vault derives
+# kubeconfig_path from `kind_cluster_name` too, and before this both plays
+# defaulted to `dev` and therefore agreed by accident — setting the name in the
+# distribution stage only would have broken a working upload.
+#
+# WHICH keys is a catalog fact (Distribution.clusterNameVars), not a branch on
+# the distribution name here: the consumer states "the name goes everywhere it
+# is read", the catalog states where that is.
+clusterNameVars = lambda distribution: str, cluster: str -> [str] {
+    ["{}+-{}".format(k, cluster) for k in ["cluster_name"] + cat.getDistribution(distribution).clusterNameVars]
+}
+
 # Per-stage ansible overrides. `ansible.extraCollections` is the shared list; a
 # stage entry is MERGED OVER it rather than replacing it, so the common case
 # stays a single list.
@@ -159,7 +182,16 @@ runIDFor = lambda spec: {str:any}, stage: str -> str {
     str(_ids[stage]) if stage in _ids else ""
 }
 
-_ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str], vaultSecret: str -> {str:any} {
+_ansibleRun = lambda {
+    name: str,
+    ns: str,
+    stage: str,
+    spec: {str:any},
+    playbooks: [str],
+    vars: [str],
+    inventory: [str],
+    vaultSecret: str,
+} -> {str:any} {
     _ans = stageAnsible(spec, stage)
     _runID = runIDFor(spec, stage)
     _suffix = "-{}".format(_runID) if _runID else ""
@@ -198,20 +230,23 @@ _ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks:
 distributionRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any} {
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
-    _vars = renderVars(_dist.vars) + ["cluster_name+-{}".format(_cluster)] + (stageAnsible(spec, "distribution")?.extraVars or [])
+    _vars = renderVars(_dist.vars) + clusterNameVars(spec?.distribution or "k3s", _cluster) + (stageAnsible(spec, "distribution")?.extraVars or [])
     _ansibleRun(name, ns, "distribution", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip), "")
 }
 
 kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any} {
     _cluster = spec?.clusterName or name
     _stage = cat.kubeconfigStage
-    _dist = cat.getDistribution(spec?.distribution or "k3s")
 
     # Where the kubeconfig sits on the node differs per distribution; the k3s
     # server writes /etc/rancher/k3s/k3s.yaml, while the kind role fetches to the
-    # user's home. Only k3s needs the override.
+    # user's home. Only k3s needs the override — the kind side is left to the
+    # play's own `/home/{{ ansible_user }}/.kube/{{ kind_cluster_name }}`, which
+    # is correct precisely BECAUSE clusterNameVars sets kind_cluster_name in this
+    # stage too. Hard-coding the path here instead would need ansible_user, which
+    # this module does not know.
     _paths = ["kubeconfig_path+-/etc/rancher/k3s/k3s.yaml"] if (spec?.distribution or "k3s") == "k3s" else []
-    _vars = renderVars(_stage.vars) + ["cluster_name+-{}".format(_cluster)] + _paths
+    _vars = renderVars(_stage.vars) + clusterNameVars(spec?.distribution or "k3s", _cluster) + _paths
 
     # THE KUBECONFIGS VAULT IS NOT THE INFRA VAULT. ansible-run defaults
     # vaultSecretName to `vault`, which in this fleet points at the infra Vault
@@ -302,7 +337,13 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> 
 # `kubectl delete` is swallowed and has to be issued twice.
 #
 # Usage orders DELETION ONLY, never creation: build order stays the ready gates.
-usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str -> {str:any} {
+usage = lambda {
+    ofKind: str,
+    ofName: str,
+    byKind: str,
+    byName: str,
+    label: str,
+} -> {str:any} {
     {
         apiVersion = "protection.crossplane.io/v1beta1"
         kind = "Usage"
