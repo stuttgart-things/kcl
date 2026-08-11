@@ -182,7 +182,16 @@ runIDFor = lambda spec: {str:any}, stage: str -> str {
     str(_ids[stage]) if stage in _ids else ""
 }
 
-_ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str], vaultSecret: str -> {str:any} {
+_ansibleRun = lambda {
+    name: str,
+    ns: str,
+    stage: str,
+    spec: {str:any},
+    playbooks: [str],
+    vars: [str],
+    inventory: [str],
+    vaultSecret: str,
+} -> {str:any} {
     _ans = stageAnsible(spec, stage)
     _runID = runIDFor(spec, stage)
     _suffix = "-{}".format(_runID) if _runID else ""
@@ -328,7 +337,13 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> 
 # `kubectl delete` is swallowed and has to be issued twice.
 #
 # Usage orders DELETION ONLY, never creation: build order stays the ready gates.
-usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str -> {str:any} {
+usage = lambda {
+    ofKind: str,
+    ofName: str,
+    byKind: str,
+    byName: str,
+    label: str,
+} -> {str:any} {
     {
         apiVersion = "protection.crossplane.io/v1beta1"
         kind = "Usage"
