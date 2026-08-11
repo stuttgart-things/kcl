@@ -83,6 +83,37 @@ test_kubeconfig_run_is_a_separate_run_with_the_k3s_path = lambda {
     assert "kubeconfig_path+-/etc/rancher/k3s/k3s.yaml" not in _k.spec.ansibleVarsFile
 }
 
+# rke2 writes to its OWN path. The upload play's default is a kind path
+# (/home/<user>/.kube/<kind_cluster_name>, defaulting to `dev`), so without an
+# override an rke2 cluster's upload looks for a file that does not exist —
+# confirmed on the reference-run VM, which has /etc/rancher/rke2/rke2.yaml and
+# no k3s path at all. Same shape as crossplane-configurations#232.
+test_rke2_gets_its_own_kubeconfig_path = lambda {
+    _r = l.kubeconfigRun("c", "ns", {provider = "proxmox", distribution = "rke2", size = "medium"}, "10.0.0.1")
+    assert "kubeconfig_path+-/etc/rancher/rke2/rke2.yaml" in _r.spec.ansibleVarsFile
+    # And emphatically not the k3s one — they are different directories.
+    assert "kubeconfig_path+-/etc/rancher/k3s/k3s.yaml" not in _r.spec.ansibleVarsFile
+}
+
+# The catalog entry has to survive the whole distribution stage, not just exist.
+test_rke2_distribution_run_carries_the_verified_pins = lambda {
+    _r = l.distributionRun("c", "ns", {provider = "proxmox", distribution = "rke2", size = "medium", clusterName = "r1"}, "10.0.0.1")
+    assert _r.spec.ansiblePlaybooks == ["sthings.rke.rke2_cluster"]
+    # The fleet pair, not the play defaults (1.36.1 / rke2r2).
+    assert "rke2_k8s_version+-1.35.1" in _r.spec.ansibleVarsFile
+    assert "rke2_release_kind+-rke2r1" in _r.spec.ansibleVarsFile
+    # rke2_cni: none means the role must bring cilium, or there is no pod network.
+    assert "install_cilium+-true" in _r.spec.ansibleVarsFile
+    assert "cluster_name+-r1" in _r.spec.ansibleVarsFile
+    # Same role as k3s, so the same three groups.
+    assert _r.spec.ansibleVarsInventory[0] == 'initial_master_node+["10.0.0.1"]'
+}
+
+# rke2 owns its CNI, so a Platform must NOT add one — the k3s rule, not the kind one.
+test_rke2_platform_does_not_add_a_second_cni = lambda {
+    assert not cat.platformCniEnabled("rke2")
+}
+
 # THE kind BUG (crossplane-configurations#232). sthings.container.kind ignores
 # `cluster_name` and names the cluster from `kind_cluster_name`, defaulting it to
 # `dev` — so the XR's identity never reached the cluster, and the Cni child then

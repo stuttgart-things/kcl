@@ -229,15 +229,31 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
     _cluster = spec?.clusterName or name
     _stage = cat.kubeconfigStage
 
-    # Where the kubeconfig sits on the node differs per distribution; the k3s
-    # server writes /etc/rancher/k3s/k3s.yaml, while the kind role fetches to the
-    # user's home. Only k3s needs the override — the kind side is left to the
-    # play's own `/home/{{ ansible_user }}/.kube/{{ kind_cluster_name }}`, which
-    # is correct precisely BECAUSE clusterNameVars sets kind_cluster_name in this
-    # stage too. Hard-coding the path here instead would need ansible_user, which
-    # this module does not know.
-    _paths = ["kubeconfig_path+-/etc/rancher/k3s/k3s.yaml"] if (spec?.distribution or "k3s") == "k3s" else []
-    _vars = renderVars(_stage.vars) + clusterNameVars(spec?.distribution or "k3s", _cluster) + _paths
+    # Where the kubeconfig sits on the node differs per distribution, and the
+    # upload play cannot guess: its default is
+    # `/home/{{ ansible_user }}/.kube/{{ kind_cluster_name }}` — a KIND path,
+    # with kind_cluster_name defaulting to `dev`.
+    #
+    #   k3s   /etc/rancher/k3s/k3s.yaml
+    #   rke2  /etc/rancher/rke2/rke2.yaml
+    #   kind  no override — the play's own default is correct, precisely BECAUSE
+    #         clusterNameVars sets kind_cluster_name in THIS stage too. Hard-
+    #         coding it here would need ansible_user, which this module does not
+    #         know.
+    #
+    # rke2 was added on 2026-08-11 with catalog 0.4.0. Without it an rke2
+    # ClusterStack inherits the kind default and the upload looks for
+    # /home/sthings/.kube/dev on a host that only has
+    # /etc/rancher/rke2/rke2.yaml — verified on the reference-run VM. That is
+    # the same shape of bug as crossplane-configurations#232: a distribution-
+    # specific fact the consumer has to supply, invisible to `crossplane render`.
+    _serverPaths = {
+        k3s = "/etc/rancher/k3s/k3s.yaml"
+        rke2 = "/etc/rancher/rke2/rke2.yaml"
+    }
+    _dist = spec?.distribution or "k3s"
+    _paths = ["kubeconfig_path+-" + _serverPaths[_dist]] if _dist in _serverPaths else []
+    _vars = renderVars(_stage.vars) + clusterNameVars(_dist, _cluster) + _paths
 
     # THE KUBECONFIGS VAULT IS NOT THE INFRA VAULT. ansible-run defaults
     # vaultSecretName to `vault`, which in this fleet points at the infra Vault
