@@ -119,6 +119,7 @@ kcl test .
 
 ## Gotchas found while writing this (KCL, not Crossplane)
 
+- **`kcl fmt` from a newer CLI can emit source the runtime cannot parse.** kcl 0.12.8 rewrites a long `lambda a: str, b: str -> T {` parameter list into a multi-line `lambda { a: str, … } -> T {` block. `function-kcl` v0.12.0 — the thing that actually runs this module — rejects that outright (`expected one of ["="] got ,`), so 0.3.1 was published unrenderable and superseded by 0.3.2. CI now pins `KCL_VERSION`; keep the two in step.
 - **Commas are load-bearing in multi-line list literals.** `[a]` followed by a line starting with `[` parses as a *subscript*, silently dropping entries instead of failing. Cost an hour; the assembled `items` list carries a comment.
 - **No `enumerate()`**, and no multi-line ternary chains — both are single-line or comprehension-only.
 - **A dict literal is typed by its keys**, so `base | {newKey = …}` fails type checking. Tests write specs out in full instead of merging.

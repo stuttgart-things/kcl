@@ -3,6 +3,7 @@
     name = "xplane-cluster-catalog"
     full_name = "xplane-cluster-catalog_0.3.0"
     version = "0.3.0"
+    sum = "hRaDYRDJT7Z39B2RlFKtLSC0uvpgk3ljerD4P3ks9Tg="
     reg = "ghcr.io"
     repo = "stuttgart-things/xplane-cluster-catalog"
     oci_tag = "0.3.0"
