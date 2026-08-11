@@ -35,18 +35,19 @@ All values are **strings** — both VM XRDs take strings, and emitting ints fail
 
 ## Distributions
 
-| | `k3s` | `kind` |
-|---|---|---|
-| playbook | `sthings.rke.k3s_cluster` | `sthings.container.kind` |
-| version pin | `k3s_k8s_version 1.35.1`, `k3s_release_kind k3s1` | `kind_version 0.31.0`, `kubectl_version 1.35.0` |
-| CNI ownership | `self` — the role installs cilium | `platform` — built deliberately without one |
-| inventory groups | `initial_master_node`, `additional_master_nodes`, `workers` | `all` |
-| cluster-name vars | — (`cluster_name` only) | `kind_cluster_name` |
-| multi-node | no | no |
+| | `k3s` | `kind` | `rke2` |
+|---|---|---|---|
+| playbook | `sthings.rke.k3s_cluster` | `sthings.container.kind` | `sthings.rke.rke2_cluster` |
+| version pin | `k3s_k8s_version 1.35.1`, `k3s_release_kind k3s1` | `kind_version 0.31.0`, `kubectl_version 1.35.0` | `rke2_k8s_version 1.35.1`, `rke2_release_kind rke2r1` |
+| CNI ownership | `self` — the role installs cilium | `platform` — built deliberately without one | `self` — `rke2_cni: none`, the role installs cilium |
+| inventory groups | `initial_master_node`, `additional_master_nodes`, `workers` | `all` | `initial_master_node`, `additional_master_nodes`, `workers` |
+| cluster-name vars | — (`cluster_name` only) | `kind_cluster_name` | — (`cluster_name` only) |
+| multi-node | no | no | no |
 
-Every var in the tables is load-bearing, with the incident history in the comments. Two worth repeating:
+Every var in the tables is load-bearing, with the incident history in the comments. Three worth repeating:
 
 - **k3s `install_cilium: "true"` is mandatory.** The role's `k3s_config` default writes `flannel-backend=none`, `disable-kube-proxy=true` and `disable-network-policy=true` — k3s comes up deliberately without a CNI *and* without kube-proxy. With it false the cluster has no working pod network at all.
+- **rke2 pins the pair the fleet runs, not the play's defaults.** `sthings.rke.rke2_cluster` defaults to `1.36.1` / `rke2r2`; every rke2 cluster in this fleet is on `1.35.1` / `rke2r1`. Shipping the default would pin a combination nobody here has ever booted. The entry was added only after a reference run on 2026-08-11 — an `AnsibleRun` on the u26-kind3 machinery cluster driving the play against a Proxmox VM, which produced `Ready control-plane,etcd v1.35.1+rke2r1` with cilium up. That rule ("no entry without a reference run") is enforced by `catalog_test.k`, not just stated here.
 - **k3s's three inventory groups are not cosmetic.** `sthings.rke.deploy_configure_rke` branches on `groups['initial_master_node']` and `groups['additional_master_nodes']`; a flat `all+[...]` inventory fails with an undefined-group error. Empty groups render as header-only INI sections, which ansible registers as existing-but-empty — exactly what the role's `in groups[...]` tests need.
 
 ### The cluster name is not one var
