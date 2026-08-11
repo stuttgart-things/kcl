@@ -4,18 +4,22 @@
 # distributions/<name>.k, then one import and one entry here. Keeping it manual
 # is the point — adding a distribution is a reviewable two-line diff.
 #
-# rke2 is DELIBERATELY ABSENT. The fleet runs multinode rke2 clusters through
-# ansible (exec/labul/sthings-infra-rke2), but no Crossplane path has ever built
-# one, so an entry here would be a guess wearing the same clothes as a verified
-# fact. Add it after a reference run, not before.
+# rke2 was absent until 2026-08-11 on the rule that an entry without a reference
+# run is "a guess wearing the same clothes as a verified fact". That run has now
+# happened — an AnsibleRun on the u26-kind3 machinery cluster drove
+# sthings.rke.rke2_cluster against a Proxmox VM and produced a Ready
+# control-plane on v1.35.1+rke2r1 with cilium up. See distributions/rke2.k for
+# the run and for why its pins are not the play's defaults.
 import .distributions.k3s as k3s
 import .distributions.kind as kind
+import .distributions.rke2 as rke2
 import sizes as sz
 import schema as s
 
 distributions: {str:s.Distribution} = {
     k3s = k3s.k3s
     kind = kind.kind
+    rke2 = rke2.rke2
 }
 
 sizes: {str:s.Size} = sz.sizeTable

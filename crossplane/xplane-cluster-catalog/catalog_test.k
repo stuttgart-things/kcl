@@ -5,11 +5,31 @@ import .main as c
 test_distributions_registered = lambda {
     assert "k3s" in c.distributions
     assert "kind" in c.distributions
+    # rke2 joined on 2026-08-11, in the same commit as its reference run — an
+    # AnsibleRun on u26-kind3 that brought up v1.35.1+rke2r1 with cilium. The
+    # rule this assertion used to enforce ("no entry without a reference run")
+    # was satisfied, not waived.
+    assert "rke2" in c.distributions
+}
 
-    # rke2 is deliberately absent until a reference run exists — if someone adds
-    # it, this test should be updated in the same commit as the reference run,
-    # not before.
-    assert "rke2" not in c.distributions
+# rke2 pins the pair the FLEET runs, not the pair the play defaults to
+# (1.36.1 / rke2r2). A catalog that ships an unbooted combination is the exact
+# failure k3s.k documents, so the two values are asserted rather than trusted.
+test_rke2_pins_the_verified_version_pair = lambda {
+    _v = c.getDistribution("rke2").vars
+    assert _v["rke2_k8s_version"] == "1.35.1"
+    assert _v["rke2_release_kind"] == "rke2r1"
+}
+
+# rke2 is told to ship no CNI, so its role must install cilium — and a Platform
+# for such a cluster must therefore NOT enable its own Cni component. Same shape
+# as k3s, opposite of kind.
+test_rke2_owns_its_own_cni = lambda {
+    _d = c.getDistribution("rke2")
+    assert _d.vars["rke2_cni"] == "none"
+    assert _d.vars["install_cilium"] == "true"
+    assert _d.cniOwnership == "self"
+    assert not c.platformCniEnabled("rke2")
 }
 
 test_sizes_registered = lambda {
