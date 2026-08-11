@@ -119,3 +119,4 @@ schema Stage:
     playbooks: [str]
     vars: {str:str}
     inventoryGroups: [str]
+

@@ -5,6 +5,7 @@ import .main as c
 test_distributions_registered = lambda {
     assert "k3s" in c.distributions
     assert "kind" in c.distributions
+
     # rke2 joined on 2026-08-11, in the same commit as its reference run — an
     # AnsibleRun on u26-kind3 that brought up v1.35.1+rke2r1 with cilium. The
     # rule this assertion used to enforce ("no entry without a reference run")
