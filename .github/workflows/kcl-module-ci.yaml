@@ -31,6 +31,25 @@ permissions:
   contents: read
   packages: write
 
+env:
+  # PINNED — do not float to latest. The consumer of these modules is
+  # `function-kcl` (v0.12.0 in the Configurations), and its embedded KCL is
+  # older than the CLI's HEAD. kcl 0.12.8's formatter rewrites a long lambda
+  # parameter list into a multi-line block:
+  #
+  #     _ansibleRun = lambda {
+  #         name: str,
+  #         ...
+  #     } -> {str:any} {
+  #
+  # which older KCL cannot parse at all ('expected one of ["="] got ,').
+  # With the CLI unpinned the fmt gate therefore *demanded* source the runtime
+  # rejects: it went red on untouched code, and formatting to satisfy it
+  # published an xplane-cluster that failed to compile inside function-kcl.
+  # Raise this only together with the function-kcl version in
+  # stuttgart-things/crossplane-configurations.
+  KCL_VERSION: "0.12.4"
+
 jobs:
   detect-changed-modules:
     runs-on: ubuntu-latest
