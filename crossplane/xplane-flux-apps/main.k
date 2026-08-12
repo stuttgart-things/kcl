@@ -69,6 +69,7 @@ _appObject = lambda app: {str:} -> {str:} {
     }
     _sub = app?.substitute or {}
     _subFrom = app?.substituteFrom or []
+
     # ALWAYS EMITTED, even when the XR supplies nothing. This used to be
     # conditional, and the conditional form is a trap: kustomize-controller runs
     # its variable-substitution pass only when spec.postBuild is non-nil, so an
