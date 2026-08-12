@@ -290,3 +290,22 @@ test_vault_issuer_still_opt_in = lambda {
         vaultIssuer = {enabled = True}
     }) == True
 }
+
+# openebs reaches the platform, and reaches it with an EMPTY spec. The catalog
+# entry has no required substitutions and no dependsOn, so `apps.openebs.enabled`
+# alone must render both halves — the flux-init source and the flux-apps
+# Kustomization — with nothing else supplied. Asserted here rather than only in
+# the catalog, because the app -> (source, kustomization) fan-out is this
+# module's job and a missing source is invisible until Flux reports
+# ArtifactFailed on the target cluster.
+test_openebs_renders_from_a_bare_enable = lambda {
+    _spec = {clusterName = "c", apps = {
+        openebs = {enabled = True}
+    }}
+    _srcs = l.appSources(_spec)
+    _named = [s for s in _srcs if s.name == "openebs"]
+    assert len(_named) == 1
+    assert _named[0].url == "oci://ghcr.io/stuttgart-things/flux/infra/openebs"
+    # The floor that can say no to Loki/MinIO/Alloy — see the catalog entry.
+    assert _named[0].ref == "v1.19.1"
+}
