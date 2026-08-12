@@ -131,12 +131,45 @@ _kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and _vmIP == "") el
 #     machine does.
 # The AnsibleRuns need no protection: they only create PipelineRuns on the
 # management cluster, and those disappearing blocks nobody.
+#
+# THOSE THREE CANNOT ORDER THE TEARDOWN OF THEIR OWN PARENT, and that is not a
+# bug in them. They are composed children of this XR, so deleting the
+# ClusterStack removes them in the SAME parallel sweep as the resources they
+# protect, and a Usage whose own object is gone blocks nothing. A live run tore
+# the tree down in about three seconds and stranded four resources — a wedged
+# flux-instance Object, a flux-operator Release that was never deleted at all,
+# and both ClusterProviderConfigs.
+#
+# The fourth entry below is what fixes that, and it escapes the sweep for one
+# reason: it protects the COMPOSITE ITSELF, so the webhook rejects the DELETE at
+# ADMISSION — before Crossplane starts deleting anything. Verified on
+# u26-rke2-1, 2026-08-12:
+#
+#   kubectl delete clusterstack u26-rke2-1 --dry-run=server
+#   Error: admission webhook "nousages.protection.crossplane.io" denied the
+#   request: This resource is in-use by 1 usage(s) ... by resource Platform/...
+#
+# It does not automate the two-phase teardown; it makes the one-phase teardown
+# IMPOSSIBLE instead of silently lossy. `platformEnabled: false` removes both
+# the Platform child and this guard, and the delete then goes through.
+#
+# GATED ON _platOpen, i.e. it exists exactly when the Platform child exists.
+# Emitting it unconditionally would make a ClusterStack undeletable, since the
+# only thing that clears it is the child going away.
+#
+# replayDeletion = FALSE here, unlike the three above, and deliberately. Replay
+# re-issues a blocked delete once the blocker is gone — convenient when the
+# protected thing is a child, dangerous when it is the whole stack: an abandoned
+# `kubectl delete` leaves a blocked-delete marker, and a later, unrelated
+# `platformEnabled: false` would then tear down the entire cluster by surprise.
+#
 # COMMAS ARE LOAD-BEARING: without them KCL parses `[a]` followed by a line
 # starting with `[` as a SUBSCRIPT, silently dropping entries instead of failing.
 _usageGroups = [
-    [l.usage(_vmKind, "{}-vm".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-vm")] if _platOpen else []
-    [l.usage("ClusterAccess", "{}-access".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-access")] if (_platOpen and _accessOpen) else []
-    [l.usage(_vmKind, "{}-vm".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-vm")] if _accessOpen else []
+    [l.usage(_vmKind, "{}-vm".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-vm", True)] if _platOpen else []
+    [l.usage("ClusterAccess", "{}-access".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-access", True)] if (_platOpen and _accessOpen) else []
+    [l.usage(_vmKind, "{}-vm".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-vm", True)] if _accessOpen else []
+    [l.usage("ClusterStack", _name, "Platform", "{}-platform".format(_name), "stack-uses-platform", False)] if _platOpen else []
 ]
 _usages = sum(_usageGroups, [])
 
