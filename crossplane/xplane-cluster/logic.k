@@ -367,7 +367,7 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> 
 # `kubectl delete` is swallowed and has to be issued twice.
 #
 # Usage orders DELETION ONLY, never creation: build order stays the ready gates.
-usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str -> {str:any} {
+usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str, replay: bool -> {str:any} {
     {
         apiVersion = "protection.crossplane.io/v1beta1"
         kind = "Usage"
@@ -376,7 +376,7 @@ usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str ->
             annotations = {"krm.kcl.dev/composition-resource-name" = label}
         }
         spec = {
-            replayDeletion = True
+            replayDeletion = replay
             of = {
                 apiVersion = "resources.stuttgart-things.com/v1alpha1" if ofKind in ["NativeProxmoxVM", "NativeVsphereVM"] else "config.stuttgart-things.com/v1alpha1"
                 kind = ofKind

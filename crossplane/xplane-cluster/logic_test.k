@@ -204,15 +204,32 @@ test_platform_passthrough_and_derived_clusterName = lambda {
 # between an ordered teardown and Objects stuck on finalizers against a dead
 # API server.
 test_usage_protects_the_vm_from_the_platform = lambda {
-    _u = l.usage("NativeProxmoxVM", "c-vm", "Platform", "c-platform", "platform-uses-vm")
+    _u = l.usage("NativeProxmoxVM", "c-vm", "Platform", "c-platform", "platform-uses-vm", True)
     assert _u.spec.of.kind == "NativeProxmoxVM"
     assert _u.spec.by.kind == "Platform"
     assert _u.spec.replayDeletion
 }
 
 test_usage_resolves_the_group_per_kind = lambda {
-    assert l.usage("NativeVsphereVM", "a", "Platform", "b", "u").spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
-    assert l.usage("ClusterAccess", "a", "Platform", "b", "u").spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
+    assert l.usage("NativeVsphereVM", "a", "Platform", "b", "u", True).spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
+    assert l.usage("ClusterAccess", "a", "Platform", "b", "u", True).spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
+
+    # The teardown guard points at the COMPOSITE, which lives in the same group
+    # as ClusterAccess and Platform — so it needs no special case in the lambda.
+    assert l.usage("ClusterStack", "a", "Platform", "b", "u", False).spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
+}
+
+# The guard that makes a one-phase teardown impossible rather than silently
+# lossy. replayDeletion MUST stay false on it: replay re-issues a blocked delete
+# once the blocker is gone, which is convenient for a child and dangerous for
+# the whole stack — an abandoned `kubectl delete` would turn a later, unrelated
+# `platformEnabled: false` into a surprise teardown of the entire cluster.
+test_stack_guard_does_not_replay_deletion = lambda {
+    _g = l.usage("ClusterStack", "c", "Platform", "c-platform", "stack-uses-platform", False)
+    assert _g.spec.of.kind == "ClusterStack"
+    assert _g.spec.of.resourceRef.name == "c"
+    assert _g.spec.by.kind == "Platform"
+    assert not _g.spec.replayDeletion
 }
 
 # --- the kubeconfigs Vault -------------------------------------------------
