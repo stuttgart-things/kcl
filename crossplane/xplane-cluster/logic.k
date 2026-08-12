@@ -255,13 +255,36 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
     _paths = ["kubeconfig_path+-" + _serverPaths[_dist]] if _dist in _serverPaths else []
     _vars = renderVars(_stage.vars) + clusterNameVars(_dist, _cluster) + _paths
 
-    # THE KUBECONFIGS VAULT IS NOT THE INFRA VAULT. ansible-run defaults
-    # vaultSecretName to `vault`, which in this fleet points at the infra Vault
-    # and carries no AppRole; the kubeconfigs KV mount lives in a different
-    # Vault entirely. Leaving it unset fails the upload with
-    # "failed to determine alias name from login request" — found on the first
-    # live cluster build, invisible to render.
-    _vaultSecret = (spec?.kubeconfig or {})?.vaultSecretName or "vault-kubeconfigs"
+    # STATED EXPLICITLY, even though `vault` is also ansible-run's own default.
+    # Which Vault the upload authenticates against is a decision this module
+    # makes, not one it inherits: if ansible-run's default ever moves, an
+    # unset field here would follow it silently and the upload would write
+    # kubeconfigs into whatever Vault that is.
+    #
+    # `vault` is CORRECT and `vault-kubeconfigs` WAS WRONG, which is the reverse
+    # of what this comment said until 0.4.1. The old claim — "vault points at the
+    # infra Vault and carries no AppRole" — described kind1 in July 2026 and has
+    # not been true since: secrets/vault.enc.yaml carries VAULT_ADDR
+    # https://vault-vsphere.labul.sva.de:8200 plus the AppRole that owns the
+    # kubeconfigs mount (policy `superuser`), and the infra credential moved to
+    # its own blob, `vault-infra`. The two names cannot collide any more.
+    #
+    # Nothing ever created a Secret called `vault-kubeconfigs`. The fleet's
+    # sops-git-secrets chart derives a Secret's name from metadata.name inside
+    # its encrypted blob, so the name could only have come from a fourth blob
+    # duplicating a credential that is already on every cluster — a second copy
+    # to rotate, and a silent breakage the day someone rotates only one. Verified
+    # on u26-kind3 (2026-08-12): VAULT_ADDR, VAULT_ROLE_ID and VAULT_SECRET_ID of
+    # a hand-made `vault-kubeconfigs` sha256-matched `vault` exactly.
+    #
+    # So an rke2/k3s upload on a fresh machinery cluster failed with "failed to
+    # determine alias name from login request" — the same symptom the old comment
+    # blamed on leaving the field unset — until someone hand-created the alias.
+    #
+    # NOT the same name as ClusterAccess's kubeconfigProviderConfigRef below,
+    # which stays `vault-kubeconfigs`: that is a ClusterProviderConfig created by
+    # the provider-kubeconfig-vault chart, not a Secret.
+    _vaultSecret = (spec?.kubeconfig or {})?.vaultSecretName or "vault"
     _ansibleRun(name, ns, "kubeconfig", spec, _stage.playbooks, _vars, renderInventory(_stage.inventoryGroups, ip), _vaultSecret)
 }
 
