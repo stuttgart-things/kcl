@@ -78,3 +78,28 @@ test_optional_components_are_marked = lambda {
     assert not cm["install"].optional, "the base install is not optional"
     assert cm["selfsigned"].optional
 }
+
+# openebs — the first entry with no required substitutions at all, which is the
+# whole reason it went in first: `apps: {openebs: {enabled: true}}` is a
+# complete spec. Asserted so nobody "helpfully" adds a required var and turns a
+# one-line enable into a broken deploy.
+test_openebs_needs_no_substitutions = lambda {
+    _a = c.get("openebs")
+    assert len(_a.components) == 1
+    assert _a.components[0].requiredSubstitutions == []
+    assert _a.components[0].dependsOn == []
+    assert _a.components[0].path == "./"
+    assert _a.components[0].wrapsHelmRelease
+}
+
+# The catalog version is the FLUX ARTIFACT tag, never the openebs chart version
+# (which the artifact pins separately as OPENEBS_VERSION, default 4.2.0). v1.19.1
+# is the floor because it is the first release that carries flux#192 — before
+# it, the artifact had no loki/alloy keys, so raising OPENEBS_VERSION to 4.5.x
+# would have silently deployed Loki, MinIO and Alloy with no way to say no.
+test_openebs_pins_a_release_that_can_say_no_to_loki = lambda {
+    _v = c.get("openebs").defaultVersion
+    assert _v.startswith("v")
+    assert _v != "v4.2.0"
+    assert _v == "v1.19.1"
+}

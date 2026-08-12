@@ -6,6 +6,7 @@
 import .apps.cert_manager as cert_manager
 import .apps.dapr as dapr
 import .apps.headlamp as headlamp
+import .apps.openebs as openebs
 import .apps.trust_manager as trust_manager
 import schema as s
 
@@ -13,6 +14,7 @@ catalog: {str:s.App} = {
     "cert-manager" = cert_manager.certManager
     dapr = dapr.dapr
     headlamp = headlamp.headlamp
+    openebs = openebs.openebs
     "trust-manager" = trust_manager.trustManager
 }
 
