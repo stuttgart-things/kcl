@@ -69,8 +69,27 @@ _appObject = lambda app: {str:} -> {str:} {
     }
     _sub = app?.substitute or {}
     _subFrom = app?.substituteFrom or []
+    # ALWAYS EMITTED, even when the XR supplies nothing. This used to be
+    # conditional, and the conditional form is a trap: kustomize-controller runs
+    # its variable-substitution pass only when spec.postBuild is non-nil, so an
+    # app with no substitute block got NO substitution at all — and every
+    # `${VAR:-default}` fallback in its manifests silently stopped being a
+    # fallback. What reaches the cluster is the literal string:
+    #
+    #   Namespace/${OPENEBS_NAMESPACE:-openebs} dry-run failed (Invalid):
+    #   metadata.name: Invalid value: "${OPENEBS_NAMESPACE:-openebs}"
+    #
+    # Found on u26-rke2-1 (2026-08-12) enabling openebs, whose catalog entry
+    # declares zero required substitutions precisely because every variable has
+    # a manifest default. "No REQUIRED substitutions" and "needs no substitute
+    # block" are different claims, and the conditional made the second one false
+    # for every app in the catalog.
+    #
+    # An empty substitute map is enough: PostBuild != nil is the whole condition
+    # upstream. substituteFrom stays conditional because an empty list is
+    # meaningful there — it would be a source list with no sources.
     _postBuild = {
-        **({substitute = _sub} if _sub else {})
+        substitute = _sub
         **({substituteFrom = _subFrom} if _subFrom else {})
     }
     _appCommon = app?.commonMetadata or _commonMeta
@@ -115,7 +134,8 @@ _appObject = lambda app: {str:} -> {str:} {
                         **({patches = app.patches} if app?.patches else {})
                         **({images = app.images} if app?.images else {})
                         **({decryption = app.decryption} if app?.decryption else {})
-                        **({postBuild = _postBuild} if _postBuild else {})
+                        # Unconditional, deliberately — see _postBuild above.
+                        postBuild = _postBuild
                     }
                 }
             }
