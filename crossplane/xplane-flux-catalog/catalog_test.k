@@ -79,11 +79,21 @@ test_optional_components_are_marked = lambda {
     assert cm["selfsigned"].optional
 }
 
-# openebs — the first entry with no required substitutions at all, which is the
-# whole reason it went in first: `apps: {openebs: {enabled: true}}` is a
-# complete spec. Asserted so nobody "helpfully" adds a required var and turns a
-# one-line enable into a broken deploy.
-test_openebs_needs_no_substitutions = lambda {
+# openebs declares no REQUIRED substitutions — every variable in its manifests
+# carries a `${VAR:-default}` fallback.
+#
+# THAT IS A STATEMENT ABOUT THE CATALOG, NOT ABOUT USAGE, and the distinction
+# cost a live debug on u26-rke2-1 (2026-08-12). An XR still has to supply a
+# `substitute` block: xplane-flux-apps used to emit `postBuild` only when one
+# was present, and kustomize-controller runs its substitution pass only when
+# spec.postBuild is non-nil — so a bare enable meant NO substitution at all and
+# the fallbacks never applied. `${OPENEBS_NAMESPACE:-openebs}` reached the
+# cluster as a literal string and failed namespace validation.
+#
+# Fixed in xplane-flux-apps 0.2.0, which always emits postBuild. The test name
+# stays about the catalog on purpose — it was previously called
+# `test_openebs_needs_no_substitutions`, which read as a promise about usage.
+test_openebs_declares_no_required_substitutions = lambda {
     _a = c.get("openebs")
     assert len(_a.components) == 1
     assert _a.components[0].requiredSubstitutions == []
