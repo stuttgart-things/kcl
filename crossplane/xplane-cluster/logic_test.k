@@ -216,14 +216,31 @@ test_usage_resolves_the_group_per_kind = lambda {
 }
 
 # --- the kubeconfigs Vault -------------------------------------------------
-# ansible-run defaults vaultSecretName to `vault`, which in this fleet points at
-# the INFRA Vault and carries no AppRole; the kubeconfigs KV mount lives in a
-# different Vault. Leaving it unset failed the first live cluster build with
-# "failed to determine alias name from login request" — a failure no render can
-# see, so it is pinned here instead.
+# The name must be EMITTED, not left to ansible-run's default: which Vault the
+# upload authenticates against is this module's decision, and an unset field
+# would follow a downstream default change silently.
+#
+# The value is `vault` — the fleet's vault-vsphere credential, which owns the
+# kubeconfigs KV mount. Until 0.4.1 this asserted `vault-kubeconfigs`, a Secret
+# nothing has ever created: sops-git-secrets names a Secret from metadata.name
+# inside its blob, so that name required a fourth blob duplicating a credential
+# already present as `vault` (sha256-identical on kind3, 2026-08-12). The upload
+# failed with "failed to determine alias name from login request" on every fresh
+# machinery cluster until someone hand-made the alias.
 test_kubeconfig_run_targets_the_kubeconfigs_vault = lambda {
     _r = l.kubeconfigRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}, "10.0.0.1")
-    assert _r.spec.vaultSecretName == "vault-kubeconfigs"
+    assert _r.spec.vaultSecretName == "vault"
+}
+
+# The ClusterAccess side keeps the name `vault-kubeconfigs`, and that is not an
+# oversight: it is a ClusterProviderConfig emitted by the provider-kubeconfig-vault
+# chart, not a Secret. Asserted next to the change above so nobody "harmonises"
+# the two names in either direction.
+test_cluster_access_provider_config_is_not_the_secret_name = lambda {
+    _a = l.clusterAccess("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"})
+    assert _a.spec.kubeconfigProviderConfigRef == "vault-kubeconfigs"
+    _r = l.kubeconfigRun("c", "ns", {provider = "proxmox", distribution = "k3s", size = "medium"}, "10.0.0.1")
+    assert _r.spec.vaultSecretName != _a.spec.kubeconfigProviderConfigRef
 }
 
 test_kubeconfig_vault_secret_is_overridable = lambda {
