@@ -113,3 +113,41 @@ test_openebs_pins_a_release_that_can_say_no_to_loki = lambda {
     assert _v != "v4.2.0"
     assert _v == "v1.19.1"
 }
+
+test_cilium_is_registered = lambda {
+    _c = c.get("cilium")
+    assert _c.artifact == "oci://ghcr.io/stuttgart-things/flux/infra/cilium"
+    assert len(_c.components) == 1
+    assert _c.components[0].path == "./", "the artifact root is lb + gateway"
+}
+
+# The four variables the lb and gateway manifests use WITHOUT a `:=` default.
+# Flux substitutes an empty string for a missing one, and both offenders apply
+# cleanly: an IP pool with blank bounds and a Gateway with a blank hostname are
+# valid objects that do nothing. Declared so a consumer can reject the app
+# before it deploys something that merely looks healthy.
+test_cilium_declares_required_substitutions = lambda {
+    assert c.get("cilium").components[0].requiredSubstitutions == [
+        "CILIUM_LB_IP_START"
+        "CILIUM_LB_IP_STOP"
+        "CILIUM_GATEWAY_DOMAIN"
+        "CILIUM_GATEWAY_TLS_SECRET"
+    ]
+}
+
+# cilium is CONFIG-ONLY and must stay that way. The artifact ships a
+# `components/install` beside lb and gateway which the root does not reference,
+# because every target cluster already runs Cilium as its CNI — a second
+# install would be two CNIs on one datapath. An `install` component appearing
+# here would mean someone wired that path into the platform.
+#
+# It also has no dependsOn: its real prerequisite (Cilium running with Gateway
+# API and L2 announcements enabled) is a cluster fact the rke2 role provides,
+# not another catalog app.
+test_cilium_is_config_only = lambda {
+    _c = c.get("cilium")
+    assert "install" not in [x.name for x in _c.components], "cilium must not install a second CNI"
+    assert _c.components[0].name == "config"
+    assert _c.components[0].dependsOn == []
+    assert not _c.components[0].wrapsHelmRelease
+}

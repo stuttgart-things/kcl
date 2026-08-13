@@ -52,6 +52,19 @@ A consumer must **reject** a reference whose target app or component is not
 enabled — `xplane-platform` does, naming what to add. Flux would otherwise leave
 the Kustomization in `DependencyNotReady` indefinitely.
 
+## Config-only apps
+
+Not every entry installs something. `cilium` reconciles only the artifact's
+`components/lb` + `components/gateway`; the `components/install` that sits
+beside them is **not** part of the root, because every target cluster already
+runs Cilium as its CNI and a second install would put two CNIs on one datapath.
+Its component is therefore named `config`, not `install` — a cluster that needs
+Cilium *installed* is served by the `bootstrap/cilium` Configuration instead.
+
+Its real prerequisite is a **cluster fact rather than a `dependsOn`**: Cilium
+must already run with Gateway API and L2 announcements enabled. The catalog has
+no way to express that, so it stays a comment in `apps/cilium.k`.
+
 ## Optional components
 
 `Component.optional = True` marks an opt-in extra that is **not** deployed unless
@@ -79,6 +92,7 @@ An app is **not** necessarily one Kustomization: dapr ships `control-plane` and
 | `test_dependson_targets_exist` | a typo'd `dependsOn` — otherwise found only as a Kustomization stuck in `DependencyNotReady` on a live cluster |
 | `test_component_names_unique` | duplicates colliding on the emitted `{app}-{component}` name |
 | `test_helmrelease_components_raise_timeout` | a chart-installing component left on the 10m FluxApps default, which is demonstrably too short |
+| `test_cilium_is_config_only` | an `install` component appearing on cilium — i.e. someone wiring a second CNI into the platform |
 
 Each was verified to fail on the mistake it describes, not merely to pass.
 
