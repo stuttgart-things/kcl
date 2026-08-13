@@ -479,6 +479,13 @@ _xrStatus = _oxr | {
                 ready = _ipResReady
                 ipAddresses = _ipResStatus?.ipAddresses or []
                 networkKey = _ipResStatus?.networkKey or ""
+                # fqdn/zone verbatim from the child; domain is the wildcard
+                # reduced to the usable name (see l.clusterDomain). Kept side by
+                # side so a wrong domain can be traced to what clusterbook
+                # actually returned rather than guessed at.
+                fqdn = _ipResStatus?.fqdn or ""
+                zone = _ipResStatus?.zone or ""
+                domain = l.clusterDomain(_ipResStatus?.fqdn or "")
             }
             cilium = {
                 enabled = _ciliumEnabled

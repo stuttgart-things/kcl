@@ -78,6 +78,24 @@ ipReservationEnabled = lambda spec: {str:} -> bool {
     (spec?.ipReservation or {})?.enabled or False
 }
 
+clusterDomain = lambda fqdn: str -> str {
+    """The reservation's wildcard FQDN reduced to the name a consumer can use.
+
+    clusterbook publishes `*.u26-rke2-1.sthings-vsphere.labul.sva.de` when
+    createDNS is set — a wildcard record, so the leading `*.` is part of the DNS
+    name, not of the domain. Everything downstream wants the remainder:
+    CILIUM_GATEWAY_DOMAIN, a Gateway listener hostname, a certificate's common
+    name. Stripping it once here is the point of publishing the value at all —
+    the alternative is every consumer doing the same string surgery, which is
+    the repetition this status field exists to remove.
+
+    Anything that is not a wildcard is passed through untouched: an explicit
+    `spec.ip` reservation carries no DNS name, and a future non-wildcard record
+    would already be the usable form.
+    """
+    fqdn[2::] if fqdn.startswith("*.") else fqdn
+}
+
 vaultIssuerEnabled = lambda spec: {str:} -> bool {
     """Opt-IN. Provisions the TOKENLESS cert-manager -> Vault-PKI path: a Vault
     Kubernetes-auth mount (VaultK8sAuth), the CA bundle on the target
