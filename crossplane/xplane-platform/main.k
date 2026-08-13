@@ -29,7 +29,6 @@ _meta = _oxr?.metadata or {}
 _name = _meta?.name or "platform"
 _namespace = _meta?.namespace or "default"
 
-_valid = l.validate(_spec)
 _shared = l.resolveShared(_spec)
 
 _fluxEnabled = l.fluxInitEnabled(_spec)
@@ -57,6 +56,27 @@ _readStatus = lambda key: str -> {str:} {
 _isReady = lambda st: {str:} -> bool {
     len([c for c in (st?.conditions or []) if c.type == "Ready" and c.status == "True"]) > 0
 }
+
+# --- Facts this Platform discovered, keyed the way the catalog addresses them ---
+# The keys ARE the component names, so a catalog `substitutionSources` path reads
+# like the status it comes from: "ipReservation.domain" is
+# status.components.ipReservation.domain. Same values the status block below
+# publishes — built once here so the two cannot drift apart.
+#
+# Only facts belong here. A value a cluster CHOOSES (which Secret a certificate
+# lands in) has no entry and stays the XR's job.
+_discovered = {
+    ipReservation = {
+        domain = l.clusterDomain(_readStatus(_ipResKey)?.fqdn or "")
+        ipAddresses = _readStatus(_ipResKey)?.ipAddresses or []
+        zone = _readStatus(_ipResKey)?.zone or ""
+    }
+}
+
+# Validated against what was discovered: a variable the platform can supply is
+# not "missing" just because the XR omitted it — that is the point of
+# substitutionSources. One that resolves to nothing still fails, by name.
+_valid = l.validate(_spec, _discovered)
 
 # --- Child 0: Cni ---
 # Not just another component: until it is Ready the target cluster's nodes are
@@ -149,7 +169,7 @@ _fluxAppsXR = {
     spec = {
         kubernetesProviderConfigRef = _shared.kubernetesProviderConfigRef
         namespace = _shared.namespace
-        apps = l.appEntries(_spec)
+        apps = l.appEntries(_spec, _discovered)
     }
 }
 
@@ -484,8 +504,8 @@ _xrStatus = _oxr | {
                 # side so a wrong domain can be traced to what clusterbook
                 # actually returned rather than guessed at.
                 fqdn = _ipResStatus?.fqdn or ""
-                zone = _ipResStatus?.zone or ""
-                domain = l.clusterDomain(_ipResStatus?.fqdn or "")
+                zone = _discovered.ipReservation.zone
+                domain = _discovered.ipReservation.domain
             }
             cilium = {
                 enabled = _ciliumEnabled
