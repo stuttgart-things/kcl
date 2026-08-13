@@ -45,6 +45,23 @@ cilium: s.App = {
                 "CILIUM_GATEWAY_DOMAIN"
                 "CILIUM_GATEWAY_TLS_SECRET"
             ]
+            # Three of the four are FACTS the platform already discovered, and
+            # repeating them on the XR is how they drift: when the reservation
+            # moved from a standalone XR to a platform child on u26-rke2-1 the
+            # IP changed .5 -> .8, DNS followed immediately and the Gateway did
+            # not, because its bounds were typed in by hand.
+            #
+            # Start and stop both take the single reserved address: `count: 1`
+            # reserves one IP and the pool is that one address, not a range.
+            #
+            # TLS_SECRET is NOT listed on purpose. It is not a discovered fact
+            # but a decision about where a certificate gets issued, and nothing
+            # in the platform's status can answer it.
+            substitutionSources = {
+                CILIUM_LB_IP_START = "ipReservation.ipAddresses[0]"
+                CILIUM_LB_IP_STOP = "ipReservation.ipAddresses[0]"
+                CILIUM_GATEWAY_DOMAIN = "ipReservation.domain"
+            }
         }
     ]
 }

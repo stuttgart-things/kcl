@@ -151,3 +151,35 @@ test_cilium_is_config_only = lambda {
     assert _c.components[0].dependsOn == []
     assert not _c.components[0].wrapsHelmRelease
 }
+
+# The three cilium variables that are FACTS the platform discovers, mapped to
+# where it can read them. Repeating them on the XR is how they drift: when the
+# reservation moved to a platform child on u26-rke2-1 the IP changed .5 -> .8,
+# DNS followed and the Gateway did not.
+test_cilium_declares_substitution_sources = lambda {
+    _src = c.get("cilium").components[0].substitutionSources
+    assert _src["CILIUM_GATEWAY_DOMAIN"] == "ipReservation.domain"
+    # count: 1 reserves ONE address; the pool is that address, not a range.
+    assert _src["CILIUM_LB_IP_START"] == "ipReservation.ipAddresses[0]"
+    assert _src["CILIUM_LB_IP_STOP"] == _src["CILIUM_LB_IP_START"]
+}
+
+# TLS_SECRET must never gain a source: it is a decision about where a
+# certificate is issued, not a fact the platform can discover.
+test_cilium_tls_secret_stays_manual = lambda {
+    _c = c.get("cilium").components[0]
+    assert "CILIUM_GATEWAY_TLS_SECRET" in _c.requiredSubstitutions
+    assert "CILIUM_GATEWAY_TLS_SECRET" not in _c.substitutionSources
+}
+
+# Every source must belong to a variable the component actually declares —
+# a typo would otherwise resolve nothing and be invisible until deploy.
+test_substitution_sources_name_declared_variables = lambda {
+    assert all _n, app in c.catalog {
+        all comp in app.components {
+            all v in comp.substitutionSources {
+                v in comp.requiredSubstitutions
+            }
+        }
+    }, "a substitutionSources key names a variable the component does not declare"
+}

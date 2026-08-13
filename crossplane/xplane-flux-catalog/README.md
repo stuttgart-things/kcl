@@ -65,6 +65,34 @@ Its real prerequisite is a **cluster fact rather than a `dependsOn`**: Cilium
 must already run with Gateway API and L2 announcements enabled. The catalog has
 no way to express that, so it stays a comment in `apps/cilium.k`.
 
+## Discoverable substitutions
+
+`Component.substitutionSources` maps a variable to a dotted path into the
+**consumer's** status, for variables whose value is a fact about the cluster
+rather than a choice:
+
+```kcl
+substitutionSources = {
+    CILIUM_GATEWAY_DOMAIN = "ipReservation.domain"
+    CILIUM_LB_IP_START    = "ipReservation.ipAddresses[0]"
+}
+```
+
+A consumer resolves an entry **only when the XR does not supply the variable** —
+an explicit value always wins.
+
+The mapping lives here rather than in the consumer because this is where the app
+is described; the consumer only knows how to read its own status. And it is a
+mapping rather than a template dialect in the value, because a template would
+add a second way to fail — an unresolvable path rendering as an empty string,
+which is exactly what `requiredSubstitutions` exists to prevent. A path that
+resolves to nothing leaves the variable **unset**, so it falls through that
+check and is rejected by name.
+
+Not every required variable belongs here. cilium's `CILIUM_GATEWAY_TLS_SECRET`
+stays manual: it is a decision about where a certificate gets issued, not a fact
+any status can answer.
+
 ## Optional components
 
 `Component.optional = True` marks an opt-in extra that is **not** deployed unless
@@ -93,6 +121,7 @@ An app is **not** necessarily one Kustomization: dapr ships `control-plane` and
 | `test_component_names_unique` | duplicates colliding on the emitted `{app}-{component}` name |
 | `test_helmrelease_components_raise_timeout` | a chart-installing component left on the 10m FluxApps default, which is demonstrably too short |
 | `test_cilium_is_config_only` | an `install` component appearing on cilium — i.e. someone wiring a second CNI into the platform |
+| `test_substitution_sources_name_declared_variables` | a `substitutionSources` key that names no declared variable — it would resolve nothing and stay invisible until deploy |
 
 Each was verified to fail on the mistake it describes, not merely to pass.
 
