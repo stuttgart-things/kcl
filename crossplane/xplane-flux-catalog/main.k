@@ -4,6 +4,7 @@
 # apps/<name>.k, then one import and one entry here. Keeping it manual is the
 # point — adding an app to the platform is a reviewable two-line diff.
 import .apps.cert_manager as cert_manager
+import .apps.cilium as cilium
 import .apps.dapr as dapr
 import .apps.headlamp as headlamp
 import .apps.openebs as openebs
@@ -12,6 +13,7 @@ import schema as s
 
 catalog: {str:s.App} = {
     "cert-manager" = cert_manager.certManager
+    cilium = cilium.cilium
     dapr = dapr.dapr
     headlamp = headlamp.headlamp
     openebs = openebs.openebs
