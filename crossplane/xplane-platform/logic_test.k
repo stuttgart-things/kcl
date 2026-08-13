@@ -309,3 +309,40 @@ test_openebs_renders_from_a_bare_enable = lambda {
     # The floor that can say no to Loki/MinIO/Alloy — see the catalog entry.
     assert _named[0].ref == "v1.19.1"
 }
+
+# The catalog's cilium entry, reached through spec.apps — NOT spec.cilium.
+#
+# The two are different paths to Cilium and only this one is used by the
+# Gateway work (crossplane-configurations#248): spec.cilium composes a Cilium
+# XR from the bootstrap/cilium Configuration, which was never published;
+# apps.cilium reconciles the flux/infra/cilium artifact's lb + gateway. Naming
+# them apart here so the next reader does not assume one test covers both.
+test_apps_cilium_renders_from_the_catalog = lambda {
+    _spec = {clusterName = "c", apps = {
+        cilium = {enabled = True, substitute = {
+            CILIUM_LB_IP_START = "10.31.102.5"
+            CILIUM_LB_IP_STOP = "10.31.102.5"
+            CILIUM_GATEWAY_DOMAIN = "u26-rke2-1.sthings-vsphere.labul.sva.de"
+            CILIUM_GATEWAY_TLS_SECRET = "gateway-tls"
+        }}
+    }}
+    _named = [s for s in l.appSources(_spec) if s.name == "cilium"]
+    assert len(_named) == 1
+    assert _named[0].url == "oci://ghcr.io/stuttgart-things/flux/infra/cilium"
+    assert _named[0].ref == "v1.18.1"
+    assert len(l.missingSubstitutions(_spec)) == 0
+}
+
+# A bare enable must be REJECTED, unlike openebs above. All four of cilium's
+# variables lack a manifest default, and Flux substitutes an empty string
+# instead of failing — an IP pool with blank bounds and a Gateway with a blank
+# hostname both apply cleanly and do nothing, so the cluster would look healthy.
+test_apps_cilium_bare_enable_is_rejected = lambda {
+    _m = l.missingSubstitutions({
+        apps = {
+            cilium = {enabled = True}
+        }
+    })
+    assert len(_m) == 4, "all four cilium vars are required"
+    assert "cilium-config: CILIUM_GATEWAY_DOMAIN" in _m
+}
