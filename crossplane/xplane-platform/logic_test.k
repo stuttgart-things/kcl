@@ -1,6 +1,7 @@
 # Unit tests for the platform logic. `kcl test`.
 # These are the rules that would otherwise only be observable on a live cluster.
 import .logic as l
+import xplane_flux_catalog as cat
 
 # template-execution requires GITHUB_TOKEN / BACKSTAGE_AUTH_TOKEN / REDIS_PASSWORD,
 # so a bare {dapr = {}} is now correctly rejected — supply them via substituteFrom.
@@ -360,4 +361,58 @@ test_cluster_domain_strips_the_wildcard = lambda {
 test_cluster_domain_passes_through_non_wildcards = lambda {
     assert l.clusterDomain("") == ""
     assert l.clusterDomain("gw.example.com") == "gw.example.com"
+}
+
+_disc = {
+    ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de", ipAddresses = ["10.31.102.8"], zone = "sthings-vsphere.labul.sva.de"}
+}
+
+# The two path shapes the catalog uses, and every way a path can read nothing.
+# Anything unreadable must be "" so the caller leaves the variable UNSET —
+# a blank substituted value is what requiredSubstitutions exists to prevent.
+test_resolve_source_reads_the_two_shapes = lambda {
+    assert l.resolveSource(_disc, "ipReservation.domain") == "u26-rke2-1.sthings-vsphere.labul.sva.de"
+    assert l.resolveSource(_disc, "ipReservation.ipAddresses[0]") == "10.31.102.8"
+}
+
+test_resolve_source_is_empty_when_unreadable = lambda {
+    assert l.resolveSource(_disc, "ipReservation.ipAddresses[3]") == "", "index past the end"
+    assert l.resolveSource({}, "ipReservation.domain") == "", "nothing discovered yet"
+    assert l.resolveSource(_disc, "nope.field") == "", "unknown group"
+    assert l.resolveSource(_disc, "a.b.c") == "", "deeper than the supported two segments"
+}
+
+# cilium's three resolve; the fourth has no source and must stay absent, so the
+# XR still has to name the Secret a certificate gets issued into.
+test_discovered_substitutions_fill_only_facts = lambda {
+    _comp = cat.get("cilium").components[0]
+    _got = l.discoveredSubstitutions(_comp, _disc)
+    assert _got["CILIUM_GATEWAY_DOMAIN"] == "u26-rke2-1.sthings-vsphere.labul.sva.de"
+    assert _got["CILIUM_LB_IP_START"] == "10.31.102.8"
+    assert _got["CILIUM_LB_IP_STOP"] == "10.31.102.8"
+    assert "CILIUM_GATEWAY_TLS_SECRET" not in _got
+}
+
+# Discovery turns three of the four from missing into supplied. The TLS Secret
+# stays missing — it is a decision, not a fact.
+test_discovery_satisfies_required_substitutions = lambda {
+    _spec = {clusterName = "c", apps = {
+        cilium = {enabled = True}
+    }}
+    assert len(l.missingSubstitutions(_spec)) == 4, "nothing discovered: all four missing"
+    _m = l.missingSubstitutions(_spec, _disc)
+    assert _m == ["cilium-config: CILIUM_GATEWAY_TLS_SECRET"], "only the decision is left"
+}
+
+# An explicit value always wins, so a cluster can break out of what was found.
+test_explicit_substitute_beats_discovery = lambda {
+    _spec = {clusterName = "c", apps = {
+        cilium = {enabled = True, substitute = {
+            CILIUM_GATEWAY_DOMAIN = "override.example.com"
+            CILIUM_GATEWAY_TLS_SECRET = "tls"
+        }}
+    }}
+    _k = [k for k in l.appEntries(_spec, _disc) if k.name == "cilium-config"][0]
+    assert _k.substitute["CILIUM_GATEWAY_DOMAIN"] == "override.example.com"
+    assert _k.substitute["CILIUM_LB_IP_START"] == "10.31.102.8", "undisputed values still come from discovery"
 }

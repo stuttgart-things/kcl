@@ -10,6 +10,7 @@ hand is the error this module removes.
 """
 
 import xplane_flux_catalog as cat
+import xplane_flux_catalog.schema as cs
 
 resolveShared = lambda spec: {str:} -> {str:} {
     """The shared cluster contract, resolved once and handed to every component.
@@ -149,7 +150,41 @@ appSources = lambda spec: {str:} -> [{str:}] {
     } for _n, _a in enabledApps(spec)]
 }
 
-appEntries = lambda spec: {str:} -> [{str:}] {
+resolveSource = lambda discovered: {str:}, path: str -> str {
+    """Read one catalog `substitutionSources` path out of the discovered facts.
+
+    Supports exactly the two shapes the catalog uses — `group.field` and
+    `group.field[N]` — and nothing else. That is a deliberate floor rather than a
+    parser: a general path language would need its own error semantics, and the
+    failure it would introduce (an unresolvable path silently yielding "") is the
+    very one requiredSubstitutions exists to prevent. A path this cannot read
+    returns "", which leaves the variable unset and lets the existing check
+    reject it by name.
+
+    Returns "" for anything absent, so callers can treat "" as "not discovered".
+    """
+    _seg = path.split(".")
+    _group = _seg[0] if len(_seg) > 0 else ""
+    _rest = _seg[1] if len(_seg) == 2 else ""
+    _obj = discovered[_group] if _group in discovered else {}
+    _isIdx = _rest.endswith("]") and "[" in _rest
+    _field = _rest.split("[")[0] if _isIdx else _rest
+    _val = _obj[_field] if _field != "" and _field in _obj else Undefined
+    _i = int(_rest.split("[")[1].replace("]", "")) if _isIdx else 0
+    str(_val[_i]) if (_isIdx and typeof(_val) == "list" and len(_val) > _i) else ("" if (_isIdx or _val == Undefined or _val == None) else str(_val))
+}
+
+discoveredSubstitutions = lambda comp: cs.Component, discovered: {str:} -> {str:str} {
+    """The subset of a component's substitutionSources that actually resolves.
+
+    Only non-empty results are kept: an entry resolving to nothing must leave the
+    variable UNSET so requiredSubstitutions rejects it by name, rather than
+    substituting a blank that Flux would deploy without complaint.
+    """
+    {k: resolveSource(discovered, v) for k, v in (comp?.substitutionSources or {}) if resolveSource(discovered, v) != ""}
+}
+
+appEntries = lambda spec: {str:}, discovered: {str:} = {} -> [{str:}] {
     """FluxApps `apps[]` entries — one per enabled component of each enabled app.
 
     An app is not necessarily one Kustomization (dapr ships control-plane +
@@ -164,8 +199,10 @@ appEntries = lambda spec: {str:} -> [{str:}] {
             dependsOn = [{name = depName(_n, _d)} for _d in _c.dependsOn]
         if (((_a?.components or {})[_c.name] or {})?.timeout or _c.timeout):
             timeout = ((_a?.components or {})[_c.name] or {})?.timeout or _c.timeout
-        if (_a?.substitute or {}) | (((_a?.components or {})[_c.name] or {})?.substitute or {}):
-            substitute = (_a?.substitute or {}) | (((_a?.components or {})[_c.name] or {})?.substitute or {})
+        if discoveredSubstitutions(_c, discovered) | (_a?.substitute or {}) | (((_a?.components or {})[_c.name] or {})?.substitute or {}):
+            # Discovered values go UNDERNEATH: an explicit value in the XR always
+            # wins, so a cluster can still break out of what the platform found.
+            substitute = discoveredSubstitutions(_c, discovered) | (_a?.substitute or {}) | (((_a?.components or {})[_c.name] or {})?.substitute or {})
         if ((_a?.components or {})[_c.name] or {})?.substituteFrom:
             substituteFrom = ((_a?.components or {})[_c.name] or {}).substituteFrom
         if (((_a?.components or {})[_c.name] or {})?.targetNamespace or _a?.targetNamespace):
@@ -177,24 +214,27 @@ _compOverride = lambda app: {str:}, name: str -> {str:} {
     (app?.components or {})[name] or {}
 }
 
-_appMissing = lambda name: str, app: {str:} -> [str] {
+_appMissing = lambda name: str, app: {str:}, discovered: {str:} = {} -> [str] {
     """Required vars of one app that nothing supplies. A component carrying
     substituteFrom is skipped — its values come from a ConfigMap/Secret resolved
     at build time, which cannot be checked statically."""
-    _supplied = lambda cname: str -> {str:} {
-        (app?.substitute or {}) | (_compOverride(app, cname)?.substitute or {})
+    _supplied = lambda cname: str, comp: cs.Component -> {str:} {
+        # A value the platform can discover counts as supplied — that is the
+        # point of substitutionSources. Only resolvable ones count; an entry
+        # that reads nothing still fails here, by name.
+        discoveredSubstitutions(comp, discovered) | (app?.substitute or {}) | (_compOverride(app, cname)?.substitute or {})
     }
     _checked = [c for c in cat.get(name).components if compEnabled(c, _compOverride(app, c.name)) and not _compOverride(app, c.name)?.substituteFrom]
-    sum([[name + "-" + c.name + ": " + v for v in c.requiredSubstitutions if v not in _supplied(c.name)] for c in _checked], [])
+    sum([[name + "-" + c.name + ": " + v for v in c.requiredSubstitutions if v not in _supplied(c.name, c)] for c in _checked], [])
 }
 
-missingSubstitutions = lambda spec: {str:} -> [str] {
+missingSubstitutions = lambda spec: {str:}, discovered: {str:} = {} -> [str] {
     """Required substitution variables that nothing supplies.
 
     Flux replaces an undefined variable with an empty string instead of failing,
     so a missing one is a silently broken deploy — that is what this catches.
     """
-    sum([_appMissing(n, a) for n, a in enabledApps(spec)], [])
+    sum([_appMissing(n, a, discovered) for n, a in enabledApps(spec)], [])
 }
 
 _compEnabled = lambda apps: {str:}, appName: str, compName: str -> bool {
@@ -223,7 +263,7 @@ depProblems = lambda spec: {str:} -> [str] {
     sum([appDepProblems(_n, _a, _apps) for _n, _a in _apps], [])
 }
 
-validate = lambda spec: {str:} -> bool {
+validate = lambda spec: {str:}, discovered: {str:} = {} -> bool {
     """Rules that must hold before anything is emitted.
 
     The fluxInit rule is also a CEL rule on the XRD (which fails at apply time,
@@ -240,7 +280,7 @@ validate = lambda spec: {str:} -> bool {
     # placeholder literally — so the messages are concatenated.
     _depProblems = depProblems(spec)
     assert len(_depProblems) == 0, "unsatisfiable dependencies — " + "; ".join(_depProblems)
-    _missing = missingSubstitutions(spec)
+    _missing = missingSubstitutions(spec, discovered)
     assert len(_missing) == 0, "required substitution variables are not supplied (Flux substitutes empty strings rather than failing, so this would deploy silently broken): " + ", ".join(_missing)
     True
 }
