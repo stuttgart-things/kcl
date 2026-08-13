@@ -49,6 +49,26 @@ schema Component:
     whose required vars are neither in `substitute` nor plausibly supplied by a
     `substituteFrom` source."""
 
+    substitutionSources?: {str:str} = {}
+    """Where a substitution variable's value can be DISCOVERED, for variables
+    whose value is a fact about the cluster rather than a choice.
+
+    Maps a variable name to a dotted path into the consumer's own status, e.g.
+    `{CILIUM_GATEWAY_DOMAIN = "ipReservation.domain"}`. A consumer resolves an
+    entry ONLY when the XR does not supply the variable — an explicit value
+    always wins, so a cluster can still break out.
+
+    This is deliberately a MAPPING here rather than logic: the catalog knows
+    which of an app's variables are discoverable facts, because it is where the
+    app is described. The consumer knows how to read its own status. Putting the
+    variable names in the consumer instead would make it grow a special case per
+    app; putting a template dialect in the value would introduce a second way to
+    fail (an unresolvable path rendering as an empty string), which is precisely
+    what requiredSubstitutions exists to prevent.
+
+    A path that resolves to nothing leaves the variable UNSET, so it falls
+    through requiredSubstitutions and is rejected — never substituted blank."""
+
     optional?: bool = False
     """Opt-in extra: NOT deployed unless the XR enables it explicitly.
 
