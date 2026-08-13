@@ -87,6 +87,14 @@ _platObs = _byKind("Platform")
 _plat = _platObs[0] if _platObs else {}
 _platReady = len([c for c in (_plat?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
 
+# The cluster's DNS domain, discovered by the ipReservation child two levels
+# down and republished by platform as components.ipReservation.domain (already
+# reduced from clusterbook's `*.` wildcard). Lifted here for the same reason
+# apiEndpoint is: state it once where it is discovered, read it everywhere else.
+# Empty whenever ipReservation is off or has no DNS — the field is then omitted
+# from share rather than published blank.
+_platDomain = l.platformDomain(_plat)
+
 # --- gates -----------------------------------------------------------------
 _distOpen = (_vmReady and _vmIP != "" and _baseosOk) or len(_distObs) > 0
 _kcOpen = (_distOk and _vmIP != "") or len(_kcObs) > 0
@@ -194,6 +202,8 @@ _dxrPatched = _dxr | {
                 clusterType = _accessShare.clusterType
             if _accessShare?.serverVersion:
                 serverVersion = _accessShare.serverVersion
+            if _platDomain:
+                domain = _platDomain
         }
         stages = {
             vm = {ready = _vmReady, ip = _vmIP}

@@ -390,3 +390,20 @@ usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str, r
         }
     }
 }
+
+platformDomain = lambda plat: {str:} -> str {
+    """The cluster's DNS domain, read off an observed Platform child.
+
+    Discovered two levels down: the ipReservation child asks clusterbook, which
+    returns a `*.` wildcard when createDNS is set; platform reduces it to the
+    usable name and republishes it as components.ipReservation.domain. This only
+    lifts it into the stack's own share, for the same reason apiEndpoint is
+    lifted — state it once where it is discovered, read it everywhere else.
+
+    Returns "" when ipReservation is off, has no DNS, or the Platform has not
+    reported yet. Callers omit the field rather than publishing an empty string:
+    a blank domain substituted into a Gateway hostname or a certificate is worse
+    than an absent one, because it renders as a valid-looking empty value.
+    """
+    ((plat?.status?.components or {})?.ipReservation or {})?.domain or ""
+}

@@ -346,3 +346,18 @@ test_apps_cilium_bare_enable_is_rejected = lambda {
     assert len(_m) == 4, "all four cilium vars are required"
     assert "cilium-config: CILIUM_GATEWAY_DOMAIN" in _m
 }
+
+# The wildcard the clusterbook reservation publishes is not the domain — the
+# leading `*.` belongs to the DNS record. Stripping it once here is what keeps
+# every consumer from doing the same string surgery.
+test_cluster_domain_strips_the_wildcard = lambda {
+    assert l.clusterDomain("*.u26-rke2-1.sthings-vsphere.labul.sva.de") == "u26-rke2-1.sthings-vsphere.labul.sva.de"
+}
+
+# Not every reservation carries a wildcard: `spec.ip` skips DNS entirely, and a
+# non-wildcard record would already be usable. Both must pass through untouched
+# rather than losing their first two characters.
+test_cluster_domain_passes_through_non_wildcards = lambda {
+    assert l.clusterDomain("") == ""
+    assert l.clusterDomain("gw.example.com") == "gw.example.com"
+}

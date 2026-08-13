@@ -410,3 +410,36 @@ test_no_endpoint_means_no_injection = lambda {
     _r = l.platformChild("c", "ns", _spec, "")
     assert "kubernetesHost" not in _r.spec.vaultIssuer
 }
+
+test_platform_domain_is_lifted = lambda {
+    _plat = {
+        status = {
+            components = {
+                ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de"}
+            }
+        }
+    }
+    assert l.platformDomain(_plat) == "u26-rke2-1.sthings-vsphere.labul.sva.de"
+}
+
+# Every shape that means "no domain yet" must yield "", so the caller can omit
+# the field. A blank domain substituted into a Gateway hostname or a certificate
+# renders as a valid-looking empty value — worse than an absent one.
+test_platform_domain_absent_is_empty = lambda {
+    assert l.platformDomain({}) == ""
+    assert l.platformDomain({
+        status = {}
+    }) == ""
+    assert l.platformDomain({
+        status = {
+            components = {}
+        }
+    }) == ""
+    assert l.platformDomain({
+        status = {
+            components = {
+                ipReservation = {enabled = False}
+            }
+        }
+    }) == ""
+}
