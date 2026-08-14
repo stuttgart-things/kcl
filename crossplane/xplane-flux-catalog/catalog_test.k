@@ -183,3 +183,13 @@ test_substitution_sources_name_declared_variables = lambda {
         }
     }, "a substitutionSources key names a variable the component does not declare"
 }
+
+# headlamp's DOMAIN is the cluster domain — discoverable, and the same value the
+# Gateway listener wildcard and the certificate CN come from. HOSTNAME and
+# GATEWAY_NAME are decisions and must stay manual.
+test_headlamp_discovers_only_the_domain = lambda {
+    _c = c.get("headlamp").components[0]
+    assert _c.substitutionSources == {DOMAIN = "ipReservation.domain"}
+    assert "HOSTNAME" not in _c.substitutionSources
+    assert "GATEWAY_NAME" not in _c.substitutionSources
+}
