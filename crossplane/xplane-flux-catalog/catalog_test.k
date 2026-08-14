@@ -193,3 +193,15 @@ test_headlamp_discovers_only_the_domain = lambda {
     assert "HOSTNAME" not in _c.substitutionSources
     assert "GATEWAY_NAME" not in _c.substitutionSources
 }
+
+# The machinery SERVICE, not the bootstrap play of the same name. Two required
+# variables, one of them discovered — so enabling it costs a single typed
+# value. That is the payoff of substitutionSources, and the assertion is here
+# so a later artifact change that adds a required variable is noticed.
+test_machinery_costs_one_typed_value = lambda {
+    _c = c.get("machinery").components[0]
+    assert _c.requiredSubstitutions == ["DOMAIN", "GATEWAY_NAME", "MACHINERY_VERSION"]
+    assert _c.substitutionSources == {DOMAIN = "ipReservation.domain"}
+    _typed = [v for v in _c.requiredSubstitutions if v not in _c.substitutionSources]
+    assert _typed == ["GATEWAY_NAME", "MACHINERY_VERSION"], "the Gateway choice, plus the version until flux fixes its broken default"
+}
