@@ -284,3 +284,19 @@ validate = lambda spec: {str:}, discovered: {str:} = {} -> bool {
     assert len(_missing) == 0, "required substitution variables are not supplied (Flux substitutes empty strings rather than failing, so this would deploy silently broken): " + ", ".join(_missing)
     True
 }
+
+wildcardCertEnabled = lambda spec: {str:}, domain: str -> bool {
+    """Whether to compose the wildcard Certificate for this cluster.
+
+    Opt-IN, and gated on a domain having been DISCOVERED — a Certificate whose
+    only dnsName is "*." is rejected by cert-manager, and one that is silently
+    never issued is worse than one that was never composed. The domain arrives
+    from the ipReservation child (status.components.ipReservation.domain), so
+    this is False until that reports, and stays False when ipReservation is off.
+
+    The Secret it fills is the one a Gateway listener names in certificateRefs:
+    cert-manager writes it, the Gateway picks it up and the HTTPS listener goes
+    Programmed on its own.
+    """
+    (((spec?.vaultIssuer or {})?.wildcardCertificate or {})?.enabled or False) and domain != ""
+}
