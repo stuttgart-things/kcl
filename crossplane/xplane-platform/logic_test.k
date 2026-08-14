@@ -416,3 +416,20 @@ test_explicit_substitute_beats_discovery = lambda {
     assert _k.substitute["CILIUM_GATEWAY_DOMAIN"] == "override.example.com"
     assert _k.substitute["CILIUM_LB_IP_START"] == "10.31.102.8", "undisputed values still come from discovery"
 }
+
+# Opt-in AND a discovered domain. Both halves matter, and the second is easy to
+# lose to operator precedence: `enabled or False and domain != ""` parses as
+# `enabled or (False and ...)`, which drops the domain check entirely.
+test_wildcard_cert_needs_enable_and_domain = lambda {
+    _on = {
+        vaultIssuer = {
+            wildcardCertificate = {enabled = True}
+        }
+    }
+    assert l.wildcardCertEnabled(_on, "u26.example.com")
+    assert not l.wildcardCertEnabled(_on, ""), "no domain discovered yet"
+    assert not l.wildcardCertEnabled({
+        vaultIssuer = {}
+    }, "u26.example.com"), "not opted in"
+    assert not l.wildcardCertEnabled({}, "u26.example.com"), "no vaultIssuer at all"
+}

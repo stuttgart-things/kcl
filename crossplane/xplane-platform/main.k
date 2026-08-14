@@ -446,7 +446,50 @@ _viRevMgmtObj = {
 }
 _viReviewerObjects = ([_viRevSAObj, _viRevCRBObj, _viRevTokenObj, _viRevObserveObj] if _viAutoReviewer else []) + ([_viRevMgmtObj] if (_viAutoReviewer and _viRevToken != "") else [])
 
-_vaultIssuerChildren = ([_vaultK8sAuthXR, _vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj] + _viReviewerObjects) if _vaultIssuerEnabled else []
+# --- Wildcard certificate for the cluster domain (opt-in) ---
+# The last hand-made object of the Gateway path: cert-manager issues
+# `*.{domain}` through the ClusterIssuer above into the Secret a Gateway
+# listener names in certificateRefs. Nothing else composed it, so it survived
+# no teardown and was reconciled by nothing.
+#
+# The domain comes from the ipReservation child, not the XR — the same value
+# the cilium substitutions read, so the certificate and the listener hostname
+# cannot disagree. Gated on it being discovered: a Certificate whose only
+# dnsName is "*." is rejected, and one that never issues is worse than one that
+# was never composed.
+_viCertSpec = (_viSpec?.wildcardCertificate or {})
+_viCertDomain = _discovered.ipReservation.domain
+_viCertEnabled = l.wildcardCertEnabled(_spec, _viCertDomain)
+_viCertSecret = _viCertSpec?.secretName or "wildcard-tls"
+_viCertNs = _viCertSpec?.namespace or "default"
+_viCertKey = "{}-wildcard-cert".format(_name)
+
+_viCertObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = _viCertKey, namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = _viCertKey}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "cert-manager.io/v1"
+            kind = "Certificate"
+            metadata = {name = _viCertSecret, namespace = _viCertNs}
+            spec = {
+                secretName = _viCertSecret
+                commonName = "*.{}".format(_viCertDomain)
+                dnsNames = ["*.{}".format(_viCertDomain)]
+                # 90 days, renewed at 15 — well inside the PKI role's one-year
+                # max_ttl, and short enough that a broken renewal surfaces while
+                # the current certificate is still valid.
+                duration = "2160h"
+                renewBefore = "360h"
+                issuerRef = {name = _viIssuerName, kind = "ClusterIssuer", group = "cert-manager.io"}
+            }
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+
+_vaultIssuerChildren = ([_vaultK8sAuthXR, _vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj] + _viReviewerObjects + ([_viCertObj] if _viCertEnabled else [])) if _vaultIssuerEnabled else []
 
 _children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else []) + _vaultIssuerChildren
 
