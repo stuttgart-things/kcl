@@ -20,6 +20,15 @@ headlamp: s.App = {
             wrapsHelmRelease = True
             timeout = "15m"
             requiredSubstitutions = ["DOMAIN", "HOSTNAME", "GATEWAY_NAME"]
+            # DOMAIN is the cluster's own domain — the same value the Gateway
+            # listener's wildcard and the certificate CN are built from. Typing
+            # it on the XR is how those three drift apart; the platform already
+            # discovered it. HOSTNAME and GATEWAY_NAME stay manual: which name
+            # this app answers on, and which Gateway it attaches to, are
+            # decisions no status can answer.
+            substitutionSources = {
+                DOMAIN = "ipReservation.domain"
+            }
         }
     ]
 }
