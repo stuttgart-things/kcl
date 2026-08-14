@@ -433,3 +433,22 @@ test_wildcard_cert_needs_enable_and_domain = lambda {
     }, "u26.example.com"), "not opted in"
     assert not l.wildcardCertEnabled({}, "u26.example.com"), "no vaultIssuer at all"
 }
+
+# headlamp's DOMAIN became discoverable in catalog 0.7.0. Enabling it now needs
+# only the two values that are decisions — which name it answers on, and which
+# Gateway it attaches to.
+test_apps_headlamp_discovers_its_domain = lambda {
+    _d = {
+        ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de", ipAddresses = ["10.31.102.8"], zone = "z"}
+    }
+    _spec = {clusterName = "c", apps = {
+        headlamp = {enabled = True, substitute = {
+            HOSTNAME = "headlamp"
+            GATEWAY_NAME = "cilium-gateway"
+        }}
+    }}
+    assert len(l.missingSubstitutions(_spec, _d)) == 0, "DOMAIN comes from the status"
+    assert len(l.missingSubstitutions(_spec)) == 1, "and is still required when nothing was discovered"
+    _k = [k for k in l.appEntries(_spec, _d) if k.name == "headlamp-app"][0]
+    assert _k.substitute["DOMAIN"] == "u26-rke2-1.sthings-vsphere.labul.sva.de"
+}
