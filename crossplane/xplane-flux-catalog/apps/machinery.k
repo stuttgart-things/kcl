@@ -14,41 +14,40 @@ import ..schema as s
 # configurable status-field extraction is what makes `status.stage` — "the one
 # field to look at when a build is stuck" — visible without kubectl.
 #
-# TWO GAPS in the artifact, both verified 2026-08-14 — neither blocks the
-# catalog entry, but both bite whoever enables it first:
+# Two gaps used to make this entry awkward; stuttgart-things/flux#193 closed
+# both in artifact v1.19.2, which is why this pins it rather than v1.18.1:
 #
-#  1. MACHINERY_VERSION defaults to `1.13.4`; the published tags are `v1.13.4`.
-#     The default resolves to nothing. Hence it sits in requiredSubstitutions.
-#  2. The artifact patches MACHINERY_CONFIG=/etc/machinery/config.json onto the
-#     deployment and mounts the `machinery-config` ConfigMap — which carries
-#     only LOG_LEVEL. There is no config.json key, so the path dangles. The
-#     service does run (the config is optional; it falls back to built-in
-#     defaults), but the WATCH SET cannot be configured through the app today.
+#  1. MACHINERY_VERSION defaulted to `1.13.4` while the published tags read
+#     `v1.13.4`, so the OCIRepository never resolved and the app never
+#     deployed. The entry carried it in requiredSubstitutions to turn that
+#     silent pull failure into a render-time rejection; no longer needed.
+#  2. MACHINERY_CONFIG pointed at /etc/machinery/config.json while the mounted
+#     ConfigMap held only LOG_LEVEL, so the WATCH SET — which decides the kinds
+#     the dashboard shows — could not be configured through the app at all. The
+#     service still ran, on built-in defaults watching StoragePlatform and
+#     NetworkIntegration: a dashboard, just not this fleet's.
 #
-# That second one matters for this fleet: the watch set decides which kinds the
-# dashboard shows, and no shipped example covers ours. examples/configs/
-# platforms.json watches StoragePlatform / NetworkIntegration /
-# SecurityPlatform / AnsibleRun — not ClusterStack, Platform or XIPReservation.
-# Making those visible needs a config the artifact has no way to supply yet.
+# The artifact now ships the watch set as a file, covering ClusterStack,
+# Platform, XIPReservation and VaultK8sAuth. Enabling this app is therefore
+# enough — no ConfigMap has to be placed on the cluster by hand.
 machinery: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/machinery"
-    defaultVersion = "v1.18.1"
+    defaultVersion = "v1.19.2"
     components = [
         s.Component {
             name = "app"
             path = "./"
             wrapsHelmRelease = True
             timeout = "15m"
-            # MACHINERY_VERSION is listed even though the artifact gives it a
-            # default, because that default is WRONG: it reads `1.13.4` while
-            # the published tags are `v1.13.4` — the OCIRepository does not
-            # resolve and the app never deploys. Declaring it required turns a
-            # silent pull failure into a render-time rejection that names the
-            # variable. Drop it from this list once flux fixes the default.
+            # MACHINERY_VERSION is no longer listed: stuttgart-things/flux#193
+            # fixed the artifact's default (it read `1.13.4` while the published
+            # tags read `v1.13.4`, so the OCIRepository never resolved) and this
+            # entry pins v1.19.2, which carries that fix. Overriding the version
+            # is still possible, it is just no longer mandatory.
             #
             # MACHINERY_HOSTNAME (machinery), MACHINERY_NAMESPACE (machinery)
-            # and GATEWAY_NAMESPACE (default) carry usable defaults.
-            requiredSubstitutions = ["DOMAIN", "GATEWAY_NAME", "MACHINERY_VERSION"]
+            # and GATEWAY_NAMESPACE (default) carry usable defaults too.
+            requiredSubstitutions = ["DOMAIN", "GATEWAY_NAME"]
             # DOMAIN is the cluster's own — the same value the Gateway listener
             # wildcard and the certificate CN are built from. GATEWAY_NAME stays
             # manual: which Gateway a service attaches to is a decision.
