@@ -7,6 +7,7 @@ import .apps.cert_manager as cert_manager
 import .apps.cilium as cilium
 import .apps.dapr as dapr
 import .apps.headlamp as headlamp
+import .apps.machinery as machinery
 import .apps.openebs as openebs
 import .apps.trust_manager as trust_manager
 import schema as s
@@ -16,6 +17,7 @@ catalog: {str:s.App} = {
     cilium = cilium.cilium
     dapr = dapr.dapr
     headlamp = headlamp.headlamp
+    machinery = machinery.machinery
     openebs = openebs.openebs
     "trust-manager" = trust_manager.trustManager
 }
