@@ -165,6 +165,50 @@ _providerConfigObject = lambda i: int, pc -> any {
     }
 }
 
+# --- RBAC -------------------------------------------------------------------
+# Emitted alongside the Release, not behind a gate: rbac.authorization.k8s.io is
+# a built-in group, so unlike everything else here it needs no CRD to exist
+# first. Emitting it early also means the providers have their permissions
+# before their first reconcile rather than after a failed one.
+_rbacName = "{}-rbac".format(_name)
+
+_rbac = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = _rbacName
+        namespace = _xrNs
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = _rbacName
+        }
+    }
+    spec = {
+        forProvider = {
+            manifest = {
+                apiVersion = "rbac.authorization.k8s.io/v1"
+                kind = "ClusterRoleBinding"
+                metadata = {
+                    name = "crossplane-providers-cluster-admin"
+                }
+                roleRef = {
+                    apiGroup = "rbac.authorization.k8s.io"
+                    kind = "ClusterRole"
+                    name = "cluster-admin"
+                }
+                subjects = [{
+                    kind = "Group"
+                    apiGroup = "rbac.authorization.k8s.io"
+                    name = l.rbacSubjectGroup
+                }]
+            }
+        }
+        providerConfigRef = {
+            name = _k8sPcr
+            kind = "ClusterProviderConfig"
+        }
+    }
+}
+
 _status = {
     apiVersion = _oxr?.apiVersion
     kind = _oxr?.kind
@@ -189,6 +233,9 @@ _status = {
                 total = len(_profile.providerConfigs)
                 emitted = len(_pcObs)
             }
+            rbac = {
+                clusterAdmin = l.clusterAdminEnabled(_spec)
+            }
         }
         # What arrives without being installed. Stated because "which packages
         # are on this cluster" cannot be answered from the spec alone.
@@ -196,4 +243,4 @@ _status = {
     }
 }
 
-items = [_core] + ([_packageObject(p) for p in _packages] if _pkgOpen else []) + ([_providerConfigObject(i, pc) for i, pc in _profile.providerConfigs] if _pcOpen else []) + [_status]
+items = [_core] + ([_rbac] if l.clusterAdminEnabled(_spec) else []) + ([_packageObject(p) for p in _packages] if _pkgOpen else []) + ([_providerConfigObject(i, pc) for i, pc in _profile.providerConfigs] if _pcOpen else []) + [_status]
