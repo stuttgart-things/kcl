@@ -468,18 +468,24 @@ test_apps_machinery_discovers_its_domain = lambda {
     assert _k.substitute["DOMAIN"] == "u26-rke2-1.sthings-vsphere.labul.sva.de"
 }
 
-test_apps_machinery_still_demands_its_version = lambda {
-    # The artifact defaults MACHINERY_VERSION to `1.13.4` while the published
-    # tags carry a `v` — the OCIRepository never resolves. The catalog entry
-    # declares it required so that fails at render time, naming the variable,
-    # instead of silently. Drop this once stuttgart-things/flux#193 lands.
+test_apps_machinery_costs_one_typed_value = lambda {
+    # stuttgart-things/flux#193 fixed the artifact default (it read `1.13.4`
+    # while the published tags read `v1.13.4`, so the OCIRepository never
+    # resolved), and catalog 0.9.0 dropped MACHINERY_VERSION from the required
+    # list. What remains is GATEWAY_NAME — a decision, not a fact, so nothing
+    # can discover it.
     _d = {
         ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de", ipAddresses = [], zone = "z"}
     }
-    _spec = {clusterName = "c", apps = {
+    _withGateway = {clusterName = "c", apps = {
         machinery = {enabled = True, substitute = {GATEWAY_NAME = "cilium-gateway"}}
     }}
-    _missing = l.missingSubstitutions(_spec, _d)
-    assert len(_missing) == 1, "only the version is unsupplied"
-    assert "MACHINERY_VERSION" in ", ".join(_missing)
+    assert len(l.missingSubstitutions(_withGateway, _d)) == 0, "the version is no longer typed by hand"
+
+    _bare = {clusterName = "c", apps = {
+        machinery = {enabled = True}
+    }}
+    _missing = l.missingSubstitutions(_bare, _d)
+    assert len(_missing) == 1, "the Gateway choice stays required"
+    assert "GATEWAY_NAME" in ", ".join(_missing)
 }
