@@ -452,3 +452,34 @@ test_apps_headlamp_discovers_its_domain = lambda {
     _k = [k for k in l.appEntries(_spec, _d) if k.name == "headlamp-app"][0]
     assert _k.substitute["DOMAIN"] == "u26-rke2-1.sthings-vsphere.labul.sva.de"
 }
+
+test_apps_machinery_discovers_its_domain = lambda {
+    _d = {
+        ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de", ipAddresses = ["10.31.102.8"], zone = "z"}
+    }
+    _spec = {clusterName = "c", apps = {
+        machinery = {enabled = True, substitute = {
+            GATEWAY_NAME = "cilium-gateway"
+            MACHINERY_VERSION = "v1.18.1"
+        }}
+    }}
+    assert len(l.missingSubstitutions(_spec, _d)) == 0, "DOMAIN comes from the status"
+    _k = [k for k in l.appEntries(_spec, _d) if k.name == "machinery-app"][0]
+    assert _k.substitute["DOMAIN"] == "u26-rke2-1.sthings-vsphere.labul.sva.de"
+}
+
+test_apps_machinery_still_demands_its_version = lambda {
+    # The artifact defaults MACHINERY_VERSION to `1.13.4` while the published
+    # tags carry a `v` — the OCIRepository never resolves. The catalog entry
+    # declares it required so that fails at render time, naming the variable,
+    # instead of silently. Drop this once stuttgart-things/flux#193 lands.
+    _d = {
+        ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de", ipAddresses = [], zone = "z"}
+    }
+    _spec = {clusterName = "c", apps = {
+        machinery = {enabled = True, substitute = {GATEWAY_NAME = "cilium-gateway"}}
+    }}
+    _missing = l.missingSubstitutions(_spec, _d)
+    assert len(_missing) == 1, "only the version is unsupplied"
+    assert "MACHINERY_VERSION" in ", ".join(_missing)
+}
