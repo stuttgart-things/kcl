@@ -360,6 +360,33 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> 
     }
 }
 
+# A ManagementPlane child, for a cluster that is meant to BUILD clusters rather
+# than run workloads. Same passthrough shape as platformChild: whatever the user
+# puts under spec.managementPlane reaches the child verbatim, and this
+# Composition supplies only clusterName — which it knows and the user should not
+# have to repeat.
+#
+# NOT filtered for `enabled`: that lives on spec.managementPlaneEnabled, a
+# sibling, for the same reason platformEnabled is one. A preserve-unknown-fields
+# block that also declares known properties makes schema converters emit
+# additionalProperties:false and reject every passthrough key.
+managementPlaneChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
+    _cluster = spec?.clusterName or name
+    _passthrough = {k: v for k, v in (spec?.managementPlane or {}) if k != "clusterName"}
+    {
+        apiVersion = "config.stuttgart-things.com/v1alpha1"
+        kind = "ManagementPlane"
+        metadata = {
+            name = "{}-management-plane".format(name)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "management-plane"}
+        }
+        spec = _passthrough | {
+            clusterName = _cluster
+        }
+    }
+}
+
 # --- teardown ordering -----------------------------------------------------
 
 # `of` is what must die LAST, `by` is the user. replayDeletion re-issues the

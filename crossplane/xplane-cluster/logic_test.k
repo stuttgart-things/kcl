@@ -443,3 +443,31 @@ test_platform_domain_absent_is_empty = lambda {
         }
     }) == ""
 }
+
+# The ManagementPlane child passes through verbatim and gets only clusterName
+# added — the one thing this Composition knows and the user should not repeat.
+test_management_plane_child_passes_through = lambda {
+    _spec = {clusterName = "mgmt-1", managementPlane = {profile = "machinery", clusterAdminRbac = True}}
+    _c = l.managementPlaneChild("stack-1", "default", _spec)
+    assert _c.kind == "ManagementPlane"
+    assert _c.metadata.name == "stack-1-management-plane"
+    assert _c.metadata.namespace == "default"
+    assert _c.spec.profile == "machinery", "arbitrary keys reach the child untouched"
+    assert _c.spec.clusterAdminRbac
+    assert _c.spec.clusterName == "mgmt-1"
+}
+
+# clusterName falls back to the stack's own name, matching platformChild.
+test_management_plane_child_defaults_cluster_name = lambda {
+    _c = l.managementPlaneChild("stack-1", "default", {})
+    assert _c.spec.clusterName == "stack-1"
+}
+
+# A clusterName inside the passthrough block must not win over the Composition's
+# — it is the one field this layer owns, and two sources would let a child point
+# at a different cluster than the stack that built it.
+test_management_plane_child_ignores_a_passed_cluster_name = lambda {
+    _spec = {clusterName = "right", managementPlane = {clusterName = "wrong"}}
+    _c = l.managementPlaneChild("stack-1", "default", _spec)
+    assert _c.spec.clusterName == "right"
+}

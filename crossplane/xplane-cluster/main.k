@@ -49,6 +49,12 @@ _supported = cat.assertSizeSupported(_spec?.distribution or "k3s", _spec?.size o
 # additionalProperties:false and reject every passthrough key.
 _platformEnabled = _spec?.platformEnabled if "platformEnabled" in _spec else True
 
+# Default OFF, unlike platformEnabled. Most ClusterStacks build WORKLOAD
+# clusters; a control plane is the exception, and installing Crossplane plus the
+# fleet's twenty packages on a machine that did not ask for it is not a default
+# anyone wants to discover.
+_mgmtEnabled = _spec?.managementPlaneEnabled if "managementPlaneEnabled" in _spec else False
+
 # --- observed children -----------------------------------------------------
 _byKind = lambda kind: str -> [any] {
     [v.Resource for _, v in _ocds if v?.Resource?.kind == kind]
@@ -83,6 +89,10 @@ _access = _accessObs[0] if _accessObs else {}
 _accessReady = _access?.status?.ready or False
 _accessShare = _access?.status?.share or {}
 
+_mgmtObs = _byKind("ManagementPlane")
+_mgmt = _mgmtObs[0] if _mgmtObs else {}
+_mgmtReady = len([c for c in (_mgmt?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
+
 _platObs = _byKind("Platform")
 _plat = _platObs[0] if _platObs else {}
 _platReady = len([c for c in (_plat?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
@@ -100,6 +110,11 @@ _distOpen = (_vmReady and _vmIP != "" and _baseosOk) or len(_distObs) > 0
 _kcOpen = (_distOk and _vmIP != "") or len(_kcObs) > 0
 _accessOpen = _kcOk or len(_accessObs) > 0
 _platOpen = _platformEnabled and (_accessReady or len(_platObs) > 0)
+
+# Gated on ClusterAccess, the same as the Platform child and for the same
+# reason: both need only the ClusterProviderConfigs, and neither needs the
+# other. They install in parallel — Crossplane and Flux do not contend.
+_mgmtOpen = _mgmtEnabled and (_accessReady or len(_mgmtObs) > 0)
 
 # Verbatim re-emission for the ansible children (see the module docstring).
 _reemit = lambda prev: any, stage: str -> {str:any} {
@@ -178,13 +193,25 @@ _usageGroups = [
     [l.usage("ClusterAccess", "{}-access".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-access", True)] if (_platOpen and _accessOpen) else []
     [l.usage(_vmKind, "{}-vm".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-vm", True)] if _accessOpen else []
     [l.usage("ClusterStack", _name, "Platform", "{}-platform".format(_name), "stack-uses-platform", False)] if _platOpen else []
+    # The ManagementPlane needs the same three guards as the Platform, and for
+    # the same reasons: it applies everything it owns THROUGH the VM and the
+    # ClusterAccess, so losing either first leaves its Objects hanging against a
+    # cluster that is gone.
+    [l.usage(_vmKind, "{}-vm".format(_name), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-vm", True)] if _mgmtOpen else []
+    [l.usage("ClusterAccess", "{}-access".format(_name), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-access", True)] if (_mgmtOpen and _accessOpen) else []
+    [l.usage("ClusterStack", _name, "ManagementPlane", "{}-management-plane".format(_name), "stack-uses-mgmt", False)] if _mgmtOpen else []
 ]
 _usages = sum(_usageGroups, [])
 
 # --- status ----------------------------------------------------------------
 
 # The one field to look at when a build is stuck.
-_stage = "ready" if (_platReady or (not _platformEnabled and _accessReady)) else ("platform" if _platOpen else ("access" if _accessOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else "vm")))))
+# A disabled component is DONE, not pending — otherwise a stack that only wants
+# a reachable machine would never report ready.
+_platDone = _platReady or (not _platformEnabled and _accessReady)
+_mgmtDone = _mgmtReady or not _mgmtEnabled
+
+_stage = "ready" if (_platDone and _mgmtDone) else ("platform" if (_platOpen and not _platDone) else ("management-plane" if _mgmtOpen else ("access" if _accessOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else "vm"))))))
 
 _dxr = _params?.dxr or {}
 _dxrPatched = _dxr | {
@@ -212,6 +239,7 @@ _dxrPatched = _dxr | {
             kubeconfig = {succeeded = _kcOk, emitted = _kcOpen}
             access = {ready = _accessReady, emitted = _accessOpen}
             platform = {ready = _platReady, emitted = _platOpen}
+            managementPlane = {ready = _mgmtReady, emitted = _mgmtOpen}
         }
     }
 }
@@ -225,6 +253,7 @@ _groups = [
     [_kcChild] if _kcOpen else []
     [l.clusterAccess(_name, _ns, _spec)] if _accessOpen else []
     [l.platformChild(_name, _ns, _spec, _accessShare?.apiEndpoint or "")] if _platOpen else []
+    [l.managementPlaneChild(_name, _ns, _spec)] if _mgmtOpen else []
     _usages
     [_dxrPatched]
 ]
