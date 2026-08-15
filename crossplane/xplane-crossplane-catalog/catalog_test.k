@@ -126,3 +126,14 @@ test_get_rejects_an_unknown_profile = lambda {
     assert "machinery" in c.names
     assert len(c.names) == len(c.catalog)
 }
+
+# A management cluster must be able to build FURTHER management clusters — that
+# is what makes the seed disposable rather than load-bearing forever. It needs
+# cluster >=v0.4.0 (spec.managementPlaneEnabled) and management-plane behind it.
+test_the_profile_can_build_control_planes = lambda {
+    _p = c.get("machinery")
+    _cl = [x for x in _p.packages if x.name.endswith("-cluster")][0]
+    assert _cl.package.endswith(":v0.4.0")
+    assert "management-plane" in _cl.pulls
+    assert "management-plane" in c.transitive(_p)
+}
