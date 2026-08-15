@@ -116,3 +116,24 @@ validate = lambda spec: {str:} -> bool {
 transitivePackages = lambda spec: {str:} -> [str] {
     cat.transitive(profile(spec))
 }
+
+# --- RBAC -------------------------------------------------------------------
+# Crossplane's providers run as ServiceAccounts in crossplane-system with
+# per-revision generated names, so binding one BY NAME is the trap #251 fixed:
+# the name carries a hash and the binding silently applies to nothing. The
+# group `system:serviceaccounts:crossplane-system` is the stable subject.
+#
+# cluster-admin, and on purpose. On a MANAGEMENT cluster the providers create
+# arbitrary cluster content by definition — that is the job. The narrower
+# ClusterRoles the machinery play fetches from raw URLs
+# (provider-kubernetes-remote-cluster, provider-kubernetes-ip-reservation) bind
+# the SAME group, so this subsumes both and they stop being a precondition.
+#
+# Default on: a management cluster without it has every XRD and can reconcile
+# none of them, which presents as a hang rather than an error. Turn it off only
+# if something else grants the equivalent.
+clusterAdminEnabled = lambda spec: {str:} -> bool {
+    spec?.clusterAdminRbac if "clusterAdminRbac" in spec else True
+}
+
+rbacSubjectGroup = "system:serviceaccounts:crossplane-system"

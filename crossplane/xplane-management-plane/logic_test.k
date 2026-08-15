@@ -93,3 +93,18 @@ test_validate_requires_a_target = lambda {
     assert l.validate(_min)
     assert l.helmRef({}) == "", "nothing to derive from, so validate would reject it"
 }
+
+# Binding a provider ServiceAccount BY NAME is the trap #251 fixed — the name
+# carries a per-revision hash, so the binding silently applies to nothing. The
+# group is the stable subject.
+test_rbac_binds_the_group_not_a_service_account = lambda {
+    assert l.rbacSubjectGroup == "system:serviceaccounts:crossplane-system"
+}
+
+# On by default: a management cluster without it has every XRD and can
+# reconcile none of them, which presents as a hang rather than an error.
+test_cluster_admin_rbac_defaults_on = lambda {
+    assert l.clusterAdminEnabled({})
+    assert l.clusterAdminEnabled({clusterName = "c"})
+    assert not l.clusterAdminEnabled({clusterName = "c", clusterAdminRbac = False})
+}
