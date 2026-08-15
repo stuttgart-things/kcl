@@ -102,8 +102,11 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-cluster"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.3.3"
-            pulls = ["platform", "remote-cluster", "vspherevm", "proxmoxvm", "ansible-run"]
+            # >=v0.4.0 carries spec.managementPlaneEnabled — without it a
+            # management cluster built from this profile cannot build further
+            # management clusters, only workload ones.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.4.0"
+            pulls = ["platform", "remote-cluster", "vspherevm", "proxmoxvm", "ansible-run", "management-plane"]
         }
         s.Package {
             kind = "Configuration"
