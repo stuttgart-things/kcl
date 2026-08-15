@@ -200,8 +200,13 @@ test_headlamp_discovers_only_the_domain = lambda {
 # so a later artifact change that adds a required variable is noticed.
 test_machinery_costs_one_typed_value = lambda {
     _c = c.get("machinery").components[0]
-    assert _c.requiredSubstitutions == ["DOMAIN", "GATEWAY_NAME", "MACHINERY_VERSION"]
+    assert _c.requiredSubstitutions == ["DOMAIN", "GATEWAY_NAME"]
     assert _c.substitutionSources == {DOMAIN = "ipReservation.domain"}
     _typed = [v for v in _c.requiredSubstitutions if v not in _c.substitutionSources]
-    assert _typed == ["GATEWAY_NAME", "MACHINERY_VERSION"], "the Gateway choice, plus the version until flux fixes its broken default"
+    assert _typed == ["GATEWAY_NAME"], "only the Gateway choice — which Gateway a service attaches to is a decision, not a fact"
+
+    # MACHINERY_VERSION was required until stuttgart-things/flux#193 fixed the
+    # artifact's `1.13.4` default (published tags read `v1.13.4`). It must stay
+    # out: re-adding it would mean the artifact's default broke again.
+    assert "MACHINERY_VERSION" not in _c.requiredSubstitutions
 }
