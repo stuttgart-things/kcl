@@ -1,0 +1,95 @@
+# Unit tests for the management-plane logic. `kcl test`.
+# These are the rules that would otherwise only be observable on a live cluster.
+import .logic as l
+
+_min = {clusterName = "mgmt-1"}
+
+test_refs_derive_from_cluster_name = lambda {
+    assert l.helmRef(_min) == "mgmt-1-helm"
+    assert l.kubernetesRef(_min) == "mgmt-1-kubernetes"
+}
+
+test_explicit_refs_win = lambda {
+    _s = {clusterName = "mgmt-1", helmProviderConfigRef = "other-helm"}
+    assert l.helmRef(_s) == "other-helm"
+    assert l.kubernetesRef(_s) == "mgmt-1-kubernetes", "the other ref still derives"
+}
+
+test_profile_defaults_to_machinery = lambda {
+    assert l.profileName({}) == "machinery"
+    assert l.profileName({profile = "machinery"}) == "machinery"
+}
+
+# The catalog carries the fleet's version; an XR may sit behind it. A cluster
+# mid-incident must be able to stay on an older core while the catalog moves.
+test_crossplane_version_can_be_overridden = lambda {
+    assert l.crossplaneVersion(_min) == "2.3.3"
+    assert l.crossplaneVersion({clusterName = "c", crossplaneVersion = "2.2.1"}) == "2.2.1"
+}
+
+test_namespace_defaults_from_the_profile = lambda {
+    assert l.targetNamespace(_min) == "crossplane-system"
+    assert l.targetNamespace({clusterName = "c", namespace = "xp"}) == "xp"
+}
+
+# An override replaces the WHOLE reference, not just the tag: the registry a
+# package comes from is load-bearing (function-kcl lives on the other mirror on
+# purpose), so a tag-only override would silently keep the catalog's registry.
+test_package_override_replaces_the_whole_reference = lambda {
+    _s = {clusterName = "c", packageOverrides = {
+        "stuttgart-things-crossplane-configurations-platform" = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.3.9"
+    }}
+    _p = [x for x in l.packages(_s) if x.name == "stuttgart-things-crossplane-configurations-platform"][0]
+    assert _p.package.endswith(":v0.3.9")
+    _untouched = [x for x in l.packages(_s) if x.name == "function-kcl"][0]
+    assert _untouched.package.startswith("xpkg.upbound.io/")
+}
+
+# An override naming a package the profile does not carry does nothing at all —
+# the caller believes a version is pinned and it is not. Rejected instead.
+test_unknown_override_is_rejected = lambda {
+    _s = {clusterName = "c", packageOverrides = {"platform" = "ghcr.io/x/platform:v1"}}
+    assert l.unknownOverrides(_s) == ["platform"], "the short name is NOT the CR name here"
+    assert l.unknownOverrides(_min) == []
+}
+
+test_package_api_version_defaults_to_v1 = lambda {
+    _pkgs = l.packages(_min)
+    _cfg = [p for p in _pkgs if p.kind == "Configuration"][0]
+    assert l.packageApiVersion(_cfg) == "pkg.crossplane.io/v1"
+    _ar = [p for p in _pkgs if p.name == "function-auto-ready"][0]
+    assert l.packageApiVersion(_ar) == "pkg.crossplane.io/v1beta1", "functions are split across v1 and v1beta1"
+}
+
+# The gates exist because the CRDs the later objects need are installed by the
+# earlier ones. Emitting everything at once still converges, but buries the real
+# errors of a broken build under minutes of expected ones.
+test_gates_wait_for_the_stage_below = lambda {
+    assert not l.packagesOpen(False, 0), "no packages before Crossplane is up"
+    assert l.packagesOpen(True, 0)
+    assert not l.providerConfigsOpen(False, 0), "no provider configs before the providers exist"
+    assert l.providerConfigsOpen(True, 0)
+}
+
+# EVERY gate is one-way. Not emitting a composed resource is how Crossplane
+# deletes it, so a gate that closed again would tear down what it just built —
+# a Crossplane deployment briefly NotReady would uninstall the whole fleet's
+# packages.
+test_gates_never_close_again = lambda {
+    assert l.packagesOpen(False, 3), "already-emitted packages keep being emitted"
+    assert l.providerConfigsOpen(False, 1)
+}
+
+# Two thirds of what ends up on the cluster is never named. Surfaced so the
+# status can answer "what is actually installed here".
+test_transitive_packages_are_reported = lambda {
+    _t = l.transitivePackages(_min)
+    assert "ansible-run" in _t
+    assert "flux-apps" in _t
+    assert len(_t) >= 6
+}
+
+test_validate_requires_a_target = lambda {
+    assert l.validate(_min)
+    assert l.helmRef({}) == "", "nothing to derive from, so validate would reject it"
+}
