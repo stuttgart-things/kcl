@@ -150,28 +150,44 @@ appSources = lambda spec: {str:} -> [{str:}] {
     } for _n, _a in enabledApps(spec)]
 }
 
+# One step of a dotted path: read `seg` out of `cur`, where seg may carry a
+# `[N]` index. Undefined for anything absent, which is what makes the whole walk
+# collapse to "" rather than to a partial value.
+_step = lambda cur, seg: str -> any {
+    _isIdx = seg.endswith("]") and "[" in seg
+    _field = seg.split("[")[0] if _isIdx else seg
+    _next = cur[_field] if (typeof(cur) == "dict" and _field in cur) else Undefined
+    _i = int(seg.split("[")[1].replace("]", "")) if _isIdx else 0
+    (_next[_i] if (typeof(_next) == "list" and len(_next) > _i) else Undefined) if _isIdx else _next
+}
+
 resolveSource = lambda discovered: {str:}, path: str -> str {
     """Read one catalog `substitutionSources` path out of the discovered facts.
 
-    Supports exactly the two shapes the catalog uses — `group.field` and
-    `group.field[N]` — and nothing else. That is a deliberate floor rather than a
-    parser: a general path language would need its own error semantics, and the
-    failure it would introduce (an unresolvable path silently yielding "") is the
-    very one requiredSubstitutions exists to prevent. A path this cannot read
-    returns "", which leaves the variable unset and lets the existing check
-    reject it by name.
+    Walks a dotted path of up to four segments, each of which may carry a `[N]`
+    index — `ipReservation.domain`, `ipReservation.ipAddresses[0]`,
+    `vaultIssuer.auths.eso.mountPath`.
 
-    Returns "" for anything absent, so callers can treat "" as "not discovered".
+    Four rather than unbounded, and dotted rather than a query language, for the
+    reason the two-segment version gave: a general path language would need its
+    own error semantics, and the failure it would introduce — an unresolvable
+    path silently yielding "" — is the very one requiredSubstitutions exists to
+    prevent. The bound keeps this a lookup. It grew from two to four when the
+    Vault mount a cluster created became discoverable, which is genuinely nested
+    (crossplane-configurations#260); raise it again only for a real path, never
+    in advance.
+
+    Returns "" for anything absent, so callers can treat "" as "not discovered",
+    and a path deeper than four reads as absent rather than as a truncated
+    prefix — the one outcome that would be worse than not resolving at all.
     """
     _seg = path.split(".")
-    _group = _seg[0] if len(_seg) > 0 else ""
-    _rest = _seg[1] if len(_seg) == 2 else ""
-    _obj = discovered[_group] if _group in discovered else {}
-    _isIdx = _rest.endswith("]") and "[" in _rest
-    _field = _rest.split("[")[0] if _isIdx else _rest
-    _val = _obj[_field] if _field != "" and _field in _obj else Undefined
-    _i = int(_rest.split("[")[1].replace("]", "")) if _isIdx else 0
-    str(_val[_i]) if (_isIdx and typeof(_val) == "list" and len(_val) > _i) else ("" if (_isIdx or _val == Undefined or _val == None) else str(_val))
+    _v1 = _step(discovered, _seg[0]) if len(_seg) > 0 else Undefined
+    _v2 = _step(_v1, _seg[1]) if len(_seg) > 1 else _v1
+    _v3 = _step(_v2, _seg[2]) if len(_seg) > 2 else _v2
+    _val = _step(_v3, _seg[3]) if len(_seg) > 3 else _v3
+    _tooDeep = len(_seg) > 4
+    "" if (_tooDeep or _val == Undefined or _val == None or typeof(_val) == "dict" or typeof(_val) == "list") else str(_val)
 }
 
 discoveredSubstitutions = lambda comp: cs.Component, discovered: {str:} -> {str:str} {

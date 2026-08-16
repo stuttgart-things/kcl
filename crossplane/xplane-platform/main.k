@@ -71,6 +71,14 @@ _discovered = {
         ipAddresses = _readStatus(_ipResKey)?.ipAddresses or []
         zone = _readStatus(_ipResKey)?.zone or ""
     }
+    vaultIssuer = {
+        # Keyed by auth name, unlike the VaultK8sAuth's own status, which keeps
+        # the list it was given. Different layers, different jobs: there the
+        # status mirrors what was asked for, here it is ADDRESSED — a catalog
+        # entry says `vaultIssuer.auths.eso.mountPath`, and an index would break
+        # the moment someone reorders spec.vaultIssuer.additionalAuths.
+        auths = {a.name: a for a in ((_readStatus(_vaultAuthKey)?.share or {})?.auths or []) if a?.name}
+    }
 }
 
 # Validated against what was discovered: a variable the platform can supply is
@@ -297,7 +305,22 @@ _vaultK8sAuthXR = {
             # adds the backend_config on a later reconcile.
             if _viReviewerAvailable:
                 backendConfig = {secretName = _viEffReviewerSecret, secretNamespace = _namespace}
-        }]
+        }] + [{
+            # Further auths on the SAME Vault mount machinery — external-secrets
+            # is the reason this exists: it needs its own mount and role, bound
+            # to its own ServiceAccount, with its own policies. Reusing
+            # cert-manager's would hand a secrets reader the right to issue
+            # certificates.
+            name = a?.name or "extra"
+            boundServiceAccountNames = a?.boundServiceAccountNames or ["default"]
+            boundServiceAccountNamespaces = a?.boundServiceAccountNamespaces or ["default"]
+            if a?.tokenPolicies:
+                tokenPolicies = a.tokenPolicies
+            if a?.policies:
+                policies = a.policies
+            if _viReviewerAvailable:
+                backendConfig = {secretName = _viEffReviewerSecret, secretNamespace = _namespace}
+        } for a in (_viSpec?.additionalAuths or [])]
     }
 }
 
@@ -563,6 +586,11 @@ _xrStatus = _oxr | {
                 authReady = _vaultAuthReady
                 caReady = _vaultPkiReady
                 issuerReady = _issuerReady
+                # What Vault actually created, keyed by auth name. This is what
+                # lets external-secrets discover its own cluster's mount instead
+                # of being told the name by hand — the gap that kept it out of
+                # the catalog with substitutionSources.
+                auths = _discovered.vaultIssuer.auths
             }
         }
         componentCount = len(_enabledReady)
