@@ -137,3 +137,31 @@ clusterAdminEnabled = lambda spec: {str:} -> bool {
 }
 
 rbacSubjectGroup = "system:serviceaccounts:crossplane-system"
+
+# --- provider config readiness ----------------------------------------------
+
+# NOT the default SuccessfulCreate. provider-kubernetes never marks an Object
+# ready when the managed manifest is a ClusterProviderConfig — measured on a
+# live cluster, not guessed (crossplane-configurations#294):
+#
+#   SuccessfulCreate     Ready=False Creating       never evaluated
+#   AllTrue              Ready=False Unavailable    evaluated, and false on an
+#                                                   empty condition list
+#   DeriveFromCelQuery   Ready=True  Available
+#
+# Three probes of the same Object shape across two target clusters behaved
+# alike, while the identical shape managing a ConfigMap went ready in seconds —
+# so it is the managed KIND, not the provider, the target cluster or a race.
+#
+# The cost of getting this wrong is out of proportion to the cause: ONE stuck
+# ProviderConfig Object keeps the whole ManagementPlane from ever reporting
+# ready, and with managementPlaneEnabled it would hold the entire ClusterStack.
+# u26-rke2-1-mgmt sat that way for 31 hours.
+#
+# `true` is the honest query, not a workaround in disguise: a ProviderConfig has
+# no lifecycle and no conditions. It is ready once it exists — which is exactly
+# what SuccessfulCreate is supposed to express and, for this kind, does not.
+providerConfigReadiness = {
+    policy = "DeriveFromCelQuery"
+    celQuery = "true"
+}

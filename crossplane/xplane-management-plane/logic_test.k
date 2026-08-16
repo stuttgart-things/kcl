@@ -108,3 +108,23 @@ test_cluster_admin_rbac_defaults_on = lambda {
     assert l.clusterAdminEnabled({clusterName = "c"})
     assert not l.clusterAdminEnabled({clusterName = "c", clusterAdminRbac = False})
 }
+
+# --- provider config readiness (crossplane-configurations#294) ---------------
+
+# The default SuccessfulCreate leaves an Object managing a ClusterProviderConfig
+# at Ready=False Creating FOREVER — measured on a live cluster, with the
+# identical Object shape managing a ConfigMap going ready in seconds. One stuck
+# ProviderConfig holds the entire ManagementPlane, so this must not silently
+# fall back to the default.
+test_provider_config_readiness_is_not_the_default = lambda {
+    assert l.providerConfigReadiness.policy == "DeriveFromCelQuery", "SuccessfulCreate never marks this kind ready"
+    assert l.providerConfigReadiness.celQuery == "true"
+}
+
+# AllTrue looks like the tidy choice for an object with no conditions — it is
+# not. It evaluates, and returns FALSE on an empty condition list
+# (Ready=False Unavailable), which is why the query is explicit instead.
+test_provider_config_readiness_is_not_alltrue = lambda {
+    assert l.providerConfigReadiness.policy != "AllTrue"
+    assert l.providerConfigReadiness.policy != "SuccessfulCreate"
+}
