@@ -210,3 +210,73 @@ test_machinery_costs_one_typed_value = lambda {
     # out: re-adding it would mean the artifact's default broke again.
     assert "MACHINERY_VERSION" not in _c.requiredSubstitutions
 }
+
+# external-secrets is the entry that unblocks the others: with a
+# ClusterSecretStore standing, an app can reference an ExternalSecret instead of
+# carrying a password. Substitutions land in postBuild.substitute — the XR spec,
+# and therefore git in the clear — which is why harbor, kube-prometheus-stack
+# and argo-cd are not catalogued yet.
+test_external_secrets_has_an_optional_vault_store = lambda {
+    _c = {x.name: x for x in c.get("external-secrets").components}
+    assert not _c["install"].optional, "ESO itself is not optional"
+    assert _c["install"].wrapsHelmRelease
+    assert _c["cluster-store-vault"].optional, "a cluster may want a different backend, or none yet"
+    assert _c["cluster-store-vault"].dependsOn == ["install"]
+    assert _c["cluster-store-vault"].requiredSubstitutions == [], "every variable carries a default"
+}
+
+# The wiring that is MISSING, asserted so its absence stays deliberate: the
+# cluster-store's Vault values are exactly what platform.vaultIssuer creates,
+# but status.components.vaultIssuer publishes only readiness flags today, so
+# there is nothing to read. Adding a source that resolves to nothing would
+# leave the variable unset and rejected — worse than the default.
+test_external_secrets_cannot_discover_its_vault_yet = lambda {
+    _c = {x.name: x for x in c.get("external-secrets").components}
+    assert _c["cluster-store-vault"].substitutionSources == {}, "no source until VaultK8sAuth publishes a status"
+}
+
+# Both nfs-csi variables are facts about the NETWORK the cluster sits in, not
+# about the cluster — nothing in the platform's status can discover them.
+test_nfs_csi_needs_the_export_named = lambda {
+    _c = c.get("nfs-csi").components[0]
+    assert _c.requiredSubstitutions == ["NFS_SERVER_FQDN", "NFS_SHARE_PATH"]
+    assert _c.substitutionSources == {}
+    assert _c.path == "./"
+}
+
+# vault installs a Vault ON the cluster. It is NOT the fleet's Vault at
+# vault.infra.sthings-vsphere, which platform.vaultIssuer consumes rather than
+# manages — the names collide in conversation more than in configuration.
+#
+# Notably it needs no admin password, unlike harbor or argo-cd: Vault
+# initialises itself and unsealing is the autounseal component's job.
+test_vault_needs_no_password = lambda {
+    _a = c.get("vault")
+    assert _a.artifact.endswith("/apps/vault")
+    _all = [v for x in _a.components for v in x.requiredSubstitutions]
+    assert len([v for v in _all if "PASSWORD" in v or "TOKEN" in v]) == 0
+    _c = {x.name: x for x in _a.components}
+    assert _c["autounseal"].optional, "a Vault that unseals itself is a trade-off, not a default"
+    assert _c["httproute"].optional
+}
+
+# The domain is discovered, the issuer is not: which Issuer a certificate comes
+# from is a decision about trust, and no status field can make it.
+test_vault_discovers_the_domain_but_not_the_issuer = lambda {
+    _c = {x.name: x for x in c.get("vault").components}
+    assert _c["install"].substitutionSources["VAULT_INGRESS_DOMAIN"] == "ipReservation.domain"
+    assert "ISSUER_NAME" not in _c["install"].substitutionSources
+    assert "ISSUER_KIND" not in _c["install"].substitutionSources
+    assert _c["httproute"].substitutionSources["VAULT_DOMAIN"] == "ipReservation.domain"
+}
+
+# Every optional component that depends on another must name one that exists —
+# already covered generically, asserted here for the four added at once so a
+# typo in this batch fails loudly rather than as DependencyNotReady on a
+# cluster.
+test_new_entries_are_registered = lambda {
+    _want = ["external-secrets", "nfs-csi", "vault"]
+    _missing = [n for n in _want if n not in c.catalog]
+    assert _missing == [], "entry missing from the registry"
+    assert len(c.names) == 10
+}
