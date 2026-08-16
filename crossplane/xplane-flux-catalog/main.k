@@ -6,20 +6,26 @@
 import .apps.cert_manager as cert_manager
 import .apps.cilium as cilium
 import .apps.dapr as dapr
+import .apps.external_secrets as external_secrets
 import .apps.headlamp as headlamp
 import .apps.machinery as machinery
+import .apps.nfs_csi as nfs_csi
 import .apps.openebs as openebs
 import .apps.trust_manager as trust_manager
+import .apps.vault as vault
 import schema as s
 
 catalog: {str:s.App} = {
     "cert-manager" = cert_manager.certManager
     cilium = cilium.cilium
     dapr = dapr.dapr
+    "external-secrets" = external_secrets.externalSecrets
     headlamp = headlamp.headlamp
     machinery = machinery.machinery
+    "nfs-csi" = nfs_csi.nfsCsi
     openebs = openebs.openebs
     "trust-manager" = trust_manager.trustManager
+    vault = vault.vault
 }
 
 names = sorted(catalog)
