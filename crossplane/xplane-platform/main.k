@@ -536,6 +536,12 @@ _clusterType = _fluxStatus?.clusterType or ""
 _enabledReady = ([_cniReady] if _cniEnabled else []) + ([_ipResReady] if _ipResEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else []) + ([_ciliumReady] if _ciliumEnabled else []) + ([_vaultIssuerReady] if _vaultIssuerEnabled else [])
 _readyComponents = len([r for r in _enabledReady if r])
 
+# Components held back this reconcile, waiting on a value this same Composition
+# still has to produce (see l.pendingSubstitutions). Computed once: the status
+# publishes it as both a list and a count, and a condition below reports it —
+# three readers of one truth, which must not drift apart.
+_pending = l.pendingSubstitutions(_spec, _discovered)
+
 _xrStatus = _oxr | {
     status = {
         shared = _shared | ({clusterType = _clusterType} if _clusterType else {})
@@ -566,7 +572,12 @@ _xrStatus = _oxr | {
                 # appear anywhere — indistinguishable from being ignored.
                 # Expected to empty out on its own; one that stays put names the
                 # variable and the component that wants it.
-                pendingSubstitutions = l.pendingSubstitutions(_spec, _discovered)
+                pendingSubstitutions = _pending
+                # The same thing as a scalar, purely so a printer column can
+                # show it: `jsonPath` cannot count a list, and the count is
+                # what belongs in `kubectl get platform`. The list stays for
+                # the WHAT, this is the WHETHER.
+                pendingCount = len(_pending)
             }
             ipReservation = {
                 enabled = _ipResEnabled
@@ -609,4 +620,34 @@ _xrStatus = _oxr | {
     }
 }
 
-items = _children + [_xrStatus]
+# A held-back component is absent from appCount, so `ready` and `readyCount`
+# stay green while something the XR asked for is missing. The status list said
+# so already, but nobody reads a status field on a green object — hence a
+# condition, which tooling and `kubectl describe` surface without being asked
+# (crossplane-configurations#284).
+#
+# `ready` is deliberately NOT touched. It means "what is there works", and the
+# deferral exists so a transient wait does not paint everything red. This
+# condition means "not everything is there yet" — a different statement, and
+# both are true at once.
+_pendingCondition = {
+    apiVersion = "meta.krm.kcl.dev/v1alpha1"
+    kind = "Conditions"
+    conditions = [{
+        # Composite, not CompositeAndClaim: v2 XRDs are namespaced and have no
+        # claim to propagate to.
+        target = "Composite"
+        # force = False would leave an existing condition of this type alone;
+        # the whole point is that it tracks the current reconcile.
+        force = True
+        condition = {
+            type = "PendingSubstitutions"
+            status = "True" if _pending else "False"
+            reason = "AwaitingDiscovery" if _pending else "AllSupplied"
+            # Names variable AND component, so the message alone is actionable.
+            message = "; ".join(_pending) if _pending else "no components are waiting on a discovered value"
+        }
+    }]
+}
+
+items = _children + [_xrStatus, _pendingCondition]
