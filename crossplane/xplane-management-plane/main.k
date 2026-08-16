@@ -161,6 +161,9 @@ _providerConfigObject = lambda i: int, pc -> any {
                 name = _k8sPcr
                 kind = "ClusterProviderConfig"
             }
+            # See l.providerConfigReadiness — the default policy never marks
+            # these ready, which would hold the whole ManagementPlane (#294).
+            readiness = l.providerConfigReadiness
         }
     }
 }
