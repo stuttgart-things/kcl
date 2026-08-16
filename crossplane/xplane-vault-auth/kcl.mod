@@ -1,7 +1,7 @@
 [package]
 name = "xplane-vault-auth"
 edition = "v0.11.2"
-version = "0.5.0"
+version = "0.6.0"
 
 [dependencies]
-xplane-vault-auth-base = { oci = "oci://ghcr.io/stuttgart-things/xplane-vault-auth-base", tag = "0.8.0" }
+xplane-vault-auth-base = { oci = "oci://ghcr.io/stuttgart-things/xplane-vault-auth-base", tag = "0.9.0" }
