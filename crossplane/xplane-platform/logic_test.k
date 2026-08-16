@@ -151,12 +151,17 @@ test_explicit_substitute_satisfies_required = lambda {
     assert len(l.missingSubstitutions(spec)) == 0
 }
 
+# Three variables, but not three of the same kind. HOSTNAME and GATEWAY_NAME
+# are decisions nothing can look up — fatal. DOMAIN is discoverable, so a bare
+# enable is rejected for two, not three.
 test_headlamp_missing_vars_detected = lambda {
-    assert len(l.missingSubstitutions({
+    _spec = {
         apps = {
             headlamp = {}
         }
-    })) == 3
+    }
+    assert len(l.missingSubstitutions(_spec)) == 2
+    assert l.pendingSubstitutions(_spec) == ["headlamp-app: DOMAIN"]
 }
 
 # --- cross-artifact dependsOn -------------------------------------------------
@@ -344,8 +349,12 @@ test_apps_cilium_bare_enable_is_rejected = lambda {
             cilium = {enabled = True}
         }
     })
-    assert len(_m) == 4, "all four cilium vars are required"
-    assert "cilium-config: CILIUM_GATEWAY_DOMAIN" in _m
+    assert _m == ["cilium-config: CILIUM_GATEWAY_TLS_SECRET"], "the one nothing can look up"
+    assert len(l.pendingSubstitutions({
+        apps = {
+            cilium = {enabled = True}
+        }
+    })) == 3, "the other three wait for the reservation"
 }
 
 # The wildcard the clusterbook reservation publishes is not the domain — the
@@ -399,7 +408,8 @@ test_discovery_satisfies_required_substitutions = lambda {
     _spec = {clusterName = "c", apps = {
         cilium = {enabled = True}
     }}
-    assert len(l.missingSubstitutions(_spec)) == 4, "nothing discovered: all four missing"
+    assert len(l.pendingSubstitutions(_spec)) == 3, "nothing discovered yet: three still waiting"
+    assert len(l.pendingSubstitutions(_spec, _disc)) == 0, "discovery clears all three"
     _m = l.missingSubstitutions(_spec, _disc)
     assert _m == ["cilium-config: CILIUM_GATEWAY_TLS_SECRET"], "only the decision is left"
 }
@@ -448,7 +458,7 @@ test_apps_headlamp_discovers_its_domain = lambda {
         }}
     }}
     assert len(l.missingSubstitutions(_spec, _d)) == 0, "DOMAIN comes from the status"
-    assert len(l.missingSubstitutions(_spec)) == 1, "and is still required when nothing was discovered"
+    assert l.pendingSubstitutions(_spec) == ["headlamp-app: DOMAIN"], "and is still awaited when nothing was discovered"
     _k = [k for k in l.appEntries(_spec, _d) if k.name == "headlamp-app"][0]
     assert _k.substitute["DOMAIN"] == "u26-rke2-1.sthings-vsphere.labul.sva.de"
 }
@@ -548,4 +558,66 @@ test_resolve_source_missing_auth_is_empty = lambda {
         }
     }
     assert l.resolveSource(_d, "vaultIssuer.auths.eso.mountPath") == ""
+}
+
+# --- deferral instead of abort (crossplane-configurations#277) -----------------
+
+# The deadlock this replaced: enabling the eso auth and the app in ONE step made
+# the render abort, so the Composition never emitted the VaultK8sAuth the app
+# was waiting for — and every unrelated component stopped reconciling with it.
+# Nothing about that state converges; only a second, manual apply escaped it.
+_esoSpec = {clusterName = "c", apps = {
+    "external-secrets" = {
+        enabled = True
+        components = {
+            "cluster-store-vault" = {enabled = True, substitute = {
+                VAULT_CSS_NAME = "vault"
+                VAULT_KV_PATH = "clusters"
+                VAULT_K8S_AUTH_SA_NAME = "eso"
+            }}
+        }
+    }
+}}
+
+test_pending_component_does_not_abort_the_render = lambda {
+    assert l.missingSubstitutions(_esoSpec) == [], "nothing here is unsuppliable"
+    assert l.validate(_esoSpec), "so the render proceeds"
+    assert len(l.pendingSubstitutions(_esoSpec)) == 2, "mount path and role are awaited"
+}
+
+# Held back ALONE. The operator must install on this very reconcile — the store
+# it is waiting for is a CRD that operator owns.
+test_pending_component_is_held_back_alone = lambda {
+    _names = [e.name for e in l.appEntries(_esoSpec)]
+    assert "external-secrets-install" in _names, "the operator still deploys"
+    assert "external-secrets-cluster-store-vault" not in _names, "the store waits"
+}
+
+# And released once the auth this same Composition creates lands in the status.
+test_pending_component_is_released_by_discovery = lambda {
+    _d = {
+        vaultIssuer = {
+            auths = {
+                eso = {mountPath = "c-eso", role = "eso"}
+            }
+        }
+    }
+    assert l.pendingSubstitutions(_esoSpec, _d) == []
+    _k = [e for e in l.appEntries(_esoSpec, _d) if e.name == "external-secrets-cluster-store-vault"][0]
+    assert _k.substitute["VAULT_K8S_AUTH_MOUNT_PATH"] == "c-eso", "discovered, not typed"
+}
+
+# A variable nothing declares a source for stays fatal. Deferring THAT would
+# swap a loud failure for a component that silently never appears.
+test_unsuppliable_variable_is_still_fatal = lambda {
+    assert len(l.missingSubstitutions({
+        apps = {
+            "nfs-csi" = {enabled = True}
+        }
+    })) == 2
+    assert l.pendingSubstitutions({
+        apps = {
+            "nfs-csi" = {enabled = True}
+        }
+    }) == []
 }

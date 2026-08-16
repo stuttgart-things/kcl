@@ -67,8 +67,48 @@ where it could not be tested at all.
 | a dependency's app is not enabled | rejected, naming what to add: `trust-manager-install depends on cert-manager:install, but app 'cert-manager' is not enabled — add it to spec.apps`. Deliberately **not** auto-enabled: a toggle that silently installs artifacts you did not list gets confusing with transitive chains, and conflicts with disable-prunes |
 | a dependency's component is disabled | rejected the same way |
 | catalog `optional` components | not deployed unless the XR enables them explicitly |
-| required substitution variable not supplied | rejected — Flux substitutes empty strings rather than failing, so this would deploy silently broken. Satisfied by `substitute` keys, or skipped when the component carries a `substituteFrom` (resolved at build time, not statically checkable) |
+| required substitution variable not supplied, and **no** `substitutionSources` entry declares where it could come from | rejected — Flux substitutes empty strings rather than failing, so this would deploy silently broken. Satisfied by `substitute` keys, or skipped when the component carries a `substituteFrom` (resolved at build time, not statically checkable) |
+| required substitution variable not supplied, but a `substitutionSources` entry declares one | **the component is deferred**, not rejected — see below |
 | disabling an app | prunes it — the entry stops being emitted, and flux-apps' Objects use `managementPolicies: ["*"]`, so the Kustomization and its workload are removed |
+
+### Deferring, not aborting
+
+A required variable that nothing supplies is one of two very different things,
+and treating them alike made some apps impossible to enable at all
+([crossplane-configurations#277](https://github.com/stuttgart-things/crossplane-configurations/issues/277)):
+
+- **no source declared** — nothing will ever supply it. A typo or a missing
+  decision. Fatal, by name, at render time.
+- **a source declared** — the platform *can* discover it, just not yet. The
+  status it reads is produced by this same Composition, so on the reconcile that
+  enables both halves it is legitimately absent.
+
+The second used to be fatal too, which deadlocked: enabling
+`vaultIssuer.additionalAuths[eso]` and `apps.external-secrets` in one step
+aborted the render **before** it emitted the `VaultK8sAuth` the app was waiting
+for. Nothing converged, and because a failed render emits nothing, every
+*unrelated* component stopped reconciling with it. Only a second, manual apply
+escaped it.
+
+Now such a component is held back — **alone**, not with its siblings. That
+distinction is the point: `external-secrets/install` deploys the operator on the
+very reconcile that `external-secrets/cluster-store-vault` waits through, and
+the store needs a CRD that operator owns anyway.
+
+Held-back components are listed on the XR:
+
+```yaml
+status:
+  components:
+    fluxApps:
+      pendingSubstitutions:
+        - "external-secrets-cluster-store-vault: VAULT_K8S_AUTH_MOUNT_PATH"
+```
+
+They are absent from `appCount`, so without that list an app enabled on the XR
+would simply not appear anywhere — indistinguishable from being ignored. The
+list is expected to empty out on its own; one that stays put names both the
+variable and the component that wants it.
 
 ## Overrides
 

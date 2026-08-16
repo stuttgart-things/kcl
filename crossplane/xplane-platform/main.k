@@ -559,6 +559,14 @@ _xrStatus = _oxr | {
                 ready = _appsReady
                 appCount = _appsStatus?.appCount or 0
                 readyCount = _appsStatus?.readyCount or 0
+                # Components held back this reconcile, waiting on a value this
+                # same Composition still has to produce (see
+                # l.pendingSubstitutions). They are absent from appCount, so
+                # without this line an app enabled on the XR would just not
+                # appear anywhere — indistinguishable from being ignored.
+                # Expected to empty out on its own; one that stays put names the
+                # variable and the component that wants it.
+                pendingSubstitutions = l.pendingSubstitutions(_spec, _discovered)
             }
             ipReservation = {
                 enabled = _ipResEnabled
