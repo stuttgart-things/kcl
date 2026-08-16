@@ -222,8 +222,14 @@ test_external_secrets_has_an_optional_vault_store = lambda {
     assert _c["install"].wrapsHelmRelease
     assert _c["cluster-store-vault"].optional, "a cluster may want a different backend, or none yet"
     assert _c["cluster-store-vault"].dependsOn == ["install"]
-    # Two are required despite carrying artifact defaults — see below.
-    assert _c["cluster-store-vault"].requiredSubstitutions == ["VAULT_K8S_AUTH_MOUNT_PATH", "VAULT_K8S_AUTH_ROLE"]
+    # Five are required despite the artifact defaulting every one — see below.
+    assert _c["cluster-store-vault"].requiredSubstitutions == [
+        "VAULT_K8S_AUTH_MOUNT_PATH"
+        "VAULT_K8S_AUTH_ROLE"
+        "VAULT_CSS_NAME"
+        "VAULT_KV_PATH"
+        "VAULT_K8S_AUTH_SA_NAME"
+    ]
 }
 
 # The wiring that was missing until xplane-platform 0.14.0: the mount path and
@@ -295,18 +301,31 @@ test_new_entries_are_registered = lambda {
     assert len(c.names) == 10
 }
 
-# The two sourced variables are REQUIRED although the artifact defaults them,
-# and that is deliberate. The defaults are `platform-sthings-eso` / `eso` — one
-# specific cluster's mount. On any other cluster they authenticate against the
-# wrong mount or against nothing, and the ClusterSecretStore looks configured
-# either way, which is the failure mode this catalog exists to prevent.
+# Every one of the five is REQUIRED although the artifact defaults it, and each
+# default names a DIFFERENT deployment. Live on u26-rke2-1, 2026-08-16: the
+# store came up as `vault-homerun2-cd`, reading KV path `homerun2-cd`,
+# authenticating as a ServiceAccount `eso` that the chart does not create — and
+# reported nothing wrong until it tried to reach Vault.
 #
-# Required, they are either discovered from the cluster's own vaultIssuer or
-# rejected at render time by name. Never silently someone else's.
+# A store pointed at the wrong Vault LOOKS configured. That is the failure class
+# requiredSubstitutions exists for: required, each value is either discovered
+# from this cluster's own vaultIssuer or rejected at render time by name.
 test_external_secrets_never_falls_back_to_another_clusters_mount = lambda {
     _c = {x.name: x for x in c.get("external-secrets").components}
     _req = _c["cluster-store-vault"].requiredSubstitutions
     _src = _c["cluster-store-vault"].substitutionSources
     _unguarded = [k for k, _ in _src if k not in _req]
     assert _unguarded == [], "a source with no required declaration falls back to the artifact default when it resolves to nothing"
+}
+
+# The two that are DECISIONS keep no source, and must not gain one: which Vault
+# mount a cluster reads and what its store is called are choices, and a status
+# field cannot make them. Only the mount path and role are facts the vaultIssuer
+# produced.
+test_external_secrets_sources_only_the_facts = lambda {
+    _c = {x.name: x for x in c.get("external-secrets").components}
+    _src = _c["cluster-store-vault"].substitutionSources
+    assert sorted(_src) == ["VAULT_K8S_AUTH_MOUNT_PATH", "VAULT_K8S_AUTH_ROLE"]
+    assert "VAULT_KV_PATH" not in _src, "which mount to read is a decision"
+    assert "VAULT_CSS_NAME" not in _src, "what to call the store is a decision"
 }
