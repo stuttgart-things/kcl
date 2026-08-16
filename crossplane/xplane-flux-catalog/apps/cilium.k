@@ -44,6 +44,7 @@ cilium: s.App = {
                 "CILIUM_LB_IP_STOP"
                 "CILIUM_GATEWAY_DOMAIN"
                 "CILIUM_GATEWAY_TLS_SECRET"
+                "CILIUM_GATEWAY_NAME"
             ]
             # Three of the four are FACTS the platform already discovered, and
             # repeating them on the XR is how they drift: when the reservation
@@ -61,6 +62,16 @@ cilium: s.App = {
                 CILIUM_LB_IP_START = "ipReservation.ipAddresses[0]"
                 CILIUM_LB_IP_STOP = "ipReservation.ipAddresses[0]"
                 CILIUM_GATEWAY_DOMAIN = "ipReservation.domain"
+                # NOT in requiredSubstitutions: the artifact defaults it to
+                # `cilium-gateway`, so leaving it unset is harmless. It is listed
+                # here so the value the platform PUBLISHES is also the value the
+                # Gateway is CREATED with — otherwise the same default would live
+                # in two repositories and drift the first time one moved.
+                #
+                # This is what makes the name discoverable for everything else:
+                # machinery and headlamp read the identical `gateway.name`, so a
+                # cluster that renames its Gateway renames it everywhere at once.
+                CILIUM_GATEWAY_NAME = "gateway.name"
             }
         }
     ]
