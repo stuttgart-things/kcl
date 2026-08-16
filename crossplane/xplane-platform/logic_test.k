@@ -489,3 +489,63 @@ test_apps_machinery_costs_one_typed_value = lambda {
     assert len(_missing) == 1, "the Gateway choice stays required"
     assert "GATEWAY_NAME" in ", ".join(_missing)
 }
+
+# The resolver grew from two segments to four when the Vault mount a cluster
+# created became discoverable. The old shapes must keep working exactly, and the
+# new depth must fail the same way — absent, never truncated.
+test_resolve_source_walks_four_segments = lambda {
+    _d = {
+        vaultIssuer = {
+            auths = {
+                eso = {mountPath = "mgmt-test1-eso", role = "eso"}
+            }
+        }
+    }
+    assert l.resolveSource(_d, "vaultIssuer.auths.eso.mountPath") == "mgmt-test1-eso"
+    assert l.resolveSource(_d, "vaultIssuer.auths.eso.role") == "eso"
+}
+
+# A path that stops short lands on a dict. Returning str(dict) would substitute
+# a rendered map into a Vault mount path — worse than not resolving, because it
+# looks like a value. Empty is what lets requiredSubstitutions reject it by name.
+test_resolve_source_refuses_a_partial_path = lambda {
+    _d = {
+        vaultIssuer = {
+            auths = {
+                eso = {mountPath = "m"}
+            }
+        }
+    }
+    assert l.resolveSource(_d, "vaultIssuer.auths") == ""
+    assert l.resolveSource(_d, "vaultIssuer.auths.eso") == ""
+}
+
+# Deeper than the bound reads as absent rather than as a truncated prefix. A
+# prefix would be a plausible-looking wrong value, which is the one outcome
+# worse than not resolving.
+test_resolve_source_rejects_beyond_the_bound = lambda {
+    _d = {
+        a = {
+            b = {
+                c = {
+                    d = {e = "too deep"}
+                }
+            }
+        }
+    }
+    assert l.resolveSource(_d, "a.b.c.d.e") == ""
+}
+
+# A missing auth resolves to nothing, not to another auth's mount. This is the
+# case that matters on a cluster whose vaultIssuer has not created the ESO auth
+# yet: the variable stays unset and the app is rejected by name.
+test_resolve_source_missing_auth_is_empty = lambda {
+    _d = {
+        vaultIssuer = {
+            auths = {
+                certmanager = {mountPath = "mgmt-certmanager"}
+            }
+        }
+    }
+    assert l.resolveSource(_d, "vaultIssuer.auths.eso.mountPath") == ""
+}
