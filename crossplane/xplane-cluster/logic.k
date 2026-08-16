@@ -394,12 +394,28 @@ managementPlaneChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
 # `kubectl delete` is swallowed and has to be issued twice.
 #
 # Usage orders DELETION ONLY, never creation: build order stays the ready gates.
-usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str, replay: bool -> {str:any} {
+#
+# `label` identifies the Usage WITHIN the composition and must stay stable;
+# `prefix` (the cluster name) is what makes the emitted OBJECT unique in the
+# namespace. They were the same string until 0.7.0, and that was a real defect:
+# every ClusterStack in a namespace emitted `access-uses-vm`, `platform-uses-vm`
+# and so on under those exact names, so the FIRST one to be created owned them
+# and every later one failed to apply with
+#
+#   Usage.protection.crossplane.io "access-uses-vm" is invalid:
+#   metadata.ownerReferences: Invalid value: [... ClusterStack "<the-first-one>"]
+#
+# — Kubernetes refuses a second controller owner. The later ClusterStack then
+# sits at Synced=False forever, while its own status.ready still reports true,
+# so it reads as finished. Observed on kind3 with three stacks: the 4-day-old
+# one held all four names, a 26-hour-old one had been unsynced that whole time
+# unnoticed, and a third could not be built at all.
+usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str, replay: bool, prefix: str -> {str:any} {
     {
         apiVersion = "protection.crossplane.io/v1beta1"
         kind = "Usage"
         metadata = {
-            name = label
+            name = "{}-{}".format(prefix, label)
             annotations = {"krm.kcl.dev/composition-resource-name" = label}
         }
         spec = {

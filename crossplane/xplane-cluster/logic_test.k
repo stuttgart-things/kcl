@@ -204,19 +204,19 @@ test_platform_passthrough_and_derived_clusterName = lambda {
 # between an ordered teardown and Objects stuck on finalizers against a dead
 # API server.
 test_usage_protects_the_vm_from_the_platform = lambda {
-    _u = l.usage("NativeProxmoxVM", "c-vm", "Platform", "c-platform", "platform-uses-vm", True)
+    _u = l.usage("NativeProxmoxVM", "c-vm", "Platform", "c-platform", "platform-uses-vm", True, "c")
     assert _u.spec.of.kind == "NativeProxmoxVM"
     assert _u.spec.by.kind == "Platform"
     assert _u.spec.replayDeletion
 }
 
 test_usage_resolves_the_group_per_kind = lambda {
-    assert l.usage("NativeVsphereVM", "a", "Platform", "b", "u", True).spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
-    assert l.usage("ClusterAccess", "a", "Platform", "b", "u", True).spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
+    assert l.usage("NativeVsphereVM", "a", "Platform", "b", "u", True, "c").spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
+    assert l.usage("ClusterAccess", "a", "Platform", "b", "u", True, "c").spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
 
     # The teardown guard points at the COMPOSITE, which lives in the same group
     # as ClusterAccess and Platform — so it needs no special case in the lambda.
-    assert l.usage("ClusterStack", "a", "Platform", "b", "u", False).spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
+    assert l.usage("ClusterStack", "a", "Platform", "b", "u", False, "c").spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
 }
 
 # The guard that makes a one-phase teardown impossible rather than silently
@@ -225,7 +225,7 @@ test_usage_resolves_the_group_per_kind = lambda {
 # the whole stack — an abandoned `kubectl delete` would turn a later, unrelated
 # `platformEnabled: false` into a surprise teardown of the entire cluster.
 test_stack_guard_does_not_replay_deletion = lambda {
-    _g = l.usage("ClusterStack", "c", "Platform", "c-platform", "stack-uses-platform", False)
+    _g = l.usage("ClusterStack", "c", "Platform", "c-platform", "stack-uses-platform", False, "c")
     assert _g.spec.of.kind == "ClusterStack"
     assert _g.spec.of.resourceRef.name == "c"
     assert _g.spec.by.kind == "Platform"
@@ -470,4 +470,43 @@ test_management_plane_child_ignores_a_passed_cluster_name = lambda {
     _spec = {clusterName = "right", managementPlane = {clusterName = "wrong"}}
     _c = l.managementPlaneChild("stack-1", "default", _spec)
     assert _c.spec.clusterName == "right"
+}
+
+# --- Usage object names must be namespace-unique ----------------------------
+
+# THE bug this guards. Until 0.7.0 the Usage was named after its label alone —
+# `access-uses-vm`, `platform-uses-vm`, … — with no cluster in it, while every
+# resource it REFERENCES carried the cluster name. So the first ClusterStack in
+# a namespace owned those object names and every later one failed to apply:
+#
+#   Usage.protection.crossplane.io "access-uses-vm" is invalid:
+#   metadata.ownerReferences: Invalid value: [... ClusterStack "<the-first>"]
+#
+# Kubernetes refuses a second controller owner. The later stack then sits at
+# Synced=False indefinitely while its own status.ready still says true, so it
+# reads as finished — which is how one went 26 hours unnoticed on kind3.
+test_usage_object_name_carries_the_cluster = lambda {
+    _a = l.usage("NativeProxmoxVM", "a-vm", "ClusterAccess", "a-access", "access-uses-vm", True, "a")
+    _b = l.usage("NativeProxmoxVM", "b-vm", "ClusterAccess", "b-access", "access-uses-vm", True, "b")
+    assert _a.metadata.name != _b.metadata.name, "two clusters must not collide on one object"
+    assert _a.metadata.name == "a-access-uses-vm"
+    assert _b.metadata.name == "b-access-uses-vm"
+}
+
+# The label stays the composition-resource-name. It identifies the Usage WITHIN
+# the composition, so renaming the object must not renumber it — otherwise
+# every existing stack would churn its resource identity on upgrade.
+test_composition_resource_name_is_unprefixed = lambda {
+    _u = l.usage("NativeProxmoxVM", "a-vm", "ClusterAccess", "a-access", "access-uses-vm", True, "a")
+    assert _u.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "access-uses-vm"
+}
+
+# All five labels, not just the one that was caught. `prefix` is a required
+# positional argument now, so no call site can omit it — this covers the other
+# half: that each label yields a distinct, cluster-scoped object name.
+test_every_usage_label_is_prefixed = lambda {
+    _labels = ["platform-uses-vm", "platform-uses-access", "access-uses-vm", "stack-uses-platform", "mgmt-uses-vm", "mgmt-uses-access", "stack-uses-mgmt"]
+    _names = [l.usage("NativeProxmoxVM", "zeta-vm", "Platform", "zeta-platform", lb, True, "zeta").metadata.name for lb in _labels]
+    assert all n in _names {n.startswith("zeta-")}, "every Usage object name carries the cluster"
+    assert len(_names) == len({n: True for n in _names}), "and they stay distinct from each other"
 }
