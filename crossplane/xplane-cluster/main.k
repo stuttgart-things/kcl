@@ -189,17 +189,17 @@ _kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and _vmIP == "") el
 # COMMAS ARE LOAD-BEARING: without them KCL parses `[a]` followed by a line
 # starting with `[` as a SUBSCRIPT, silently dropping entries instead of failing.
 _usageGroups = [
-    [l.usage(_vmKind, "{}-vm".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-vm", True)] if _platOpen else []
-    [l.usage("ClusterAccess", "{}-access".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-access", True)] if (_platOpen and _accessOpen) else []
-    [l.usage(_vmKind, "{}-vm".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-vm", True)] if _accessOpen else []
-    [l.usage("ClusterStack", _name, "Platform", "{}-platform".format(_name), "stack-uses-platform", False)] if _platOpen else []
+    [l.usage(_vmKind, "{}-vm".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-vm", True, _name)] if _platOpen else []
+    [l.usage("ClusterAccess", "{}-access".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-access", True, _name)] if (_platOpen and _accessOpen) else []
+    [l.usage(_vmKind, "{}-vm".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-vm", True, _name)] if _accessOpen else []
+    [l.usage("ClusterStack", _name, "Platform", "{}-platform".format(_name), "stack-uses-platform", False, _name)] if _platOpen else []
     # The ManagementPlane needs the same three guards as the Platform, and for
     # the same reasons: it applies everything it owns THROUGH the VM and the
     # ClusterAccess, so losing either first leaves its Objects hanging against a
     # cluster that is gone.
-    [l.usage(_vmKind, "{}-vm".format(_name), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-vm", True)] if _mgmtOpen else []
-    [l.usage("ClusterAccess", "{}-access".format(_name), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-access", True)] if (_mgmtOpen and _accessOpen) else []
-    [l.usage("ClusterStack", _name, "ManagementPlane", "{}-management-plane".format(_name), "stack-uses-mgmt", False)] if _mgmtOpen else []
+    [l.usage(_vmKind, "{}-vm".format(_name), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-vm", True, _name)] if _mgmtOpen else []
+    [l.usage("ClusterAccess", "{}-access".format(_name), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-access", True, _name)] if (_mgmtOpen and _accessOpen) else []
+    [l.usage("ClusterStack", _name, "ManagementPlane", "{}-management-plane".format(_name), "stack-uses-mgmt", False, _name)] if _mgmtOpen else []
 ]
 _usages = sum(_usageGroups, [])
 
