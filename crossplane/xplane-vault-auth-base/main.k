@@ -1,6 +1,7 @@
 # Library module — not runnable standalone.
 # Generates Crossplane v2 namespaced OpenTofu Workspaces that configure
 # Vault Kubernetes auth backends (optionally with backend_config).
+import regex
 import json
 import v1beta1 as otf
 
@@ -18,23 +19,44 @@ schema K8sAuthBackendConfig:
     disableLocalCaJwt?: bool = True
 
 schema VaultPolicy:
-    """One Vault ACL policy, created for the auth that declares it."""
+    """One Vault ACL policy, created for the auth that declares it.
+
+    The body is BUILT here, from a bounded description — it is deliberately not
+    accepted as HCL. A free-form body plus the ability to bind it to your own
+    role is the right to grant yourself anything: a cluster could write
+    `path "clusters/*" { capabilities = ["read"] }` and read every other
+    cluster's secrets. Restricting the policy NAME does not help, because Vault
+    cannot restrict what a policy body contains — so the body has to come from
+    here. See crossplane-configurations#285.
+
+    What remains configurable is the part that is safe to configure: which KV
+    mount, and which subtrees of it. Not the paths, not the capabilities, not
+    the mount type — nothing that could name `sys/`, `auth/`, or `sudo`.
+    """
     name: str
     """Suffix. The policy is named `{clusterName}-{name}`, so two clusters
     granting the same kind of access do not collide on one object."""
 
-    rules: str
-    """HCL body, verbatim. The cluster's own subtree is the usual case:
+    kvMount: str
+    """The KV v2 mount the grants apply to, e.g. `clusters`. One mount per
+    policy: a grant that spans mounts is two grants with two lifetimes."""
 
-        path "kv/data/mgmt-test1/*" { capabilities = ["read"] }
+    read: [str]
+    """Subtrees of kvMount to grant read on. The literal `own` expands to this
+    cluster's own subtree — a cluster cannot spell another cluster's name into
+    that position and get it, because `own` is the only value that resolves to a
+    cluster name.
 
-    Taken as given rather than templated here: this module does not know which
-    paths a fleet uses, and a helper that guessed would be wrong the first time
-    someone needed a shared tree."""
+    A LIST because one cluster rarely wants one subtree: its own, plus whatever
+    a role it plays grants it — a cluster with the cicd profile reads the cicd
+    tree as well as its own.
+    """
 
     check:
         len(name) > 0, "a policy needs a name"
-        len(rules) > 0, "a policy with no rules grants nothing and hides that it does"
+        len(kvMount) > 0, "a policy needs the KV mount its grants apply to"
+        len(read) > 0, "a policy that grants no read grants nothing and hides that it does"
+        all s in read {regex.match(s, r"^[a-z0-9][a-z0-9._-]*$")}, "a subtree is a plain name, not a path — no slashes, no globs, no traversal"
 
 schema K8sAuth:
     name: str
@@ -263,6 +285,26 @@ _terraformBlock = lambda hasBackendConfig: bool -> str {
     'terraform {\n  required_providers {\n    vault = {\n      source  = "hashicorp/vault"\n      version = "~> 3.25"\n    }' + _k8s + '\n  }\n}\n\n'
 }
 
+# The policy body is built HERE and nowhere else — see VaultPolicy for why it
+# is not accepted as HCL. Every path is anchored at "{mount}/data/" or
+# "{mount}/metadata/", every capability list is a literal, and the only value
+# that ever reaches a path is a subtree name the schema has already constrained
+# to [a-z0-9._-]. There is no input that can widen this beyond read on one KV
+# mount.
+#
+# metadata gets list as well as read: without it `vault kv list` and the ESO
+# `find` selector fail on a tree the token can otherwise read, which reads like
+# a missing secret rather than a missing capability.
+_policyBody = lambda clusterName: str, policy: VaultPolicy -> str {
+    _subtree = lambda scope: str -> str {
+        clusterName if scope == "own" else scope
+    }
+    "\n".join(sum([[
+        'path "' + policy.kvMount + '/data/' + _subtree(s) + '/*" { capabilities = ["read"] }'
+        'path "' + policy.kvMount + '/metadata/' + _subtree(s) + '/*" { capabilities = ["read", "list"] }'
+    ] for s in policy.read], [])) + "\n"
+}
+
 _listToJson = lambda items: [str] -> str {
     '["' + '","'.join(items) + '"]'
 }
@@ -277,7 +319,7 @@ _baseVars = lambda auth: K8sAuth -> [{str:str}] {
         {key = "token_ttl", value = str(auth.tokenTtl)}
         {key = "bound_service_account_names", value = _listToJson(auth.boundServiceAccountNames)}
         {key = "bound_service_account_namespaces", value = _listToJson(auth.boundServiceAccountNamespaces)}
-        {key = "policies", value = json.encode({p.name: p.rules for p in (auth.policies or [])})}
+        {key = "policies", value = json.encode({p.name: _policyBody(auth.clusterName, p) for p in (auth.policies or [])})}
     ]
 }
 
