@@ -1,9 +1,9 @@
 [dependencies]
   [dependencies.xplane-vault-auth-base]
     name = "xplane-vault-auth-base"
-    full_name = "xplane-vault-auth-base_0.9.0"
-    version = "0.9.0"
-    sum = "tuiEOI4H8BtjDD4ou9uh4Mq1EwF1RVmjX0ZwSRqAyhg="
+    full_name = "xplane-vault-auth-base_0.10.0"
+    version = "0.10.0"
+    sum = "0T+h2exi34BfdJcSYAKTr5DM6GCjqSP2FEHQ6n6FNRo="
     reg = "ghcr.io"
     repo = "stuttgart-things/xplane-vault-auth-base"
-    oci_tag = "0.9.0"
+    oci_tag = "0.10.0"

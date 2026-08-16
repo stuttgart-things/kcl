@@ -42,7 +42,8 @@ _k8sAuths = [vault_auth.K8sAuth {
     # KV subtree, plus whatever the role it plays grants it.
     policies = [vault_auth.VaultPolicy {
         name = p?.name or "default"
-        rules = p?.rules or ""
+        kvMount = p?.kvMount or ""
+        read = p?.read or []
     } for p in (auth?.policies or [])]
     backendConfig = _buildBackendConfig(auth?.backendConfig)
 } for auth in (_spec?.k8sAuths or [
