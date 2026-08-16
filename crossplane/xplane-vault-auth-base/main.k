@@ -1,6 +1,7 @@
 # Library module — not runnable standalone.
 # Generates Crossplane v2 namespaced OpenTofu Workspaces that configure
 # Vault Kubernetes auth backends (optionally with backend_config).
+import json
 import v1beta1 as otf
 
 schema K8sAuthBackendConfig:
@@ -16,6 +17,25 @@ schema K8sAuthBackendConfig:
     disableIssValidation?: bool = True
     disableLocalCaJwt?: bool = True
 
+schema VaultPolicy:
+    """One Vault ACL policy, created for the auth that declares it."""
+    name: str
+    """Suffix. The policy is named `{clusterName}-{name}`, so two clusters
+    granting the same kind of access do not collide on one object."""
+
+    rules: str
+    """HCL body, verbatim. The cluster's own subtree is the usual case:
+
+        path "kv/data/mgmt-test1/*" { capabilities = ["read"] }
+
+    Taken as given rather than templated here: this module does not know which
+    paths a fleet uses, and a helper that guessed would be wrong the first time
+    someone needed a shared tree."""
+
+    check:
+        len(name) > 0, "a policy needs a name"
+        len(rules) > 0, "a policy with no rules grants nothing and hides that it does"
+
 schema K8sAuth:
     name: str
     clusterName: str
@@ -25,7 +45,25 @@ schema K8sAuth:
     tokenTtl?: int = 3600
     boundServiceAccountNames?: [str] = ["default"]
     boundServiceAccountNamespaces?: [str] = ["default"]
-    # If set, the generated Workspace also renders vault_kubernetes_auth_backend_config.
+    policies?: [VaultPolicy] = []
+    """Vault policies to CREATE for this auth, each named `{clusterName}-{name}`
+    and appended to tokenPolicies.
+
+    A LIST because one cluster rarely wants one policy: its own KV subtree, plus
+    whatever a role it plays grants it — a cluster with the cicd profile reads
+    the cicd tree as well as its own. Those are separate grants with separate
+    lifetimes, not one policy with a longer body.
+
+    Vault accepts a role that names a policy which does not exist — the token
+    then simply has no permissions, with no error anywhere. Creating them beside
+    the role, in the same plan, is what removes that: tofu orders them by the
+    reference, and a destroy reverses it.
+
+    The names are derived rather than passed, so a caller can neither repeat nor
+    misspell them. Leave empty to keep referencing policies that already exist
+    in Vault, via tokenPolicies.
+    """
+
     backendConfig?: K8sAuthBackendConfig
     labels?: {str:str}
     annotations?: {str:str}
@@ -76,13 +114,25 @@ resource "vault_auth_backend" "kubernetes" {
   path = "${var.cluster_name}-${var.auth_name}"
 }
 
+# Empty map when no policies were declared, so a caller that only references
+# existing ones gets a plan identical to before.
+resource "vault_policy" "auth" {
+  for_each = var.policies
+  name     = "${var.cluster_name}-${each.key}"
+  policy   = each.value
+}
+
 resource "vault_kubernetes_auth_backend_role" "service_account" {
   backend                          = vault_auth_backend.kubernetes.path
   role_name                        = var.auth_name
   bound_service_account_names      = var.bound_service_account_names
   bound_service_account_namespaces = var.bound_service_account_namespaces
   token_ttl                        = var.token_ttl
-  token_policies                   = var.token_policies
+  # The reference is what orders the two: tofu creates the policy before the
+  # role that names it, and destroys them in the reverse order. Splitting this
+  # across two systems is what makes "role bound to a policy that is not there
+  # yet" possible, and Vault reports that as nothing at all.
+  token_policies                   = concat(var.token_policies, [for p in vault_policy.auth : p.name])
 }
 
 variable "auth_name" {
@@ -117,6 +167,11 @@ variable "token_policies" {
   default = []
 }
 
+variable "policies" {
+  type    = map(string)
+  default = {}
+}
+
 variable "token_ttl" {
   type    = number
   default = 3600
@@ -138,6 +193,10 @@ output "auth_backend_path" {
 
 output "auth_role_name" {
   value = vault_kubernetes_auth_backend_role.service_account.role_name
+}
+
+output "policy_names" {
+  value = [for p in vault_policy.auth : p.name]
 }
 """
 
@@ -218,6 +277,7 @@ _baseVars = lambda auth: K8sAuth -> [{str:str}] {
         {key = "token_ttl", value = str(auth.tokenTtl)}
         {key = "bound_service_account_names", value = _listToJson(auth.boundServiceAccountNames)}
         {key = "bound_service_account_namespaces", value = _listToJson(auth.boundServiceAccountNamespaces)}
+        {key = "policies", value = json.encode({p.name: p.rules for p in (auth.policies or [])})}
     ]
 }
 
