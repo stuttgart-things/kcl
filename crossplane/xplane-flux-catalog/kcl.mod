@@ -1,4 +1,4 @@
 [package]
 name = "xplane-flux-catalog"
 edition = "v0.12.3"
-version = "0.10.0"
+version = "0.11.0"

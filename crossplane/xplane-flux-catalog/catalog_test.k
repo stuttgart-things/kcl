@@ -222,17 +222,31 @@ test_external_secrets_has_an_optional_vault_store = lambda {
     assert _c["install"].wrapsHelmRelease
     assert _c["cluster-store-vault"].optional, "a cluster may want a different backend, or none yet"
     assert _c["cluster-store-vault"].dependsOn == ["install"]
-    assert _c["cluster-store-vault"].requiredSubstitutions == [], "every variable carries a default"
+    # Two are required despite carrying artifact defaults — see below.
+    assert _c["cluster-store-vault"].requiredSubstitutions == ["VAULT_K8S_AUTH_MOUNT_PATH", "VAULT_K8S_AUTH_ROLE"]
 }
 
-# The wiring that is MISSING, asserted so its absence stays deliberate: the
-# cluster-store's Vault values are exactly what platform.vaultIssuer creates,
-# but status.components.vaultIssuer publishes only readiness flags today, so
-# there is nothing to read. Adding a source that resolves to nothing would
-# leave the variable unset and rejected — worse than the default.
-test_external_secrets_cannot_discover_its_vault_yet = lambda {
+# The wiring that was missing until xplane-platform 0.14.0: the mount path and
+# role come from the vaultIssuer that CREATED them, not from the artifact's
+# defaults — which describe one specific cluster (mount `platform-sthings-eso`,
+# role `eso`) and would have a second cluster authenticate against the wrong
+# mount, or against nothing.
+test_external_secrets_discovers_its_vault = lambda {
     _c = {x.name: x for x in c.get("external-secrets").components}
-    assert _c["cluster-store-vault"].substitutionSources == {}, "no source until VaultK8sAuth publishes a status"
+    _src = _c["cluster-store-vault"].substitutionSources
+    assert _src["VAULT_K8S_AUTH_MOUNT_PATH"] == "vaultIssuer.auths.eso.mountPath"
+    assert _src["VAULT_K8S_AUTH_ROLE"] == "vaultIssuer.auths.eso.role"
+}
+
+# Keyed by auth NAME, never by index. spec.vaultIssuer.additionalAuths is a
+# list, and an indexed path would silently point at cert-manager's mount the
+# moment someone reorders it — handing a secrets reader a certificate-issuing
+# role, which is exactly the mix-up the separate auth exists to prevent.
+test_external_secrets_addresses_the_auth_by_name = lambda {
+    _c = {x.name: x for x in c.get("external-secrets").components}
+    _paths = [v for _, v in _c["cluster-store-vault"].substitutionSources]
+    assert len([p for p in _paths if "[" in p]) == 0, "an index would break on reorder"
+    assert len([p for p in _paths if ".eso." in p]) == len(_paths)
 }
 
 # Both nfs-csi variables are facts about the NETWORK the cluster sits in, not
@@ -279,4 +293,20 @@ test_new_entries_are_registered = lambda {
     _missing = [n for n in _want if n not in c.catalog]
     assert _missing == [], "entry missing from the registry"
     assert len(c.names) == 10
+}
+
+# The two sourced variables are REQUIRED although the artifact defaults them,
+# and that is deliberate. The defaults are `platform-sthings-eso` / `eso` — one
+# specific cluster's mount. On any other cluster they authenticate against the
+# wrong mount or against nothing, and the ClusterSecretStore looks configured
+# either way, which is the failure mode this catalog exists to prevent.
+#
+# Required, they are either discovered from the cluster's own vaultIssuer or
+# rejected at render time by name. Never silently someone else's.
+test_external_secrets_never_falls_back_to_another_clusters_mount = lambda {
+    _c = {x.name: x for x in c.get("external-secrets").components}
+    _req = _c["cluster-store-vault"].requiredSubstitutions
+    _src = _c["cluster-store-vault"].substitutionSources
+    _unguarded = [k for k, _ in _src if k not in _req]
+    assert _unguarded == [], "a source with no required declaration falls back to the artifact default when it resolves to nothing"
 }
