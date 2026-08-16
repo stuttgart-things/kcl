@@ -300,8 +300,8 @@ _policyBody = lambda clusterName: str, policy: VaultPolicy -> str {
         clusterName if scope == "own" else scope
     }
     "\n".join(sum([[
-        'path "' + policy.kvMount + '/data/' + _subtree(s) + '/*" { capabilities = ["read"] }',
-        'path "' + policy.kvMount + '/metadata/' + _subtree(s) + '/*" { capabilities = ["read", "list"] }',
+        'path "' + policy.kvMount + '/data/' + _subtree(s) + '/*" { capabilities = ["read"] }'
+        'path "' + policy.kvMount + '/metadata/' + _subtree(s) + '/*" { capabilities = ["read", "list"] }'
     ] for s in policy.read], [])) + "\n"
 }
 
