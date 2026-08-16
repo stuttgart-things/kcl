@@ -206,6 +206,11 @@ appEntries = lambda spec: {str:}, discovered: {str:} = {} -> [{str:}] {
     An app is not necessarily one Kustomization (dapr ships control-plane +
     template-execution), so components are expanded here and dependsOn is
     rewritten to the emitted '{app}-{component}' names.
+
+    A component still WAITING for a discoverable value is held back rather than
+    emitted blank — see componentIsPending. It is held back alone: its siblings
+    keep deploying, which is what lets external-secrets install the operator on
+    the reconcile before its ClusterSecretStore learns the auth mount path.
     """
     sum([[{
         name = "{}-{}".format(_n, _c.name)
@@ -223,34 +228,83 @@ appEntries = lambda spec: {str:}, discovered: {str:} = {} -> [{str:}] {
             substituteFrom = ((_a?.components or {})[_c.name] or {}).substituteFrom
         if (((_a?.components or {})[_c.name] or {})?.targetNamespace or _a?.targetNamespace):
             targetNamespace = ((_a?.components or {})[_c.name] or {})?.targetNamespace or _a?.targetNamespace
-    } for _c in cat.get(_n).components if compEnabled(_c, (_a?.components or {})[_c.name] or {})] for _n, _a in enabledApps(spec)], [])
+    } for _c in cat.get(_n).components if compEnabled(_c, (_a?.components or {})[_c.name] or {}) and not componentIsPending(_a, _c, discovered)] for _n, _a in enabledApps(spec)], [])
 }
 
 _compOverride = lambda app: {str:}, name: str -> {str:} {
     (app?.components or {})[name] or {}
 }
 
-_appMissing = lambda name: str, app: {str:}, discovered: {str:} = {} -> [str] {
-    """Required vars of one app that nothing supplies. A component carrying
-    substituteFrom is skipped — its values come from a ConfigMap/Secret resolved
-    at build time, which cannot be checked statically."""
-    _supplied = lambda cname: str, comp: cs.Component -> {str:} {
-        # A value the platform can discover counts as supplied — that is the
-        # point of substitutionSources. Only resolvable ones count; an entry
-        # that reads nothing still fails here, by name.
-        discoveredSubstitutions(comp, discovered) | (app?.substitute or {}) | (_compOverride(app, cname)?.substitute or {})
-    }
-    _checked = [c for c in cat.get(name).components if compEnabled(c, _compOverride(app, c.name)) and not _compOverride(app, c.name)?.substituteFrom]
-    sum([[name + "-" + c.name + ": " + v for v in c.requiredSubstitutions if v not in _supplied(c.name, c)] for c in _checked], [])
+_compSupplied = lambda app: {str:}, cname: str, comp: cs.Component, discovered: {str:} -> {str:} {
+    """Everything that supplies a value to one component, discovered included.
+
+    A value the platform can discover counts as supplied — that is the point of
+    substitutionSources. Only RESOLVABLE ones count; an entry that reads nothing
+    is still missing."""
+    discoveredSubstitutions(comp, discovered) | (app?.substitute or {}) | (_compOverride(app, cname)?.substitute or {})
+}
+
+_checkedComps = lambda name: str, app: {str:} -> [cs.Component] {
+    """Enabled components worth checking. One carrying substituteFrom is skipped
+    — its values come from a ConfigMap/Secret resolved at build time, which
+    cannot be checked statically."""
+    [c for c in cat.get(name).components if compEnabled(c, _compOverride(app, c.name)) and not _compOverride(app, c.name)?.substituteFrom]
+}
+
+# A required variable that nothing supplies is one of two very different things,
+# and treating them alike is what made an app impossible to enable
+# (crossplane-configurations#277).
+#
+#   NO source declared    nothing will ever supply it — a typo or missing
+#                         config. Fatal: reject at render time, by name.
+#   source declared       the platform CAN discover it, just not yet — the
+#                         status it reads from is produced by this same
+#                         Composition. A transient state, not an error.
+#
+# The second used to be fatal too, which deadlocked: enabling
+# `vaultIssuer.additionalAuths[eso]` and `apps.external-secrets` in one step
+# aborted the whole Composition BEFORE it emitted the auth the app was waiting
+# for. Nothing converged, and every other component stopped reconciling with it.
+_compMissing = lambda app: {str:}, comp: cs.Component, discovered: {str:} -> [str] {
+    _sup = _compSupplied(app, comp.name, comp, discovered)
+    [v for v in comp.requiredSubstitutions if v not in _sup]
+}
+
+_compPending = lambda app: {str:}, comp: cs.Component, discovered: {str:} -> [str] {
+    """Missing variables the component knows how to discover — waiting, not broken."""
+    [v for v in _compMissing(app, comp, discovered) if v in (comp?.substitutionSources or {})]
+}
+
+_compFatal = lambda app: {str:}, comp: cs.Component, discovered: {str:} -> [str] {
+    """Missing variables nothing can ever supply."""
+    [v for v in _compMissing(app, comp, discovered) if v not in (comp?.substitutionSources or {})]
+}
+
+componentIsPending = lambda app: {str:}, comp: cs.Component, discovered: {str:} -> bool {
+    """Hold this component back this reconcile: it is waiting on a value the
+    platform will produce. Emitting it with the variable unset would deploy
+    something that looks configured and is not."""
+    len(_compPending(app, comp, discovered)) > 0
 }
 
 missingSubstitutions = lambda spec: {str:}, discovered: {str:} = {} -> [str] {
-    """Required substitution variables that nothing supplies.
+    """Required substitution variables that NOTHING can supply — fatal.
 
     Flux replaces an undefined variable with an empty string instead of failing,
-    so a missing one is a silently broken deploy — that is what this catches.
+    so a missing one is a silently broken deploy. Variables the component
+    declares a source for are excluded here and reported by
+    pendingSubstitutions instead; see the note above _compMissing.
     """
-    sum([_appMissing(n, a, discovered) for n, a in enabledApps(spec)], [])
+    sum([[n + "-" + c.name + ": " + v for c in _checkedComps(n, a) for v in _compFatal(a, c, discovered)] for n, a in enabledApps(spec)], [])
+}
+
+pendingSubstitutions = lambda spec: {str:}, discovered: {str:} = {} -> [str] {
+    """Variables a component is WAITING for — discoverable, not yet discovered.
+
+    Published on the status so a held-back component reads as waiting rather
+    than as forgotten. Without that, an app enabled on the XR simply would not
+    appear, which is the second-worst kind of silence."""
+    sum([[n + "-" + c.name + ": " + v for c in _checkedComps(n, a) for v in _compPending(a, c, discovered)] for n, a in enabledApps(spec)], [])
 }
 
 _compEnabled = lambda apps: {str:}, appName: str, compName: str -> bool {
