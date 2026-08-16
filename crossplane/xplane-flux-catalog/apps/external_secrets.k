@@ -27,18 +27,36 @@ externalSecrets: s.App = {
         # and a cluster whose vaultIssuer created a differently named mount has
         # to say so.
         #
-        # NO substitutionSources yet, and that is a gap rather than a choice:
-        # the values are exactly what `vaultIssuer` creates, but Platform's
-        # status.components.vaultIssuer publishes only readiness flags
-        # (authReady/caReady/issuerReady) — the Tofu outputs auth_backend_path
-        # and auth_role_name reach nothing. Wire them here the moment
-        # VaultK8sAuth publishes a status; see
-        # crossplane-configurations#260.
+        # The mount path and role are DISCOVERED from this cluster's own
+        # vaultIssuer, which created them. Before xplane-platform 0.14.0 the
+        # status published only readiness flags, so the artifact's defaults —
+        # mount `platform-sthings-eso`, role `eso` — were the only option, and
+        # they describe one specific cluster. A second cluster silently
+        # authenticated against the wrong mount, or against nothing.
+        #
+        # Requires spec.vaultIssuer.additionalAuths to declare an auth named
+        # `eso`. Where it does not, the paths resolve to nothing, the variables
+        # stay at the artifact's defaults, and the store points wherever those
+        # point — which is why this component is opt-in.
         s.Component {
             name = "cluster-store-vault"
             path = "./components/cluster-store-vault"
             optional = True
             dependsOn = ["install"]
+            # REQUIRED even though the artifact defaults them, and that is the
+            # point: the defaults are `platform-sthings-eso` / `eso`, i.e. one
+            # specific cluster's mount. On any other cluster they authenticate
+            # against the wrong mount or against nothing, and the store looks
+            # configured either way.
+            #
+            # Declared required, they are either DISCOVERED from this cluster's
+            # own vaultIssuer or rejected by name at render time. Never silently
+            # someone else's.
+            requiredSubstitutions = ["VAULT_K8S_AUTH_MOUNT_PATH", "VAULT_K8S_AUTH_ROLE"]
+            substitutionSources = {
+                VAULT_K8S_AUTH_MOUNT_PATH = "vaultIssuer.auths.eso.mountPath"
+                VAULT_K8S_AUTH_ROLE = "vaultIssuer.auths.eso.role"
+            }
         }
     ]
 }
