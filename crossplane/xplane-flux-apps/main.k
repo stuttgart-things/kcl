@@ -70,27 +70,38 @@ _appObject = lambda app: {str:} -> {str:} {
     _sub = app?.substitute or {}
     _subFrom = app?.substituteFrom or []
 
-    # ALWAYS EMITTED, even when the XR supplies nothing. This used to be
-    # conditional, and the conditional form is a trap: kustomize-controller runs
-    # its variable-substitution pass only when spec.postBuild is non-nil, so an
-    # app with no substitute block got NO substitution at all — and every
-    # `${VAR:-default}` fallback in its manifests silently stopped being a
-    # fallback. What reaches the cluster is the literal string:
+    # ALWAYS EMITTED AND NEVER EMPTY. Both halves are load-bearing, and the
+    # second was learned the hard way twice.
+    #
+    # kustomize-controller skips its variable-substitution pass unless there is
+    # something to substitute, so an app with no substitute block gets NO
+    # substitution — and every `${VAR:-default}` fallback in its manifests
+    # silently stops being a fallback. What reaches the cluster is the literal
+    # string:
     #
     #   Namespace/${OPENEBS_NAMESPACE:-openebs} dry-run failed (Invalid):
     #   metadata.name: Invalid value: "${OPENEBS_NAMESPACE:-openebs}"
     #
-    # Found on u26-rke2-1 (2026-08-12) enabling openebs, whose catalog entry
-    # declares zero required substitutions precisely because every variable has
-    # a manifest default. "No REQUIRED substitutions" and "needs no substitute
-    # block" are different claims, and the conditional made the second one false
-    # for every app in the catalog.
+    # 0.2.0 fixed the first half — postBuild is emitted unconditionally — on the
+    # belief that `PostBuild != nil` was the whole condition upstream. IT IS
+    # NOT. Measured on u26-rke2-1, 2026-08-16, with before/after on a running
+    # cluster: with `substitute: {}` the Kustomization stayed
+    # ReconciliationFailed on exactly that error, through a forced reconcile;
+    # adding one real entry made it Ready. It bit openebs first and
+    # external-secrets second, so it is not one app's quirk — it is every app
+    # enabled bare, which is the case the catalog advertises as the easy one.
     #
-    # An empty substitute map is enough: PostBuild != nil is the whole condition
-    # upstream. substituteFrom stays conditional because an empty list is
-    # meaningful there — it would be a source list with no sources.
+    # Hence the marker: one inert entry, whose only job is to be non-empty. It
+    # names its author so nobody deletes it as noise. A user-supplied key of the
+    # same name would win, which is harmless.
+    #
+    # NO LEADING UNDERSCORE in the key. KCL treats an underscore-prefixed
+    # attribute as private and drops it from the emitted output — a marker named
+    # `_XPLANE_FLUX_APPS` renders as `substitute: {}`, i.e. exactly the bug it
+    # exists to prevent, and silently.
+    _marker = {XPLANE_FLUX_APPS = "substitution-marker"}
     _postBuild = {
-        substitute = _sub
+        substitute = _marker | _sub
         **({substituteFrom = _subFrom} if _subFrom else {})
     }
     _appCommon = app?.commonMetadata or _commonMeta
@@ -135,7 +146,8 @@ _appObject = lambda app: {str:} -> {str:} {
                         **({patches = app.patches} if app?.patches else {})
                         **({images = app.images} if app?.images else {})
                         **({decryption = app.decryption} if app?.decryption else {})
-                        # Unconditional, deliberately — see _postBuild above.
+                        # Unconditional AND never empty, deliberately — see
+                        # _postBuild above.
                         postBuild = _postBuild
                     }
                 }
