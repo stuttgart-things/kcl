@@ -23,11 +23,15 @@ headlamp: s.App = {
             # DOMAIN is the cluster's own domain — the same value the Gateway
             # listener's wildcard and the certificate CN are built from. Typing
             # it on the XR is how those three drift apart; the platform already
-            # discovered it. HOSTNAME and GATEWAY_NAME stay manual: which name
+            # discovered it, and so is GATEWAY_NAME — the platform sets that
+            # name on the Gateway it creates. HOSTNAME stays manual: which name
             # this app answers on, and which Gateway it attaches to, are
             # decisions no status can answer.
             substitutionSources = {
                 DOMAIN = "ipReservation.domain"
+                # No longer a required substitution: the platform publishes the
+                # Gateway's name it also creates it with, so nobody states it.
+                GATEWAY_NAME = "gateway.name"
             }
         }
     ]

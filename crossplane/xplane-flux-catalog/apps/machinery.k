@@ -48,11 +48,18 @@ machinery: s.App = {
             # MACHINERY_HOSTNAME (machinery), MACHINERY_NAMESPACE (machinery)
             # and GATEWAY_NAMESPACE (default) carry usable defaults too.
             requiredSubstitutions = ["DOMAIN", "GATEWAY_NAME"]
-            # DOMAIN is the cluster's own — the same value the Gateway listener
-            # wildcard and the certificate CN are built from. GATEWAY_NAME stays
-            # manual: which Gateway a service attaches to is a decision.
+            # Both are facts about the cluster now. DOMAIN is its own — the
+            # same value the Gateway listener wildcard and the certificate CN are
+            # built from. GATEWAY_NAME used to be called a decision and typed by
+            # hand; it is the name the platform SETS on the Gateway it creates
+            # (cilium reads the identical `gateway.name`), so stating it again
+            # was only a chance to state it differently. Enabling this app now
+            # costs no typed value at all.
             substitutionSources = {
                 DOMAIN = "ipReservation.domain"
+                # No longer a required substitution: the platform publishes the
+                # Gateway's name it also creates it with, so nobody states it.
+                GATEWAY_NAME = "gateway.name"
             }
         }
     ]

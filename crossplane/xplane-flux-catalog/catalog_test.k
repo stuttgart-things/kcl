@@ -132,7 +132,25 @@ test_cilium_declares_required_substitutions = lambda {
         "CILIUM_LB_IP_STOP"
         "CILIUM_GATEWAY_DOMAIN"
         "CILIUM_GATEWAY_TLS_SECRET"
+        "CILIUM_GATEWAY_NAME"
     ]
+}
+
+# CILIUM_GATEWAY_NAME is the odd one out: the artifact DOES default it
+# (`${CILIUM_GATEWAY_NAME:-cilium-gateway}`), so leaving it unset would be
+# harmless. It is required anyway, because required-and-sourced is the only
+# combination this catalog allows — a source without a requirement would make a
+# typo in the source path invisible. The source always resolves (the platform
+# defaults the name), so requiring it costs nothing.
+test_cilium_gateway_name_is_required_only_to_be_sourced = lambda {
+    _c = c.get("cilium").components[0]
+    assert _c.substitutionSources["CILIUM_GATEWAY_NAME"] == "gateway.name"
+    assert "CILIUM_GATEWAY_NAME" in _c.requiredSubstitutions
+
+    # The same fact reaches the Gateway that CREATES it and every app that
+    # merely REFERENCES it, so a rename can never desynchronise the two.
+    assert c.get("machinery").components[0].substitutionSources["GATEWAY_NAME"] == "gateway.name"
+    assert c.get("headlamp").components[0].substitutionSources["GATEWAY_NAME"] == "gateway.name"
 }
 
 # cilium is CONFIG-ONLY and must stay that way. The artifact ships a
@@ -185,25 +203,34 @@ test_substitution_sources_name_declared_variables = lambda {
 }
 
 # headlamp's DOMAIN is the cluster domain — discoverable, and the same value the
-# Gateway listener wildcard and the certificate CN come from. HOSTNAME and
-# GATEWAY_NAME are decisions and must stay manual.
-test_headlamp_discovers_only_the_domain = lambda {
+# Gateway listener wildcard and the certificate CN come from. GATEWAY_NAME is
+# discovered too now: the platform publishes the name it also creates the
+# Gateway with. HOSTNAME stays manual — what a service is CALLED is a decision,
+# not a fact about the cluster.
+test_headlamp_discovers_domain_and_gateway = lambda {
     _c = c.get("headlamp").components[0]
-    assert _c.substitutionSources == {DOMAIN = "ipReservation.domain"}
-    assert "HOSTNAME" not in _c.substitutionSources
-    assert "GATEWAY_NAME" not in _c.substitutionSources
+    assert _c.substitutionSources == {DOMAIN = "ipReservation.domain", GATEWAY_NAME = "gateway.name"}
+    assert "HOSTNAME" not in _c.substitutionSources, "the name is a decision"
+
+    # Still REQUIRED, and that is the point: required-and-discovered is what
+    # makes a component defer until the value exists (#277) instead of
+    # deploying with a blank Flux would substitute without complaint.
+    assert "GATEWAY_NAME" in _c.requiredSubstitutions
+    _typed = [v for v in _c.requiredSubstitutions if v not in _c.substitutionSources]
+    assert _typed == ["HOSTNAME"], "only the name is still typed"
 }
 
-# The machinery SERVICE, not the bootstrap play of the same name. Two required
-# variables, one of them discovered — so enabling it costs a single typed
-# value. That is the payoff of substitutionSources, and the assertion is here
-# so a later artifact change that adds a required variable is noticed.
-test_machinery_costs_one_typed_value = lambda {
+# The machinery SERVICE, not the bootstrap play of the same name. Enabling it
+# now costs NO typed value at all: DOMAIN comes from the reservation, the
+# Gateway's name from the platform that creates it. That is the payoff of
+# substitutionSources, and the assertion is here so a later artifact change
+# adding a required variable is noticed.
+test_machinery_costs_no_typed_value = lambda {
     _c = c.get("machinery").components[0]
     assert _c.requiredSubstitutions == ["DOMAIN", "GATEWAY_NAME"]
-    assert _c.substitutionSources == {DOMAIN = "ipReservation.domain"}
+    assert _c.substitutionSources == {DOMAIN = "ipReservation.domain", GATEWAY_NAME = "gateway.name"}
     _typed = [v for v in _c.requiredSubstitutions if v not in _c.substitutionSources]
-    assert _typed == ["GATEWAY_NAME"], "only the Gateway choice — which Gateway a service attaches to is a decision, not a fact"
+    assert _typed == [], "a bare enable is now enough"
 
     # MACHINERY_VERSION was required until stuttgart-things/flux#193 fixed the
     # artifact's `1.13.4` default (published tags read `v1.13.4`). It must stay
