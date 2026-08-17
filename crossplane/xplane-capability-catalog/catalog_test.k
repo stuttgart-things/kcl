@@ -80,16 +80,16 @@ test_workload_secret_vault_keys_match_their_templates = lambda {
 # where the value came from. So placement values are not all strings, and the
 # renderer must not coerce them.
 test_list_valued_defaults_stay_lists = lambda {
-    _v = c.get("ansible").defaults["ansibleExtraCollections"]
+    _v = c.get("ansible-run").defaults["ansibleExtraCollections"]
     assert typeof(_v) == "list", "a stringified list is a ParameterTypeMismatch in Tekton"
     assert len(_v) > 0
 }
 
-# ansible configures a Configuration, not a provider — so it has no
+# ansible-run configures a Configuration, not a provider — so it has no
 # ClusterProviderConfig, and the renderer must emit none rather than an empty
 # one. providerConfig was optional from the first version for this case.
-test_ansible_has_no_provider_config = lambda {
-    assert not c.get("ansible")?.providerConfig
+test_ansible_run_has_no_provider_config = lambda {
+    assert not c.get("ansible-run")?.providerConfig
     assert c.get("proxmoxvm")?.providerConfig, "while a provider capability does"
 }
 
@@ -98,7 +98,7 @@ test_ansible_has_no_provider_config = lambda {
 # single-key rule is asserted only for capabilities WITH a provider config, and
 # this is the entry that would break a rule stated too broadly.
 test_pipeline_credentials_are_plain_keys = lambda {
-    _d = c.get("ansible").credentials.data
+    _d = c.get("ansible-run").credentials.data
     assert len(_d) == 2
     assert "ANSIBLE_USER" in _d and "ANSIBLE_PASSWORD" in _d
 }
@@ -115,8 +115,24 @@ test_derived_credential_fields_are_not_also_defaulted = lambda {
 
 # ansible's credentials are read by a Tekton pipeline in the pipeline's own
 # namespace — the same trap as a cloud-init password beside the provider.
-test_ansible_credentials_live_where_the_pipeline_runs = lambda {
-    _a = c.get("ansible")
+test_ansible_run_credentials_live_where_the_pipeline_runs = lambda {
+    _a = c.get("ansible-run")
     assert _a.credentialsNamespaceField == "namespace"
     assert _a.credentialsNamespaceField in _a.required, "and that namespace must be stated, not guessed"
+}
+
+# The label a consumer selects on is derived from the entry name, and
+# function-environment-configs requires EXACTLY ONE match — so a name that does
+# not match its consumer's label produces zero matches and an error naming the
+# selector rather than the entry. These are the labels the Compositions in
+# crossplane-configurations actually select on; check there before adding one.
+test_entry_names_match_their_consumers_selectors = lambda {
+    _consumers = {
+        "ansible-run" = "ansible-run.resources.stuttgart-things.com/environment"
+        "proxmoxvm" = "proxmoxvm.resources.stuttgart-things.com/environment"
+        "vspherevm" = "vspherevm.resources.stuttgart-things.com/environment"
+    }
+    _wrong = [n for n in _consumers if c.get(n).environmentLabelKey != _consumers[n]]
+    assert _wrong == [], "these emit a label their Composition does not select: " + str(_wrong)
+    assert sorted([n for n in _consumers]) == c.names, "a new entry needs its consumer's selector checked here"
 }
