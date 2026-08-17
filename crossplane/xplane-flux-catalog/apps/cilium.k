@@ -13,12 +13,20 @@ import ..schema as s
 # should be added: a cluster that needs Cilium INSTALLED is served by the
 # bootstrap/cilium Configuration instead.
 #
-# Both pieces are kustomize `kind: Component`, not standalone Kustomizations,
-# so they cannot be split into two Flux Kustomizations — lb and gateway arrive
-# together or not at all. Worth knowing because the gateway's TLS listener
-# needs a certificate that a fresh cluster does not have yet: the HTTP listener
-# works immediately, HTTPS stays certificate-less until something issues into
-# CILIUM_GATEWAY_TLS_SECRET.
+# lb and gateway are shipped as one component here, not because they must be:
+# both are kustomize `kind: Component`, and this entry claimed for months that
+# a Component therefore cannot be a Flux Kustomization of its own. That is
+# WRONG — `kustomize build` on a Component directory works, and Flux runs
+# nothing else. Verified 2026-08-17 against all four tekton components and both
+# cilium ones.
+#
+# They stay together because they belong together — an L2 pool without a
+# Gateway announces nothing, a Gateway without a pool has no address — not
+# because kustomize forces it. Splitting them is available if a reason appears.
+#
+# Worth knowing either way: the gateway's TLS listener needs a certificate a
+# fresh cluster does not have yet. The HTTP listener works immediately, HTTPS
+# stays certificate-less until something issues into CILIUM_GATEWAY_TLS_SECRET.
 #
 # Prerequisite is a cluster fact rather than a catalog dependency: Cilium must
 # already run WITH Gateway API and L2 announcements enabled
