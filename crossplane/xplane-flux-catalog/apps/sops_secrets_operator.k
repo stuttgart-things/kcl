@@ -8,17 +8,19 @@ import ..schema as s
 # credentials stay encrypted blobs and every provider that needs them sits
 # without a config.
 #
-# NOT a HelmRelease: the app pulls a kustomize base built from the operator's
-# config/default, so there is no chart to wait on. 10m rather than the 15m the
+# NOT a HelmRelease: the app pulls the published sops-secrets-operator-kustomize
+# artifact, so there is no chart to wait on. 10m rather than the 15m the
 # Helm-wrapping entries use — CRDs and a Deployment, no chart pull.
 #
 # NO cert-manager dependency, which is worth stating because the obvious
 # assumption is wrong. Upstream (isindir/sops-secrets-operator, group
-# isindir.github.com) ships a validating webhook and `config/default` wires in
-# ../webhook and ../certmanager. This is NOT that operator: it is
-# stuttgart-things/sops-secrets-operator, group sops.stuttgart-things.com, and
-# the artifact it publishes contains exactly a Namespace, 5 CRDs, a
-# ServiceAccount, a ClusterRole+Binding and a Deployment. Verified against the
+# isindir.github.com) ships a validating webhook. Our own repo reads that way
+# too — its kubebuilder config/default composes ../webhook and ../certmanager,
+# so a `kubectl apply -k .../config/default` install really does need
+# cert-manager. This app installs neither: the published
+# sops-secrets-operator-kustomize artifact is rendered by the release workflow
+# from the repo's kcl/ deploy profile, and contains exactly a Namespace, 5
+# CRDs, a ServiceAccount, a ClusterRole+Binding and a Deployment. Verified against the
 # published v0.9.0 artifact and against a live install on u26-rke2-1
 # (2026-08-17): no ValidatingWebhookConfiguration, no Certificate, no cert
 # volume on the Deployment. Adding the dependency back would not be a harmless
