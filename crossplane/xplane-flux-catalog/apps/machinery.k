@@ -30,9 +30,17 @@ import ..schema as s
 # The artifact now ships the watch set as a file, covering ClusterStack,
 # Platform, XIPReservation and VaultK8sAuth. Enabling this app is therefore
 # enough — no ConfigMap has to be placed on the cluster by hand.
+#
+# v1.19.3 adds the RBAC to actually READ those kinds (stuttgart-things/flux#195).
+# The watch set lived in the flux artifact while the ClusterRole lived in the
+# machinery kustomize base — a different repository — so #193 changed what the
+# app looks at without changing what it may read. On the first deploy through
+# this catalog the Deployment was 1/1, the HTTPRoute attached and HTTPS answered
+# in 79ms, while every request was a 500 and every informer sat on
+# `clusterstacks... is forbidden`. Do not pin below v1.19.3.
 machinery: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/machinery"
-    defaultVersion = "v1.19.2"
+    defaultVersion = "v1.19.3"
     components = [
         s.Component {
             name = "app"
