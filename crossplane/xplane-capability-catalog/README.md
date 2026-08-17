@@ -35,8 +35,22 @@ sthings-u26 image and the bpg provider — not of LabUL.
 
 | capability | provider config | Vault keys | required placement |
 |---|---|---|---|
+| `ansible` | **none** | `vm_ssh_user`, `vm_ssh_password` | `namespace`, `storageClass` |
 | `proxmoxvm` | `proxmoxbpg.m.crossplane.io/v1beta1` | `pve_api_url`, `pve_api_user`, `pve_api_password`, `vm_ssh_user`, `vm_ssh_password` | `node`, `datastore`, `bridge`, `vlanTag`, `pool`, `templateVmId` |
 | `vspherevm` | `vspherevm.m.stuttgart-things.com/v1beta1` | `vsphere_user`, `vsphere_password`, `vsphere_server` | `templateUuid`, `datastoreId`, `resourcePoolId`, `networkId`, `folder`, `domain` |
+
+`ansible` is the entry that made the schema earn its keep, and it differs from
+the other two in all three ways a capability can:
+
+* **no provider config** — it configures a Configuration, not a provider.
+  `providerConfig?` was optional from the first version for exactly this.
+* **two plain credential keys** instead of one JSON document, because the
+  consumer is a Tekton pipeline reading environment variables.
+* **a list-valued default.** `ansibleExtraCollections` reaches Tekton as a
+  parameter, and a stringified list is rejected there with
+  `ParameterTypeMismatch` — an error that names the Tekton parameter and
+  nothing about where the value came from. So `defaults` is `{str:any}`, and a
+  consumer must not coerce.
 
 Both were transcribed from the capability Helm charts in
 `stuttgart-things/stuttgart-things` (`crossplane/platform/capabilities/`), which
