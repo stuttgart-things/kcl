@@ -30,5 +30,10 @@ get = lambda name: str -> s.Capability {
 # the user never wrote.
 fields = lambda name: str -> [str] {
     _c = get(name)
-    _c.required + sorted([k for k in _c.defaults]) + _c.optional
+
+    # Derived fields count as known: an XR may not set them (the consumer
+    # rejects unknown keys, and these are filled in by the renderer), but they
+    # must not be rejected as typos either.
+    _derived = [f for f in [_c?.credentialsNameField] if f]
+    _c.required + sorted([k for k in _c.defaults]) + _c.optional + [f for f in _derived if f not in _c.required and f not in _c.defaults and f not in _c.optional]
 }
