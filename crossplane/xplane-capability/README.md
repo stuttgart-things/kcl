@@ -140,6 +140,23 @@ every field is legitimately absent.
 | `test_every_capability_is_reported_in_one_pass` | one-error-per-reconcile |
 | `test_a_store_without_a_server_is_rejected` | a store with nothing left to derive |
 | `test_an_existing_store_needs_no_vault_facts` | requiring Vault facts from a cluster that reuses a store it already trusts |
+| `test_status_less_objects_do_not_derive_readiness_from_themselves` | an EnvironmentConfig or ClusterProviderConfig stuck at Ready=False forever |
+| `test_secret_objects_derive_readiness_from_themselves` | a capability reporting ready while Vault answers 403 |
+
+## Readiness
+
+Not one policy for all four objects.
+
+| object | policy | why |
+|---|---|---|
+| `ClusterSecretStore` | `DeriveFromObject` | its `Valid` condition IS the proof that the Vault login works |
+| `ExternalSecret` | `DeriveFromObject` | its `Ready` condition is the only signal that Vault answered — a capability whose credentials 403 must not report ready |
+| `EnvironmentConfig` | `DeriveFromCelQuery` (`true`) | it has no conditions at all |
+| `ClusterProviderConfig` | `DeriveFromCelQuery` (`true`) | same, and measured: [#294](https://github.com/stuttgart-things/crossplane-configurations/issues/294) found `SuccessfulCreate` never evaluated and `AllTrue` false on an empty condition list |
+
+Using `DeriveFromObject` everywhere leaves the two status-less objects at
+`Ready=False` forever while what they created is present and correct — found on
+`u26-rke2-1` on the first live apply.
 
 ## Naming
 

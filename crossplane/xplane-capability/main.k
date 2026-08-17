@@ -152,7 +152,22 @@ _validStores = logic.validateStores(_enabled, {n: _vaultOf(n) for n in _enabled}
 # these objects have no pre-existing owner to adopt — and a ClusterProviderConfig
 # left behind after its Secret is gone is worse than none, because a VM XR then
 # references a config that cannot authenticate.
-_object = lambda resName: str, manifest: {str:} -> {str:} {
+# NOT DeriveFromObject for everything. provider-kubernetes derives readiness
+# from the managed object's own conditions, and neither an EnvironmentConfig nor
+# a ClusterProviderConfig HAS any — so those Objects sit at Ready=False forever
+# while the thing they created is present and correct. Measured here on
+# u26-rke2-1, and the same effect is documented for ClusterProviderConfig in
+# crossplane-configurations#294, where DeriveFromCelQuery with a constant was
+# the shape that worked.
+#
+# ExternalSecret keeps DeriveFromObject: it reports Ready, and that condition is
+# the only signal that Vault actually answered — a capability whose credentials
+# 403 must NOT report ready.
+# The mapping itself lives in logic.k so it can be tested — see readinessFor.
+_readyOnCreate = {policy = "DeriveFromCelQuery", celQuery = "true"}
+_readyFromObject = {policy = "DeriveFromObject"}
+
+_object = lambda resName: str, manifest: {str:}, readiness: {str:str} = _readyFromObject -> {str:} {
     {
         apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
@@ -167,7 +182,7 @@ _object = lambda resName: str, manifest: {str:} -> {str:} {
                 kind = "ClusterProviderConfig"
             }
             forProvider = {manifest = manifest}
-            readiness = {policy = "DeriveFromObject"}
+            readiness = readiness
         }
     }
 }
@@ -208,7 +223,6 @@ _externalSecret = lambda capName: str -> {str:} {
                     conversionStrategy = "Default"
                     decodingStrategy = "None"
                     metadataPolicy = "None"
-                    nullBytePolicy = "Ignore"
                 }
             }]
         }
@@ -250,7 +264,6 @@ _workloadSecret = lambda capName: str, w: capschema.WorkloadSecret, idx: int -> 
                     conversionStrategy = "Default"
                     decodingStrategy = "None"
                     metadataPolicy = "None"
-                    nullBytePolicy = "Ignore"
                 }
             }]
         }
@@ -318,7 +331,7 @@ _providerConfig = lambda capName: str -> {str:} {
                 }
             }
         }
-    })
+    }, _readyOnCreate)
 }
 
 _environmentConfig = lambda capName: str -> {str:} {
@@ -340,7 +353,7 @@ _environmentConfig = lambda capName: str -> {str:} {
             labels = {(_c.environmentLabelKey) = _environment}
         }
         data = _placement(capName) | _derived
-    })
+    }, _readyOnCreate)
 }
 
 _capObjects = lambda capName: str -> [{str:}] {

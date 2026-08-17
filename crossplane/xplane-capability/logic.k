@@ -75,3 +75,14 @@ validateStores = lambda enabled: [str], vaultFor: {str:{str:}}, server: str, aut
     assert len(_needing) == 0 or authMountPath, "spec.vault.auth.mountPath could not be derived — it defaults to <clusterName>-eso, so set spec.clusterName"
     True
 }
+
+schema Readiness:
+    policy: str
+    celQuery?: str
+
+# Which readiness policy a managed KIND gets. Here rather than inline in main.k
+# so the choice is testable: both directions are failures that hide rather than
+# break, so nothing else would catch a change.
+readinessFor = lambda kind: str -> Readiness {
+    Readiness {policy = "DeriveFromCelQuery", celQuery = "true"} if kind in ["EnvironmentConfig", "ClusterProviderConfig"] else Readiness {policy = "DeriveFromObject"}
+}
