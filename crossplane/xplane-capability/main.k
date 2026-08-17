@@ -106,6 +106,15 @@ _credsSecretName = lambda capName: str -> str {
     capName + "-creds-" + _environment
 }
 
+# Where the credentials Secret goes. Beside the provider by default; a
+# capability whose consumer reads it elsewhere says so with
+# credentialsNamespaceField, and the value comes from its own placement — for
+# ansible that is the Tekton pipeline's namespace, and a Secret in
+# crossplane-system would simply never be read.
+_credsNamespace = lambda capName: str -> str {
+    logic.credentialsNamespace(capName, _placement(capName), _ns)
+}
+
 # A capability names a KV mount -> it gets its own store. Names one that already
 # exists -> that one is used and nothing is created.
 _vaultOf = lambda capName: str -> {str:} {
@@ -196,7 +205,7 @@ _externalSecret = lambda capName: str -> {str:} {
         kind = "ExternalSecret"
         metadata = {
             name = _credsSecretName(capName)
-            namespace = _ns
+            namespace = _credsNamespace(capName)
         }
         spec = {
             refreshInterval = _refreshInterval
@@ -341,10 +350,16 @@ _environmentConfig = lambda capName: str -> {str:} {
     # providerConfigName/-Kind are DERIVED, never taken from the XR: they name
     # the object rendered two functions up, and letting an XR state them makes
     # it possible to point a VM at a config this XR did not create.
+    # Derived, never taken from the XR: each names an object rendered by this
+    # same module, and letting an XR state one makes it possible to point a
+    # consumer at something this XR did not create — or at a name that does not
+    # exist, which reads as a missing credential rather than a wrong name.
     _derived = ({
         providerConfigName = _objName(capName)
         providerConfigKind = _c.providerConfig.kind
-    } if _c?.providerConfig else {}) | _workloadSecretNames(capName)
+    } if _c?.providerConfig else {}) | _workloadSecretNames(capName) | ({
+        (_c.credentialsNameField) = _credsSecretName(capName)
+    } if _c?.credentialsNameField else {})
     _object(_resName, {
         apiVersion = "apiextensions.crossplane.io/v1beta1"
         kind = "EnvironmentConfig"

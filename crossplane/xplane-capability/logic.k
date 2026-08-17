@@ -97,3 +97,13 @@ schema Readiness:
 readinessFor = lambda kind: str -> Readiness {
     Readiness {policy = "DeriveFromCelQuery", celQuery = "true"} if kind in ["EnvironmentConfig", "ClusterProviderConfig"] else Readiness {policy = "DeriveFromObject"}
 }
+
+# Which namespace a capability's credentials Secret belongs in. Beside the
+# provider by default; a capability whose consumer reads it elsewhere names the
+# placement key holding that namespace. Here rather than inline so it is
+# testable: a Secret in the wrong namespace does not fail, it is simply never
+# read — the consumer reports a missing credential and points at itself.
+credentialsNamespace = lambda capName: str, placementOf: {str:}, providerNs: str -> str {
+    _f = cat.get(capName)?.credentialsNamespaceField
+    str(placementOf[_f]) if _f else providerNs
+}
