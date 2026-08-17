@@ -102,3 +102,21 @@ test_pipeline_credentials_are_plain_keys = lambda {
     assert len(_d) == 2
     assert "ANSIBLE_USER" in _d and "ANSIBLE_PASSWORD" in _d
 }
+
+# The name and the namespace of a credentials Secret are DERIVED, and both are
+# silent when wrong: an EnvironmentConfig naming a Secret that does not exist
+# makes the consumer report a missing credential rather than a wrong name, and
+# a Secret beside the provider is simply never read by a pipeline running
+# elsewhere.
+test_derived_credential_fields_are_not_also_defaulted = lambda {
+    _bad = [n for n in c.names if c.get(n)?.credentialsNameField and c.get(n).credentialsNameField in c.get(n).defaults]
+    assert _bad == [], "a derived field must not have a default that diverges from it: " + str(_bad)
+}
+
+# ansible's credentials are read by a Tekton pipeline in the pipeline's own
+# namespace — the same trap as a cloud-init password beside the provider.
+test_ansible_credentials_live_where_the_pipeline_runs = lambda {
+    _a = c.get("ansible")
+    assert _a.credentialsNamespaceField == "namespace"
+    assert _a.credentialsNamespaceField in _a.required, "and that namespace must be stated, not guessed"
+}
