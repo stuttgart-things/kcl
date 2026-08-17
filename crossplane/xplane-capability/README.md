@@ -6,6 +6,7 @@ act on an external system, onto a target cluster, one set per enabled capability
 
 | object | why |
 |---|---|
+| `ClusterSecretStore` | where the credentials come from — only where a capability names its own KV mount |
 | `ExternalSecret` (credentials) | the provider may log in |
 | `ClusterProviderConfig` | it knows where to connect |
 | `EnvironmentConfig` | it knows which node, datastore and template to place a VM on |
@@ -29,7 +30,16 @@ secretStore.name: vault-cicd-proxmox-labul
 ```
 
 Their own comment says the mount is injected from outside. Here the cluster name
-is the XR's, so the same derivation happens where the fact lives.
+is the XR's, so `<clusterName>-eso` is derived where the fact lives — which is
+only true because this module emits the store itself. A capability that borrowed
+an existing store would leave that derivation to whoever created it.
+
+**One store per capability, and that is not a choice.** A `ClusterSecretStore`
+fixes ONE Vault KV mount, and capabilities do not share one: proxmox credentials
+live under `cicd-proxmox-labul`, vsphere under its own. So a capability names
+its `mount` and gets a store; everything else about that store — server, CA,
+auth mount, role, ServiceAccount — is a property of the cluster and is stated
+once, or derived.
 
 **Package installation stays out.** The charts can install the Configuration and
 the Provider, which is what their long comments about duplicate lock nodes are
@@ -50,13 +60,20 @@ spec:
   clusterName: u26-rke2-1
   kubernetesProviderConfigRef: u26-rke2-1-kubernetes   # the TARGET cluster
   environment: labul              # defaults to clusterName; labels + names every object
+  vault:
+    server: https://vault.infra.sthings-vsphere.labul.sva.de
+    # auth.mountPath defaults to <clusterName>-eso, role to eso, the
+    # ServiceAccount to external-secrets/external-secrets, and the CA to
+    # vault-pki-ca in cert-manager — the shape the platform's external-secrets
+    # app already produces.
   namespace: crossplane-system    # where the provider reads its Secret
   workloadNamespace: default      # where the VM XRs live
   capabilities:
     proxmoxvm:
       enabled: true
       vault:
-        secret: default           # KV key; the store defaults to vault-cluster-secrets
+        mount: cicd-proxmox-labul # KV-v2 mount -> this capability gets its own store
+        secret: default           # KV key within it
       placement:
         node: ul-pve01
         datastore: V5010-01-1
@@ -121,6 +138,8 @@ every field is legitimately absent.
 | `test_numbers_are_stringified` | `vlanTag: 102` failing the apply on type rather than content |
 | `test_optional_fields_are_accepted_but_not_defaulted` | `cloneDatastore` acquiring a default. bpg's clone block is `ForceNew`: a value here rewrites the clone block of every VM already built under this EnvironmentConfig, and the provider answers with destroy + recreate |
 | `test_every_capability_is_reported_in_one_pass` | one-error-per-reconcile |
+| `test_a_store_without_a_server_is_rejected` | a store with nothing left to derive |
+| `test_an_existing_store_needs_no_vault_facts` | requiring Vault facts from a cluster that reuses a store it already trusts |
 
 ## Naming
 
@@ -128,7 +147,9 @@ Objects are named `<capability>-<environment>`, credentials
 `<capability>-creds-<environment>`. Two environments on one cluster (labda *and*
 labul) must not share a `ClusterProviderConfig` or a Secret.
 
-The credentials name deviates from the charts' `proxmox-creds-<env>` on purpose:
+The store is named `<capability>-<environment>` rather than the charts'
+`vault-<mount>`, and the credentials name deviates from their
+`proxmox-creds-<env>`, both on purpose:
 on a cluster that still has the chart installed, colliding would give one Secret
 two owners and each ESO refresh would overwrite the other. Nothing else refers
 to the name — only the `ClusterProviderConfig` this module also emits — so a

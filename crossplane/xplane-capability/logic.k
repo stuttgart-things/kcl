@@ -60,3 +60,18 @@ validate = lambda spec: {str:}, enabled: [str], givenFor: {str:{str:}} -> bool {
     assert len(enabled) == 0 or spec?.kubernetesProviderConfigRef, "spec.kubernetesProviderConfigRef is required — it names the ClusterProviderConfig for the TARGET cluster"
     True
 }
+
+validateStores = lambda enabled: [str], vaultFor: {str:{str:}}, server: str, authMountPath: str -> bool {
+    """The store half of validate().
+
+    A capability that names its own KV mount needs a Vault server and an auth
+    mount to reach it. Both have derivations, so the failure is not "you forgot
+    a field" but "nothing could be derived": `authMountPath` falls back to
+    `<clusterName>-eso`, which is only absent when clusterName is.
+    """
+    _needing = [n for n in enabled if not (vaultFor[n] or {})?.secretStoreName and (vaultFor[n] or {})?.mount]
+    _noServer = [n for n in _needing if not ((vaultFor[n] or {})?.server or server)]
+    assert len(_noServer) == 0, "these capabilities create a ClusterSecretStore but no Vault server is set (spec.vault.server, or per capability): " + ", ".join(_noServer)
+    assert len(_needing) == 0 or authMountPath, "spec.vault.auth.mountPath could not be derived — it defaults to <clusterName>-eso, so set spec.clusterName"
+    True
+}

@@ -58,6 +58,28 @@ _storeName = _spec?.secretStoreName or "vault-cluster-secrets"
 # resource's own namespace, so a cloud-init password next to the provider is a
 # Secret nothing reads.
 _workloadNs = _spec?.workloadNamespace or "default"
+
+# --- Vault coordinates for the stores this module creates -------------------
+# A ClusterSecretStore fixes ONE KV mount, and capabilities do not share one:
+# proxmox credentials live under cicd-proxmox-labul, vsphere under its own. So a
+# capability that names a mount gets its own store rather than borrowing the
+# cluster's.
+#
+# Everything except the mount is a property of the CLUSTER and is stated once
+# here — and `mountPath` is the reason this module exists in this form: the Helm
+# charts take it as a deploy-time parameter with the comment "appset injects
+# <cluster>-eso per cluster", while here the cluster name is on the XR.
+_vault = _spec?.vault or {}
+_vaultServer = _vault?.server
+_vaultAuth = _vault?.auth or {}
+_authMountPath = _vaultAuth?.mountPath or (_clusterName + "-eso" if _clusterName else None)
+_authRole = _vaultAuth?.role or "eso"
+_authSaName = _vaultAuth?.serviceAccountName or "external-secrets"
+_authSaNamespace = _vaultAuth?.serviceAccountNamespace or "external-secrets"
+_caProvider = _vault?.caProvider or {}
+_caName = _caProvider?.name or "vault-pki-ca"
+_caNamespace = _caProvider?.namespace or "cert-manager"
+_caKey = _caProvider?.key or "ca.crt"
 _refreshInterval = _spec?.refreshInterval or "1h"
 
 _capsIn = _spec?.capabilities or {}
@@ -84,6 +106,24 @@ _credsSecretName = lambda capName: str -> str {
     capName + "-creds-" + _environment
 }
 
+# A capability names a KV mount -> it gets its own store. Names one that already
+# exists -> that one is used and nothing is created.
+_vaultOf = lambda capName: str -> {str:} {
+    _capSpec(capName)?.vault or {}
+}
+_needsStore = lambda capName: str -> bool {
+    _v = _vaultOf(capName)
+    not _v?.secretStoreName and bool(_v?.mount)
+}
+
+# `<capability>-<environment>`, NOT the charts' `vault-<mount>`. Matching that
+# name on a cluster where the chart is still installed would give one store two
+# owners, and each side would keep rewriting the other's spec.
+_storeNameFor = lambda capName: str -> str {
+    _v = _vaultOf(capName)
+    _v?.secretStoreName or (_objName(capName) if _needsStore(capName) else _storeName)
+}
+
 # --- per-capability rendering ----------------------------------------------
 _capSpec = lambda capName: str -> {str:} {
     _capsIn[capName] or {}
@@ -104,6 +144,7 @@ _placement = lambda capName: str -> {str:str} {
 # surfaces as a VM the provider tries to place nowhere, minutes later, in a
 # message that names the provider and not this XR.
 _valid = logic.validate(_spec, _enabled, {n: _given(n) for n in _enabled})
+_validStores = logic.validateStores(_enabled, {n: _vaultOf(n) for n in _enabled}, _vaultServer, _authMountPath)
 
 # --- object wrapper ---------------------------------------------------------
 # One provider-kubernetes Object per manifest, exactly as flux-apps does it.
@@ -146,7 +187,7 @@ _externalSecret = lambda capName: str -> {str:} {
             refreshInterval = _refreshInterval
             secretStoreRef = {
                 kind = "ClusterSecretStore"
-                name = _v?.secretStoreName or _storeName
+                name = _storeNameFor(capName)
             }
             target = {
                 name = _credsSecretName(capName)
@@ -191,7 +232,7 @@ _workloadSecret = lambda capName: str, w: capschema.WorkloadSecret, idx: int -> 
             refreshInterval = _refreshInterval
             secretStoreRef = {
                 kind = "ClusterSecretStore"
-                name = _v?.secretStoreName or _storeName
+                name = _storeNameFor(capName)
             }
             target = {
                 name = _secretName
@@ -218,6 +259,45 @@ _workloadSecret = lambda capName: str, w: capschema.WorkloadSecret, idx: int -> 
 
 _workloadSecretNames = lambda capName: str -> {str:str} {
     {"ciPasswordSecretName": capName + "-" + w.nameSuffix for w in cat.get(capName).workloadSecrets if w.nameSuffix == "ci-password"}
+}
+
+_secretStore = lambda capName: str -> {str:} {
+    _v = _vaultOf(capName)
+    _resName = capName + "-secret-store"
+
+    # Cluster-scoped: a ClusterSecretStore has no namespace, and an
+    # ExternalSecret in any namespace may reference it — which is what the
+    # workload secret in a different namespace depends on.
+    _object(_resName, {
+        apiVersion = "external-secrets.io/v1"
+        kind = "ClusterSecretStore"
+        metadata = {name = _storeNameFor(capName)}
+        spec = {
+            provider = {
+                vault = {
+                    server = _v?.server or _vaultServer
+                    path = _v.mount
+                    version = "v2"
+                    caProvider = {
+                        type = "Secret"
+                        name = _caName
+                        namespace = _caNamespace
+                        key = _caKey
+                    }
+                    auth = {
+                        kubernetes = {
+                            mountPath = _authMountPath
+                            role = _authRole
+                            serviceAccountRef = {
+                                name = _authSaName
+                                namespace = _authSaNamespace
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
 }
 
 _providerConfig = lambda capName: str -> {str:} {
@@ -265,7 +345,7 @@ _environmentConfig = lambda capName: str -> {str:} {
 
 _capObjects = lambda capName: str -> [{str:}] {
     _c = cat.get(capName)
-    [_externalSecret(capName), _environmentConfig(capName)] + ([_providerConfig(capName)] if _c?.providerConfig else []) + [_workloadSecret(capName, _c.workloadSecrets[i], i) for i in range(len(_c.workloadSecrets))]
+    ([_secretStore(capName)] if _needsStore(capName) else []) + [_externalSecret(capName), _environmentConfig(capName)] + ([_providerConfig(capName)] if _c?.providerConfig else []) + [_workloadSecret(capName, _c.workloadSecrets[i], i) for i in range(len(_c.workloadSecrets))]
 }
 
 _objects = sum([_capObjects(n) for n in _enabled], [])
