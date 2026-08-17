@@ -66,7 +66,7 @@ test_several_policies_per_auth = lambda {
 test_policy_bodies_survive_encoding = lambda {
     _v = json.decode(_vars(m.vaultK8sAuth(_cfg([_auth("eso", [_own])]))[0])["policies"])
     assert "\n" in _v["kv-own"], "a multi-line body must come back multi-line"
-    assert _v["kv-own"].count("path \"") == 2, "data and metadata, per subtree"
+    assert _v["kv-own"].count("path \"") == 4, "data and metadata, each as the subtree itself and as a glob below it"
 }
 
 # --- the body is BUILT, not accepted (crossplane-configurations#285) ---------
@@ -107,7 +107,7 @@ test_nothing_escapes_the_kv_mount = lambda {
         l == "" or l.startswith('path "clusters/data/') or l.startswith('path "clusters/metadata/')
     }, "every path is anchored at the declared KV mount"
     assert "sudo" not in _v and "create" not in _v and "delete" not in _v and "update" not in _v
-    assert _v.count("path \"") == 6, "three subtrees, data and metadata each"
+    assert _v.count("path \"") == 12, "three subtrees x data/metadata x subtree-itself/below-it"
 }
 
 # A subtree name is a plain name. A slash, a glob or a traversal would each let
@@ -147,4 +147,24 @@ test_policy_name_is_derived = lambda {
 test_token_policies_are_not_rewritten = lambda {
     _v = _vars(m.vaultK8sAuth(_cfg([_auth("eso", [_own])]))[0])
     assert _v["token_policies"] == "[\"read-secrets\"]"
+}
+
+# Vault matches a policy path EXACTLY unless it ends in a glob, so
+# `x/data/default/*` does not match `x/data/default`. That is not a corner case:
+# the cicd mounts put their secret directly under the mount
+# (cicd-proxmox-labul/data/default), so a policy that looked like it granted
+# read denied it. Measured on u26-rke2-1 — external-secrets logged 403 on that
+# exact path while the ClusterSecretStore reported Valid, i.e. the login worked
+# and only the read failed.
+test_a_leaf_secret_is_granted_not_only_its_children = lambda {
+    _leaf = m.VaultPolicy {
+        name = "read-proxmox"
+        kvMount = "cicd-proxmox-labul"
+        read = ["default"]
+    }
+    _v = json.decode(_vars(m.vaultK8sAuth(_cfg([_auth("eso", [_leaf])]))[0])["policies"])
+    _b = _v["read-proxmox"]
+    assert 'path "cicd-proxmox-labul/data/default" { capabilities = ["read"] }' in _b, "the secret itself"
+    assert 'path "cicd-proxmox-labul/data/default/*" { capabilities = ["read"] }' in _b, "and anything below it"
+    assert 'path "cicd-proxmox-labul/metadata/default" { capabilities = ["read", "list"] }' in _b
 }

@@ -299,8 +299,19 @@ _policyBody = lambda clusterName: str, policy: VaultPolicy -> str {
     _subtree = lambda scope: str -> str {
         clusterName if scope == "own" else scope
     }
+
+    # FOUR paths per subtree, not two. Vault matches a policy path exactly
+    # unless it ends in a glob, and `x/data/default/*` does NOT match
+    # `x/data/default` — so a secret that IS the subtree (the cicd mounts put
+    # theirs directly under the mount, at cicd-proxmox-labul/data/default) was
+    # denied by a policy that appeared to grant it. Measured on u26-rke2-1:
+    # external-secrets logged 403 on exactly that path while the
+    # ClusterSecretStore reported Valid, so the login worked and only the read
+    # failed.
     "\n".join(sum([[
+        'path "' + policy.kvMount + '/data/' + _subtree(s) + '" { capabilities = ["read"] }'
         'path "' + policy.kvMount + '/data/' + _subtree(s) + '/*" { capabilities = ["read"] }'
+        'path "' + policy.kvMount + '/metadata/' + _subtree(s) + '" { capabilities = ["read", "list"] }'
         'path "' + policy.kvMount + '/metadata/' + _subtree(s) + '/*" { capabilities = ["read", "list"] }'
     ] for s in policy.read], [])) + "\n"
 }
