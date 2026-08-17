@@ -341,11 +341,7 @@ test_new_entries_are_registered = lambda {
 # healthy and every SopsSecret apply is then rejected by a validating webhook
 # whose certificate was never issued — which reads like a broken CRD.
 test_webhook_apps_depend_on_cert_manager = lambda {
-    _detached = [
-        n
-        for n in ["trust-manager", "sops-secrets-operator"]
-        if "cert-manager:install" not in c.get(n).components[0].dependsOn
-    ]
+    _detached = [n for n in ["trust-manager", "sops-secrets-operator"] if "cert-manager:install" not in c.get(n).components[0].dependsOn]
     assert _detached == [], "must wait for cert-manager: " + str(_detached)
 }
 
