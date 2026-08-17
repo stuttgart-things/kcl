@@ -138,14 +138,14 @@ test_status_fields_are_the_ones_the_xrd_declares = lambda {
 # stringified list with ParameterTypeMismatch, naming the Tekton parameter and
 # nothing about where the value came from.
 test_list_values_are_not_stringified = lambda {
-    _p = logic.placement("ansible", {namespace = "tekton-ci", storageClass = "openebs-hostpath"})
+    _p = logic.placement("ansible-run", {namespace = "tekton-ci", storageClass = "openebs-hostpath"})
     assert typeof(_p["ansibleExtraCollections"]) == "list"
     assert typeof(_p["gitRevision"]) == "str", "scalars still become strings"
 }
 
 # And an XR-supplied list wins the same way a scalar does.
 test_an_xr_list_overrides_the_default = lambda {
-    _p = logic.placement("ansible", {namespace = "tekton-ci", storageClass = "openebs-hostpath", ansibleExtraCollections = ["only.this:1.0.0"]})
+    _p = logic.placement("ansible-run", {namespace = "tekton-ci", storageClass = "openebs-hostpath", ansibleExtraCollections = ["only.this:1.0.0"]})
     assert _p["ansibleExtraCollections"] == ["only.this:1.0.0"]
 }
 
@@ -154,8 +154,8 @@ test_an_xr_list_overrides_the_default = lambda {
 # itself. ansible's is read by a Tekton pipeline in the pipeline's namespace;
 # a provider reads its own beside itself.
 test_credentials_land_where_their_consumer_reads_them = lambda {
-    _ap = logic.placement("ansible", {namespace = "tekton-ci", storageClass = "openebs-hostpath"})
-    assert logic.credentialsNamespace("ansible", _ap, "crossplane-system") == "tekton-ci"
+    _ap = logic.placement("ansible-run", {namespace = "tekton-ci", storageClass = "openebs-hostpath"})
+    assert logic.credentialsNamespace("ansible-run", _ap, "crossplane-system") == "tekton-ci"
     _pp = logic.placement("proxmoxvm", _full)
     assert logic.credentialsNamespace("proxmoxvm", _pp, "crossplane-system") == "crossplane-system"
 }

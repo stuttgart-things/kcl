@@ -14,7 +14,7 @@ kcl_options:
           vault:
             server: https://vault.infra.sthings-vsphere.labul.sva.de
           capabilities:
-            ansible:
+            ansible-run:
               enabled: true
               vault:
                 mount: cicd-proxmox-labul

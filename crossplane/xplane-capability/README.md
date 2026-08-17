@@ -85,7 +85,7 @@ spec:
 
 Everything not listed is either a catalog default or derived.
 `providerConfigName`, `providerConfigKind`, `ciPasswordSecretName` and (for
-`ansible`) `ansibleCredentialsSecretName` are **always** derived: each names an
+`ansible-run`) `ansibleCredentialsSecretName` are **always** derived: each names an
 object this module emits, and letting an XR state one makes it possible to point
 a consumer at something this XR did not create — or at a name that does not
 exist, which reads as a missing credential rather than a wrong name.
@@ -99,7 +99,7 @@ namespace does not fail — it is simply never read, and the consumer reports a
 | Secret | namespace | who reads it |
 |---|---|---|
 | credentials (default) | `spec.namespace` | the provider, beside itself |
-| credentials (`credentialsNamespaceField`) | a placement value | `ansible`: the Tekton pipeline, in its own namespace |
+| credentials (`credentialsNamespaceField`) | a placement value | `ansible-run`: the Tekton pipeline, in its own namespace |
 | workload | `spec.workloadNamespace` | the VM XR — see below |
 
 ## Two namespaces, not one
