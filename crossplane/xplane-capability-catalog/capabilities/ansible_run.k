@@ -1,6 +1,14 @@
 import ..schema as s
 
-# ansible — the AnsibleRun Configuration, not a provider.
+# ansible-run — the AnsibleRun Configuration, not a provider.
+#
+# Named for the Configuration it configures, not for the tool. That is not
+# cosmetic: the ansible-run Composition selects its EnvironmentConfig on the
+# label `ansible-run.resources.stuttgart-things.com/environment`, this catalog
+# derives that label from the entry name, and function-environment-configs
+# requires EXACTLY ONE match — so an entry called `ansible` emits a label
+# nothing selects, the Composition finds zero EnvironmentConfigs, and the error
+# names the selector rather than the entry.
 #
 # The entry that shows what the schema had to accommodate, and the reason it is
 # worth having a schema at all rather than three near-identical charts:
@@ -17,8 +25,8 @@ import ..schema as s
 #
 # Values are transcribed from the ansible capability chart and from the
 # ansible-run-defaults EnvironmentConfig that builds this fleet's VMs today.
-ansible: s.Capability = {
-    name = "ansible"
+ansibleRun: s.Capability = {
+    name = "ansible-run"
     credentials = s.Credentials {
         # Plain keys: the pipeline reads them as environment variables.
         data = {
@@ -32,7 +40,7 @@ ansible: s.Capability = {
     # second source that silently diverges from what is actually created.
     credentialsNameField = "ansibleCredentialsSecretName"
     credentialsNamespaceField = "namespace"
-    environmentLabelKey = "ansible.resources.stuttgart-things.com/environment"
+    environmentLabelKey = "ansible-run.resources.stuttgart-things.com/environment"
     # The pipeline definition and where it runs. Facts about THIS cluster —
     # which namespace has the Tekton pipeline SA, which StorageClass exists —
     # so they are required rather than defaulted: a wrong storageClass leaves

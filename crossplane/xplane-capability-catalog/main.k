@@ -7,12 +7,12 @@ not.
 """
 
 import .schema as s
-import .capabilities.ansible as ansible
+import .capabilities.ansible_run as ansible_run
 import .capabilities.proxmoxvm as proxmoxvm
 import .capabilities.vspherevm as vspherevm
 
 catalog: {str:s.Capability} = {
-    ansible = ansible.ansible
+    "ansible-run" = ansible_run.ansibleRun
     proxmoxvm = proxmoxvm.proxmoxvm
     vspherevm = vspherevm.vspherevm
 }
