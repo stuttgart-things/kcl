@@ -65,7 +65,28 @@ _isReady = lambda st: {str:} -> bool {
 #
 # Only facts belong here. A value a cluster CHOOSES (which Secret a certificate
 # lands in) has no entry and stays the XR's job.
+# The Gateway's name. The cilium artifact takes it as
+# `${CILIUM_GATEWAY_NAME:-cilium-gateway}`, so it has ALWAYS been configurable
+# and never configured — every cluster silently got the default, and every app
+# that needed the name had to be told it by hand (GATEWAY_NAME was a required
+# substitution on headlamp and machinery).
+#
+# So the module now SETS it rather than letting the artifact default it, and
+# publishes the same value. Setting what we publish is the point: reading the
+# artifact's default into a constant here would put the same string in two
+# repositories, and the next person to change one would not find the other.
+#
+# The default stays `cilium-gateway`, deliberately. Deriving it from the cluster
+# name would be defensible — but the Gateway lives on the TARGET cluster, one
+# per cluster, so it does not collide, and renaming it on an existing cluster
+# breaks every HTTPRoute that already references it. Discoverability is the gap;
+# a rename is a separate decision.
+_gatewayName = ((_spec?.apps or {})?.cilium?.substitute or {})?.CILIUM_GATEWAY_NAME or "cilium-gateway"
+
 _discovered = {
+    gateway = {
+        name = _gatewayName
+    }
     ipReservation = {
         domain = l.clusterDomain(_readStatus(_ipResKey)?.fqdn or "")
         ipAddresses = _readStatus(_ipResKey)?.ipAddresses or []
@@ -595,6 +616,13 @@ _xrStatus = _oxr | {
             cilium = {
                 enabled = _ciliumEnabled
                 ready = _ciliumReady
+                # The Gateway's name, published so nothing has to be told it.
+                # Set here rather than defaulted by the artifact — see the note
+                # above _gatewayName. Present even when the cilium INSTALL child
+                # is disabled (the usual case on rke2, where the CNI comes from
+                # the AnsibleRun and only the config app runs): the name belongs
+                # to the cluster, not to that child.
+                gatewayName = _gatewayName
                 loadBalancerReady = _ciliumStatus?.loadBalancerReady or False
                 gatewayReady = _ciliumStatus?.gatewayReady or False
                 networkKey = _ciliumStatus?.networkKey or ""

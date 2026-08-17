@@ -160,8 +160,9 @@ test_headlamp_missing_vars_detected = lambda {
             headlamp = {}
         }
     }
-    assert len(l.missingSubstitutions(_spec)) == 2
-    assert l.pendingSubstitutions(_spec) == ["headlamp-app: DOMAIN"]
+    # HOSTNAME alone is unsuppliable now — GATEWAY_NAME became discoverable.
+    assert l.missingSubstitutions(_spec) == ["headlamp-app: HOSTNAME"]
+    assert l.pendingSubstitutions(_spec) == ["headlamp-app: DOMAIN", "headlamp-app: GATEWAY_NAME"]
 }
 
 # --- cross-artifact dependsOn -------------------------------------------------
@@ -354,7 +355,7 @@ test_apps_cilium_bare_enable_is_rejected = lambda {
         apps = {
             cilium = {enabled = True}
         }
-    })) == 3, "the other three wait for the reservation"
+    })) == 4, "the other four wait — three on the reservation, the name on the platform"
 }
 
 # The wildcard the clusterbook reservation publishes is not the domain — the
@@ -372,7 +373,11 @@ test_cluster_domain_passes_through_non_wildcards = lambda {
     assert l.clusterDomain("gw.example.com") == "gw.example.com"
 }
 
+# gateway.name is in EVERY real _discovered — the module defaults it to
+# "cilium-gateway" rather than letting the artifact do so, precisely so it is
+# always resolvable. The fixture says so too.
 _disc = {
+    gateway = {name = "cilium-gateway"}
     ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de", ipAddresses = ["10.31.102.8"], zone = "sthings-vsphere.labul.sva.de"}
 }
 
@@ -408,8 +413,8 @@ test_discovery_satisfies_required_substitutions = lambda {
     _spec = {clusterName = "c", apps = {
         cilium = {enabled = True}
     }}
-    assert len(l.pendingSubstitutions(_spec)) == 3, "nothing discovered yet: three still waiting"
-    assert len(l.pendingSubstitutions(_spec, _disc)) == 0, "discovery clears all three"
+    assert len(l.pendingSubstitutions(_spec)) == 4, "nothing discovered yet: four still waiting"
+    assert len(l.pendingSubstitutions(_spec, _disc)) == 0, "discovery clears all four"
     _m = l.missingSubstitutions(_spec, _disc)
     assert _m == ["cilium-config: CILIUM_GATEWAY_TLS_SECRET"], "only the decision is left"
 }
@@ -478,13 +483,15 @@ test_apps_machinery_discovers_its_domain = lambda {
     assert _k.substitute["DOMAIN"] == "u26-rke2-1.sthings-vsphere.labul.sva.de"
 }
 
-test_apps_machinery_costs_one_typed_value = lambda {
+test_apps_machinery_costs_no_typed_value = lambda {
     # stuttgart-things/flux#193 fixed the artifact default (it read `1.13.4`
     # while the published tags read `v1.13.4`, so the OCIRepository never
     # resolved), and catalog 0.9.0 dropped MACHINERY_VERSION from the required
-    # list. What remains is GATEWAY_NAME — a decision, not a fact, so nothing
-    # can discover it.
+    # list. GATEWAY_NAME was the last typed value and was called a decision —
+    # until it turned out the platform SETS that name on the Gateway it creates,
+    # so stating it again was only a chance to state it differently.
     _d = {
+        gateway = {name = "cilium-gateway"}
         ipReservation = {domain = "u26-rke2-1.sthings-vsphere.labul.sva.de", ipAddresses = [], zone = "z"}
     }
     _withGateway = {clusterName = "c", apps = {
@@ -495,9 +502,11 @@ test_apps_machinery_costs_one_typed_value = lambda {
     _bare = {clusterName = "c", apps = {
         machinery = {enabled = True}
     }}
-    _missing = l.missingSubstitutions(_bare, _d)
-    assert len(_missing) == 1, "the Gateway choice stays required"
-    assert "GATEWAY_NAME" in ", ".join(_missing)
+
+    # Used to cost exactly one typed value, the Gateway's name. It does not any
+    # more: the platform publishes the name it also creates the Gateway with.
+    assert l.missingSubstitutions(_bare, _d) == [], "a bare enable is enough"
+    assert l.pendingSubstitutions(_bare, _d) == [], "and nothing is left waiting"
 }
 
 # The resolver grew from two segments to four when the Vault mount a cluster
@@ -620,4 +629,36 @@ test_unsuppliable_variable_is_still_fatal = lambda {
             "nfs-csi" = {enabled = True}
         }
     }) == []
+}
+
+# --- the gateway name is discovered, not typed -------------------------------
+
+# GATEWAY_NAME was a required substitution on headlamp and machinery, so every
+# XR had to state a name the system already knew. The cilium artifact took it as
+# ${CILIUM_GATEWAY_NAME:-cilium-gateway} all along — configurable and never
+# configured. Now the module sets it and publishes the same value, and consumers
+# read it through substitutionSources like any other discovered fact.
+_gwDisc = {
+    gateway = {name = "cilium-gateway"}
+}
+
+test_gateway_name_resolves_for_consumers = lambda {
+    assert l.resolveSource(_gwDisc, "gateway.name") == "cilium-gateway"
+}
+
+# An XR that names its own Gateway must win — same rule as every other
+# discovered value: what the cluster states beats what the platform found.
+test_gateway_name_override_is_visible = lambda {
+    assert l.resolveSource({
+        gateway = {name = "edge"}
+    }, "gateway.name") == "edge"
+}
+
+# Absent, it must resolve to "" so requiredSubstitutions still rejects by name
+# rather than substituting a blank Flux would deploy without complaint.
+test_gateway_name_absent_is_empty = lambda {
+    assert l.resolveSource({}, "gateway.name") == ""
+    assert l.resolveSource({
+        gateway = {}
+    }, "gateway.name") == ""
 }
