@@ -1,0 +1,27 @@
+kcl_options:
+  - key: params
+    value:
+      oxr:
+        apiVersion: config.stuttgart-things.com/v1alpha1
+        kind: Capability
+        metadata:
+          name: u26-rke2-1-capability
+          namespace: default
+        spec:
+          clusterName: u26-rke2-1
+          kubernetesProviderConfigRef: u26-rke2-1-kubernetes
+          environment: labul
+          capabilities:
+            proxmoxvm:
+              enabled: true
+              vault:
+                secret: default
+              placement:
+                node: ul-pve01
+                datastore: V5010-01-1
+                bridge: vmbrvlan
+                vlanTag: "102"
+                pool: stuttgart-things
+                templateVmId: "211"
+      ocds: {}
+      ctx: {}
