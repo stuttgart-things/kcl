@@ -36,7 +36,7 @@ import ..schema as s
 # exist.
 cilium: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/infra/cilium"
-    defaultVersion = "v1.18.1"
+    defaultVersion = "v1.20.0"
     components = [
         s.Component {
             name = "config"
