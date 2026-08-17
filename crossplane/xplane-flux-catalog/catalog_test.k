@@ -330,10 +330,29 @@ test_vault_discovers_the_domain_but_not_the_issuer = lambda {
 # typo in this batch fails loudly rather than as DependencyNotReady on a
 # cluster.
 test_new_entries_are_registered = lambda {
-    _want = ["external-secrets", "nfs-csi", "vault", "tekton"]
+    _want = ["external-secrets", "nfs-csi", "vault", "tekton", "sops-secrets-operator"]
     _missing = [n for n in _want if n not in c.catalog]
     assert _missing == [], "entry missing from the registry"
-    assert len(c.names) == 11
+    assert len(c.names) == 12
+}
+
+# Both depend on cert-manager, and both would present as something else without
+# it. trust-manager's CRDs never appear; the sops operator's Deployment comes up
+# healthy and every SopsSecret apply is then rejected by a validating webhook
+# whose certificate was never issued — which reads like a broken CRD.
+test_webhook_apps_depend_on_cert_manager = lambda {
+    _detached = [n for n in ["trust-manager", "sops-secrets-operator"] if "cert-manager:install" not in c.get(n).components[0].dependsOn]
+    assert _detached == [], "must wait for cert-manager: " + str(_detached)
+}
+
+# No HelmRelease here: the app pulls a kustomize base built from the operator's
+# own config/default, so there is no chart to wait on. The assertion is here
+# because wrapsHelmRelease also drives the default timeout, and a later editor
+# copying trust-manager wholesale would set it wrongly.
+test_sops_operator_is_not_a_helm_release = lambda {
+    _c = c.get("sops-secrets-operator").components[0]
+    assert not _c.wrapsHelmRelease
+    assert _c.requiredSubstitutions == [], "the age key is not a substitution"
 }
 
 # tekton is the first entry from cicd/ rather than apps/ or infra/ — those were
