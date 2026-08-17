@@ -313,8 +313,11 @@ test_openebs_renders_from_a_bare_enable = lambda {
     _named = [s for s in _srcs if s.name == "openebs"]
     assert len(_named) == 1
     assert _named[0].url == "oci://ghcr.io/stuttgart-things/flux/infra/openebs"
-    # The floor that can say no to Loki/MinIO/Alloy — see the catalog entry.
-    assert _named[0].ref == "v1.19.1"
+    # Two floors, both load-bearing: v1.19.1 can say no to Loki/MinIO/Alloy,
+    # v1.20.1 makes openebs-hostpath the DEFAULT StorageClass. rke2 ships no
+    # default at all, so without the second a cluster installs openebs and still
+    # has every unclassed PVC hang. See the catalog entry.
+    assert _named[0].ref == "v1.20.1"
 }
 
 # The catalog's cilium entry, reached through spec.apps — NOT spec.cilium.
