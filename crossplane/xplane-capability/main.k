@@ -387,6 +387,7 @@ _xrStatus = _oxr | {
             ready = _capReady(n)
             environmentConfig = _objName(n)
             credentialsSecret = _credsSecretName(n)
+            secretStore = _storeNameFor(n)
             **({providerConfig = _objName(n)} if cat.get(n)?.providerConfig else {})
         } for n in _enabled}
     }

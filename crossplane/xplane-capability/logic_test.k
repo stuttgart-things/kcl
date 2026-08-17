@@ -120,3 +120,16 @@ test_secret_objects_derive_readiness_from_themselves = lambda {
     _wrong = [k for k in ["ExternalSecret", "ClusterSecretStore"] if logic.readinessFor(k).policy != "DeriveFromObject"]
     assert _wrong == [], "these carry the only evidence that Vault answered: " + str(_wrong)
 }
+
+# The XRD declares status.capabilities.<n>.secretStore, and for one release the
+# module did not write it — an edit lost to a reformat. #283 is the same drift
+# in the other direction (module writes, XRD does not declare), where every
+# compose fails; this direction breaks nothing and is therefore worse to spot:
+# the field is documented and simply never appears. Both need the two sides
+# named in one place.
+statusFields = ["ready", "environmentConfig", "credentialsSecret", "secretStore", "providerConfig"]
+
+test_status_fields_are_the_ones_the_xrd_declares = lambda {
+    _want = ["credentialsSecret", "environmentConfig", "providerConfig", "ready", "secretStore"]
+    assert sorted(statusFields) == _want, "keep this in step with the XRD in crossplane-configurations/bootstrap/capability"
+}
