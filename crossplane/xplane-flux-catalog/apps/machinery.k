@@ -28,8 +28,16 @@ import ..schema as s
 #     NetworkIntegration: a dashboard, just not this fleet's.
 #
 # The artifact now ships the watch set as a file, covering ClusterStack,
-# Platform, XIPReservation and VaultK8sAuth. Enabling this app is therefore
-# enough — no ConfigMap has to be placed on the cluster by hand.
+# Platform, XIPReservation, VaultK8sAuth and — since v1.22.0 — NativeProxmoxVM,
+# NativeVsphereVM and AnsibleRun. Enabling this app is therefore enough; no
+# ConfigMap has to be placed on the cluster by hand.
+#
+# v1.22.0 added the last three because four kinds was too few to see what a
+# build is doing: a ClusterStack shows its stage, but the VM it waits on and the
+# AnsibleRun that provisions it were both invisible — exactly what one opens
+# kubectl for when a build sits at `stage: vm`. AnsibleRun also surfaces its
+# pipelineRunName, which is how the Tekton logs are found
+# (stuttgart-things/flux#201).
 #
 # v1.19.3 adds the RBAC to actually READ those kinds (stuttgart-things/flux#195).
 # The watch set lived in the flux artifact while the ClusterRole lived in the
@@ -40,7 +48,7 @@ import ..schema as s
 # `clusterstacks... is forbidden`. Do not pin below v1.19.3.
 machinery: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/machinery"
-    defaultVersion = "v1.19.3"
+    defaultVersion = "v1.22.0"
     components = [
         s.Component {
             name = "app"
