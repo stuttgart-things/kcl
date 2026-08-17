@@ -9,10 +9,21 @@ import xplane_capability_catalog.main as cat
 # Catalog defaults overlaid with the XR's values. Only keys the catalog knows
 # are kept — unknownFields turns the rest into an error rather than a value that
 # quietly disappears.
-placement = lambda capName: str, given: {str:} -> {str:str} {
+# Scalars become strings, everything else is passed through untouched.
+# EnvironmentConfig data is not string-only, and the one list in the catalog —
+# ansible's collection set — is handed to Tekton as a parameter, where a
+# stringified list is rejected with ParameterTypeMismatch: an error naming the
+# Tekton parameter and nothing about where the value came from. A YAML author
+# writing `vlanTag: 102` still has to be caught, so ints and bools keep being
+# coerced.
+_coerce = lambda v: any -> any {
+    v if typeof(v) in ["list", "dict"] else str(v)
+}
+
+placement = lambda capName: str, given: {str:} -> {str:} {
     _c = cat.get(capName)
     _known = cat.fields(capName)
-    _over = {k: str(given[k]) for k in given if k in _known}
+    _over = {k: _coerce(given[k]) for k in given if k in _known}
 
     # Built key by key rather than with `|`: KCL treats a union between a
     # schema-typed dict and an override of the same key as a CONFLICT and
@@ -85,4 +96,14 @@ schema Readiness:
 # break, so nothing else would catch a change.
 readinessFor = lambda kind: str -> Readiness {
     Readiness {policy = "DeriveFromCelQuery", celQuery = "true"} if kind in ["EnvironmentConfig", "ClusterProviderConfig"] else Readiness {policy = "DeriveFromObject"}
+}
+
+# Which namespace a capability's credentials Secret belongs in. Beside the
+# provider by default; a capability whose consumer reads it elsewhere names the
+# placement key holding that namespace. Here rather than inline so it is
+# testable: a Secret in the wrong namespace does not fail, it is simply never
+# read — the consumer reports a missing credential and points at itself.
+credentialsNamespace = lambda capName: str, placementOf: {str:}, providerNs: str -> str {
+    _f = cat.get(capName)?.credentialsNamespaceField
+    str(placementOf[_f]) if _f else providerNs
 }

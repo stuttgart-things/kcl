@@ -84,9 +84,23 @@ spec:
 ```
 
 Everything not listed is either a catalog default or derived.
-`providerConfigName` and `providerConfigKind` are **always** derived: they name
-an object this module emits, and letting an XR state them would make it possible
-to point a VM at a config this XR did not create.
+`providerConfigName`, `providerConfigKind`, `ciPasswordSecretName` and (for
+`ansible`) `ansibleCredentialsSecretName` are **always** derived: each names an
+object this module emits, and letting an XR state one makes it possible to point
+a consumer at something this XR did not create — or at a name that does not
+exist, which reads as a missing credential rather than a wrong name.
+
+## Three namespaces, not one
+
+Where a Secret goes is decided per capability, because a Secret in the wrong
+namespace does not fail — it is simply never read, and the consumer reports a
+*missing* credential while pointing at itself.
+
+| Secret | namespace | who reads it |
+|---|---|---|
+| credentials (default) | `spec.namespace` | the provider, beside itself |
+| credentials (`credentialsNamespaceField`) | a placement value | `ansible`: the Tekton pipeline, in its own namespace |
+| workload | `spec.workloadNamespace` | the VM XR — see below |
 
 ## Two namespaces, not one
 
@@ -138,6 +152,8 @@ every field is legitimately absent.
 | `test_numbers_are_stringified` | `vlanTag: 102` failing the apply on type rather than content |
 | `test_optional_fields_are_accepted_but_not_defaulted` | `cloneDatastore` acquiring a default. bpg's clone block is `ForceNew`: a value here rewrites the clone block of every VM already built under this EnvironmentConfig, and the provider answers with destroy + recreate |
 | `test_every_capability_is_reported_in_one_pass` | one-error-per-reconcile |
+| `test_list_values_are_not_stringified` | `ansibleExtraCollections` reaching Tekton as a string — rejected there with `ParameterTypeMismatch`, an error naming the Tekton parameter and nothing about where the value came from |
+| `test_credentials_land_where_their_consumer_reads_them` | a credentials Secret beside the provider when a pipeline elsewhere reads it |
 | `test_a_store_without_a_server_is_rejected` | a store with nothing left to derive |
 | `test_an_existing_store_needs_no_vault_facts` | requiring Vault facts from a cluster that reuses a store it already trusts |
 | `test_status_less_objects_do_not_derive_readiness_from_themselves` | an EnvironmentConfig or ClusterProviderConfig stuck at Ready=False forever |

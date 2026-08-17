@@ -14,6 +14,13 @@ kcl_options:
           vault:
             server: https://vault.infra.sthings-vsphere.labul.sva.de
           capabilities:
+            ansible:
+              enabled: true
+              vault:
+                mount: cicd-proxmox-labul
+              placement:
+                namespace: tekton-ci
+                storageClass: openebs-hostpath
             proxmoxvm:
               enabled: true
               vault:
