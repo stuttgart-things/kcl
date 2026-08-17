@@ -12,7 +12,7 @@ import ..schema as s
 # The Gateway they reference must already exist on the target cluster.
 headlamp: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/headlamp"
-    defaultVersion = "v1.18.1"
+    defaultVersion = "v1.20.0"
     components = [
         s.Component {
             name = "app"
