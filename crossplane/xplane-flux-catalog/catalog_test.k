@@ -103,15 +103,23 @@ test_openebs_declares_no_required_substitutions = lambda {
 }
 
 # The catalog version is the FLUX ARTIFACT tag, never the openebs chart version
-# (which the artifact pins separately as OPENEBS_VERSION, default 4.2.0). v1.19.1
-# is the floor because it is the first release that carries flux#192 — before
-# it, the artifact had no loki/alloy keys, so raising OPENEBS_VERSION to 4.5.x
-# would have silently deployed Loki, MinIO and Alloy with no way to say no.
+# (which the artifact pins separately as OPENEBS_VERSION, default 4.2.0). Two
+# floors, both load-bearing:
+#
+#   v1.19.1  first release carrying flux#192 — before it the artifact had no
+#            loki/alloy keys, so raising OPENEBS_VERSION to 4.5.x would have
+#            silently deployed Loki, MinIO and Alloy with no way to say no.
+#   v1.20.1  makes openebs-hostpath the DEFAULT StorageClass (flux#198). rke2
+#            ships no default at all, so a cluster could install openebs and
+#            still have every unclassed PVC hang. Found through Tekton: its
+#            Results component wants a PostgreSQL, the PVC stayed Pending, the
+#            operator blocked, and the Dashboard never appeared — a failure
+#            that named neither storage nor a class.
 test_openebs_pins_a_release_that_can_say_no_to_loki = lambda {
     _v = c.get("openebs").defaultVersion
     assert _v.startswith("v")
-    assert _v != "v4.2.0"
-    assert _v == "v1.19.1"
+    assert _v != "v4.2.0", "the artifact tag, not the chart version"
+    assert _v == "v1.20.1"
 }
 
 test_cilium_is_registered = lambda {
