@@ -99,12 +99,17 @@ schema Capability:
     """Placement fields the XR MUST supply. Facts about a datacenter that
     nothing can derive: which node, which datastore, which template."""
 
-    defaults: {str:str} = {}
+    defaults: {str:any} = {}
     """Placement fields with a fleet-wide default. An XR value always wins.
     These are here rather than on the XR because they are properties of the
     IMAGE and the provider, not of the environment: sthings-u26 puts its root
     disk on virtio0, and getting that wrong produces a VM that boots to no
-    disk."""
+    disk.
+
+    Values are NOT all strings. `ansible.ansibleExtraCollections` is a list, and
+    it has to stay one: the consuming Composition hands it to Tekton, which
+    rejects a stringified list with ParameterTypeMismatch — an error that names
+    the Tekton parameter and nothing about where the value came from."""
 
     workloadSecrets: [WorkloadSecret] = []
     """Secrets that belong in the workload namespace rather than beside the

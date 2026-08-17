@@ -6,7 +6,7 @@ test_every_entry_is_registered_under_its_own_name = lambda {
 }
 
 test_get_rejects_an_unknown_name = lambda {
-    assert len(c.names) == 2
+    assert len(c.names) == 3
     assert "proxmoxvm" in c.names
 }
 
@@ -72,4 +72,33 @@ test_workload_secrets_are_referenced_from_placement = lambda {
 test_workload_secret_vault_keys_match_their_templates = lambda {
     _undeclared = [n + ":" + k for n in c.names for w in c.get(n).workloadSecrets for k in w.vaultKeys if not any_true([("{{ ." + k + " }}") in w.data[dk] for dk in w.data])]
     assert _undeclared == [], "declared but never referenced: " + str(_undeclared)
+}
+
+# The entry that made the schema earn its keep. `ansibleExtraCollections` reaches
+# Tekton as a parameter, and a stringified list is rejected there with
+# ParameterTypeMismatch — an error naming the Tekton parameter and nothing about
+# where the value came from. So placement values are not all strings, and the
+# renderer must not coerce them.
+test_list_valued_defaults_stay_lists = lambda {
+    _v = c.get("ansible").defaults["ansibleExtraCollections"]
+    assert typeof(_v) == "list", "a stringified list is a ParameterTypeMismatch in Tekton"
+    assert len(_v) > 0
+}
+
+# ansible configures a Configuration, not a provider — so it has no
+# ClusterProviderConfig, and the renderer must emit none rather than an empty
+# one. providerConfig was optional from the first version for this case.
+test_ansible_has_no_provider_config = lambda {
+    assert not c.get("ansible")?.providerConfig
+    assert c.get("proxmoxvm")?.providerConfig, "while a provider capability does"
+}
+
+# Two plain keys, because the consumer is a pipeline reading environment
+# variables — not a Terraform provider parsing one credentials document. The
+# single-key rule is asserted only for capabilities WITH a provider config, and
+# this is the entry that would break a rule stated too broadly.
+test_pipeline_credentials_are_plain_keys = lambda {
+    _d = c.get("ansible").credentials.data
+    assert len(_d) == 2
+    assert "ANSIBLE_USER" in _d and "ANSIBLE_PASSWORD" in _d
 }
