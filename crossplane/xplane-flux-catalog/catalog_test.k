@@ -336,13 +336,17 @@ test_new_entries_are_registered = lambda {
     assert len(c.names) == 12
 }
 
-# Both depend on cert-manager, and both would present as something else without
-# it. trust-manager's CRDs never appear; the sops operator's Deployment comes up
-# healthy and every SopsSecret apply is then rejected by a validating webhook
-# whose certificate was never issued — which reads like a broken CRD.
-test_webhook_apps_depend_on_cert_manager = lambda {
-    _detached = [n for n in ["trust-manager", "sops-secrets-operator"] if "cert-manager:install" not in c.get(n).components[0].dependsOn]
-    assert _detached == [], "must wait for cert-manager: " + str(_detached)
+# The obvious assumption about this operator is wrong, and the cost of acting on
+# it is not an extra edge in the graph: the catalog REJECTS an app whose
+# dependency is not enabled, so a cert-manager dependsOn here would deny the
+# operator to every cluster that does not run cert-manager. Upstream
+# (isindir/sops-secrets-operator) does ship a webhook and a cert-manager
+# Certificate; ours (group sops.stuttgart-things.com) publishes a Namespace, 5
+# CRDs, a ServiceAccount, a ClusterRole+Binding and a Deployment, and nothing
+# else — checked against the v0.9.0 artifact and a live install.
+test_sops_operator_has_no_cert_manager_dependency = lambda {
+    _c = c.get("sops-secrets-operator").components[0]
+    assert _c.dependsOn == [], "the published artifact installs no webhook and no Certificate"
 }
 
 # No HelmRelease here: the app pulls a kustomize base built from the operator's
@@ -350,9 +354,9 @@ test_webhook_apps_depend_on_cert_manager = lambda {
 # because wrapsHelmRelease also drives the default timeout, and a later editor
 # copying trust-manager wholesale would set it wrongly.
 test_sops_operator_is_not_a_helm_release = lambda {
-    _c = c.get("sops-secrets-operator").components[0]
-    assert not _c.wrapsHelmRelease
-    assert _c.requiredSubstitutions == [], "the age key is not a substitution"
+    _c2 = c.get("sops-secrets-operator").components[0]
+    assert not _c2.wrapsHelmRelease
+    assert _c2.requiredSubstitutions == [], "the age key is not a substitution"
 }
 
 # tekton is the first entry from cicd/ rather than apps/ or infra/ — those were
