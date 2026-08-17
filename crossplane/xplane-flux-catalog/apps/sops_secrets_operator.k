@@ -8,15 +8,22 @@ import ..schema as s
 # credentials stay encrypted blobs and every provider that needs them sits
 # without a config.
 #
-# Depends on cert-manager for the same reason trust-manager does, but the
-# failure is nastier. trust-manager's CRDs simply do not appear; here the
-# Deployment comes up healthy and every `SopsSecret` apply is then rejected by a
-# validating webhook whose certificate was never issued — which reads like a
-# broken CRD rather than a missing dependency.
-#
 # NOT a HelmRelease: the app pulls a kustomize base built from the operator's
-# own config/default, so there is no chart to wait on. 10m rather than the
-# 15m the Helm-wrapping entries use — CRDs and a webhook, no chart pull.
+# config/default, so there is no chart to wait on. 10m rather than the 15m the
+# Helm-wrapping entries use — CRDs and a Deployment, no chart pull.
+#
+# NO cert-manager dependency, which is worth stating because the obvious
+# assumption is wrong. Upstream (isindir/sops-secrets-operator, group
+# isindir.github.com) ships a validating webhook and `config/default` wires in
+# ../webhook and ../certmanager. This is NOT that operator: it is
+# stuttgart-things/sops-secrets-operator, group sops.stuttgart-things.com, and
+# the artifact it publishes contains exactly a Namespace, 5 CRDs, a
+# ServiceAccount, a ClusterRole+Binding and a Deployment. Verified against the
+# published v0.9.0 artifact and against a live install on u26-rke2-1
+# (2026-08-17): no ValidatingWebhookConfiguration, no Certificate, no cert
+# volume on the Deployment. Adding the dependency back would not be a harmless
+# extra edge — the catalog REJECTS an app whose dependency is not enabled, so
+# it would deny this operator to any cluster that does not run cert-manager.
 #
 # The age key is deliberately absent. The operator carries none: it resolves one
 # per resource through `spec.decryption.keyRef`, so how a key reaches a cluster
@@ -31,7 +38,6 @@ sopsSecretsOperator: s.App = {
             name = "install"
             path = "./"
             timeout = "10m"
-            dependsOn = ["cert-manager:install"]
         }
     ]
 }
