@@ -322,10 +322,44 @@ test_vault_discovers_the_domain_but_not_the_issuer = lambda {
 # typo in this batch fails loudly rather than as DependencyNotReady on a
 # cluster.
 test_new_entries_are_registered = lambda {
-    _want = ["external-secrets", "nfs-csi", "vault"]
+    _want = ["external-secrets", "nfs-csi", "vault", "tekton"]
     _missing = [n for n in _want if n not in c.catalog]
     assert _missing == [], "entry missing from the registry"
-    assert len(c.names) == 10
+    assert len(c.names) == 11
+}
+
+# tekton is the first entry from cicd/ rather than apps/ or infra/ — those were
+# the only directories the flux release workflow published, so nothing under
+# cicd/ existed as an OCI artifact until stuttgart-things/flux#196.
+test_tekton_is_split_so_only_the_dashboard_costs_a_value = lambda {
+    _c = {x.name: x for x in c.get("tekton").components}
+    assert sorted(_c) == ["ci-namespace", "dashboard", "install"]
+
+    # The point of splitting: operator and config need nothing, the namespace
+    # defaults its own. Bundled, every Tekton user would owe a domain whether or
+    # not they wanted a dashboard — and Flux substitutes an empty string rather
+    # than failing, so they would get a route pointing at nothing.
+    assert _c["install"].requiredSubstitutions == []
+    assert _c["ci-namespace"].requiredSubstitutions == []
+    assert "TEKTON_DASHBOARD_DOMAIN" in _c["dashboard"].requiredSubstitutions
+
+    # Only the dashboard is a choice. The CI namespace is ON by default although
+    # upstream calls it opt-in: every Tekton here runs Crossplane-managed
+    # PipelineRuns, and that namespace carries the prune.skip annotation which
+    # keeps the cluster-wide pruner from deleting them overnight.
+    assert _c["dashboard"].optional
+    assert not _c["ci-namespace"].optional
+    assert not _c["install"].optional
+}
+
+# Of the dashboard's three required variables only the hostname is typed — what
+# a service is CALLED is a decision. Domain and Gateway name are facts the
+# platform already publishes.
+test_tekton_dashboard_costs_one_typed_value = lambda {
+    _d = [x for x in c.get("tekton").components if x.name == "dashboard"][0]
+    _typed = [v for v in _d.requiredSubstitutions if v not in _d.substitutionSources]
+    assert _typed == ["TEKTON_DASHBOARD_HOSTNAME"]
+    assert _d.substitutionSources["GATEWAY_NAME"] == "gateway.name"
 }
 
 # Every one of the five is REQUIRED although the artifact defaults it, and each

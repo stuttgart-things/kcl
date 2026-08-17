@@ -11,6 +11,7 @@ import .apps.headlamp as headlamp
 import .apps.machinery as machinery
 import .apps.nfs_csi as nfs_csi
 import .apps.openebs as openebs
+import .apps.tekton as tekton
 import .apps.trust_manager as trust_manager
 import .apps.vault as vault
 import schema as s
@@ -24,6 +25,7 @@ catalog: {str:s.App} = {
     machinery = machinery.machinery
     "nfs-csi" = nfs_csi.nfsCsi
     openebs = openebs.openebs
+    tekton = tekton.tekton
     "trust-manager" = trust_manager.trustManager
     vault = vault.vault
 }
