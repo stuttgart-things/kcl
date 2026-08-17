@@ -46,7 +46,11 @@ dependsOn = ["cert-manager:install"]    # a component of ANOTHER app
 
 Both resolve to the emitted Kustomization name `{app}-{component}`, which is
 globally unique because app names are. Cross-artifact dependencies are real:
-`trust-manager` cannot reconcile before cert-manager's CRDs exist.
+`trust-manager` cannot reconcile before cert-manager's CRDs exist, and
+`sops-secrets-operator` installs a validating webhook whose certificate
+cert-manager issues — without it the operator comes up *healthy* and then
+rejects every `SopsSecret` apply, which looks like a broken CRD rather than a
+missing dependency.
 
 A consumer must **reject** a reference whose target app or component is not
 enabled — `xplane-platform` does, naming what to add. Flux would otherwise leave
