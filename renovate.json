@@ -2,5 +2,35 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "customManagers": [
+    {
+      "description": "OCI dependencies between our own KCL modules — xplane-platform pulls xplane-flux-catalog, xplane-vault-auth pulls xplane-vault-auth-base. Nothing read kcl.mod before, so every one of these was noticed by a human or not at all.",
+      "customType": "regex",
+      "fileMatch": ["(^|/)kcl\\.mod$"],
+      "matchStrings": [
+        "oci\\s*=\\s*\"oci://(?<depName>ghcr\\.io/stuttgart-things/[^\"]+)\"\\s*,\\s*tag\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
+    },
+    {
+      "description": "The Flux artifact each catalog entry pins. This is the chain that cost four hops for one ClusterRole on 2026-08-17: flux published v1.19.3, and the catalog had to be told. artifact and defaultVersion sit on adjacent lines, which is what makes one regex enough.",
+      "customType": "regex",
+      "fileMatch": ["^crossplane/xplane-flux-catalog/apps/.+\\.k$"],
+      "matchStrings": [
+        "artifact\\s*=\\s*\"oci://(?<depName>ghcr\\.io/stuttgart-things/[^\"]+)\"[\\s\\S]*?defaultVersion\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Our own modules and artifacts, one PR each rather than grouped. A module bump carries reasoning — catalog 0.13.0 needed a platform that publishes gateway.name — and a grouped PR would hide which half of it broke.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/stuttgart-things/**"],
+      "semanticCommitType": "feat",
+      "addLabels": ["own-module"]
+    }
   ]
 }
