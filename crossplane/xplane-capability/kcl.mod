@@ -1,7 +1,7 @@
 [package]
 name = "xplane-capability"
 edition = "v0.12.3"
-version = "0.1.0"
+version = "0.2.0"
 
 [dependencies]
 xplane-capability-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-capability-catalog", tag = "0.1.0" }

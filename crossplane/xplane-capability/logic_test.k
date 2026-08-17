@@ -72,3 +72,29 @@ test_optional_fields_are_accepted_but_not_defaulted = lambda {
     assert logic.placement("proxmoxvm", _full | {cloneDatastore = "V5010-01-1"}).cloneDatastore == "V5010-01-1"
     assert "cloneDatastore" in cat.fields("proxmoxvm")
 }
+
+# A capability that names its own KV mount needs a Vault server. The failure is
+# worth naming precisely because it is not "you forgot a field" — everything
+# else about the store is derived, so this is the one fact left.
+test_a_store_without_a_server_is_rejected = lambda {
+    assert logic.validateStores(["proxmoxvm"], {
+        proxmoxvm = {mount = "cicd-proxmox-labul"}
+    }, "https://vault.example.com", "c-eso")
+    assert logic.validateStores(["proxmoxvm"], {
+        proxmoxvm = {mount = "cicd-proxmox-labul", server = "https://per-cap.example.com"}
+    }, "", "c-eso")
+}
+
+# Naming an existing store means "use that one" — nothing is created, so no
+# server is needed. This is how a cluster keeps a store it already trusts.
+test_an_existing_store_needs_no_vault_facts = lambda {
+    assert logic.validateStores(["proxmoxvm"], {
+        proxmoxvm = {secretStoreName = "vault-cluster-secrets"}
+    }, "", "")
+}
+
+# Nothing enabled, nothing to validate. Guarded for the same reason validate()
+# is: the module is compiled during `kcl test` with no request at all.
+test_no_capabilities_means_no_store_requirements = lambda {
+    assert logic.validateStores([], {}, "", "")
+}
