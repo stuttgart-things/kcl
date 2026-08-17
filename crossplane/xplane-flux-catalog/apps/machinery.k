@@ -40,7 +40,7 @@ import ..schema as s
 # `clusterstacks... is forbidden`. Do not pin below v1.19.3.
 machinery: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/machinery"
-    defaultVersion = "v1.19.3"
+    defaultVersion = "v1.20.0"
     components = [
         s.Component {
             name = "app"
