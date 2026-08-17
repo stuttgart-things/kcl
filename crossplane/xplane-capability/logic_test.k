@@ -98,3 +98,25 @@ test_an_existing_store_needs_no_vault_facts = lambda {
 test_no_capabilities_means_no_store_requirements = lambda {
     assert logic.validateStores([], {}, "", "")
 }
+
+# Readiness is not one setting for all four objects, and both directions are
+# failures that hide.
+#
+# provider-kubernetes derives readiness from the managed object's own
+# conditions. An EnvironmentConfig and a ClusterProviderConfig have none, so
+# DeriveFromObject leaves them at Ready=False forever while what they created is
+# present and correct — found on u26-rke2-1 on the first apply, and measured for
+# ClusterProviderConfig in crossplane-configurations#294.
+test_status_less_objects_do_not_derive_readiness_from_themselves = lambda {
+    _statusLess = ["EnvironmentConfig", "ClusterProviderConfig"]
+    _wrong = [k for k in _statusLess if logic.readinessFor(k).policy == "DeriveFromObject"]
+    assert _wrong == [], "these have no conditions to derive from: " + str(_wrong)
+}
+
+# The other direction. An ExternalSecret DOES report Ready, and that condition is
+# the only signal that Vault actually answered — a constant would make a
+# capability whose credentials 403 report ready.
+test_secret_objects_derive_readiness_from_themselves = lambda {
+    _wrong = [k for k in ["ExternalSecret", "ClusterSecretStore"] if logic.readinessFor(k).policy != "DeriveFromObject"]
+    assert _wrong == [], "these carry the only evidence that Vault answered: " + str(_wrong)
+}
