@@ -1,9 +1,9 @@
 [dependencies]
   [dependencies.xplane-flux-catalog]
     name = "xplane-flux-catalog"
-    full_name = "xplane-flux-catalog_0.14.0"
-    version = "0.14.0"
-    sum = "hIyrkc6MxE9oUy1zXsYRbI3x5LMugOObh71i1VYLp84="
+    full_name = "xplane-flux-catalog_0.15.0"
+    version = "0.15.0"
+    sum = "TailTu6qqU0aJ12fcttiTp5tOpUMMS631sxW/PodTUc="
     reg = "ghcr.io"
     repo = "stuttgart-things/xplane-flux-catalog"
-    oci_tag = "0.14.0"
+    oci_tag = "0.15.0"
