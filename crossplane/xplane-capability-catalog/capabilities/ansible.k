@@ -27,6 +27,11 @@ ansible: s.Capability = {
         }
         vaultKeys = ["vm_ssh_user", "vm_ssh_password"]
     }
+    # Both derived, not defaulted. The pipeline looks the Secret up by name and
+    # reads it in ITS OWN namespace, so a catalog default for either would be a
+    # second source that silently diverges from what is actually created.
+    credentialsNameField = "ansibleCredentialsSecretName"
+    credentialsNamespaceField = "namespace"
     environmentLabelKey = "ansible.resources.stuttgart-things.com/environment"
     # The pipeline definition and where it runs. Facts about THIS cluster —
     # which namespace has the Tekton pipeline SA, which StorageClass exists —
@@ -39,7 +44,6 @@ ansible: s.Capability = {
         gitRevision = "main"
         gitPath = "pipelines/execute-ansible-playbooks.yaml"
         ansibleWorkingImage = "ghcr.io/stuttgart-things/sthings-ansible:14.0.0"
-        ansibleCredentialsSecretName = "ansible-credentials"
         # A LIST, deliberately — see the header. Pinned versions rather than
         # floating ones: a collection that moves under a running fleet changes
         # what every VM build does, without a single file changing here.

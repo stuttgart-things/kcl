@@ -135,7 +135,7 @@ _capSpec = lambda capName: str -> {str:} {
 _given = lambda capName: str -> {str:} {
     _capSpec(capName)?.placement or {}
 }
-_placement = lambda capName: str -> {str:str} {
+_placement = lambda capName: str -> {str:} {
     logic.placement(capName, _given(capName))
 }
 

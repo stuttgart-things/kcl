@@ -133,3 +133,18 @@ test_status_fields_are_the_ones_the_xrd_declares = lambda {
     _want = ["credentialsSecret", "environmentConfig", "providerConfig", "ready", "secretStore"]
     assert sorted(statusFields) == _want, "keep this in step with the XRD in crossplane-configurations/bootstrap/capability"
 }
+
+# The catalog's one list value must survive rendering. Tekton rejects a
+# stringified list with ParameterTypeMismatch, naming the Tekton parameter and
+# nothing about where the value came from.
+test_list_values_are_not_stringified = lambda {
+    _p = logic.placement("ansible", {namespace = "tekton-ci", storageClass = "openebs-hostpath"})
+    assert typeof(_p["ansibleExtraCollections"]) == "list"
+    assert typeof(_p["gitRevision"]) == "str", "scalars still become strings"
+}
+
+# And an XR-supplied list wins the same way a scalar does.
+test_an_xr_list_overrides_the_default = lambda {
+    _p = logic.placement("ansible", {namespace = "tekton-ci", storageClass = "openebs-hostpath", ansibleExtraCollections = ["only.this:1.0.0"]})
+    assert _p["ansibleExtraCollections"] == ["only.this:1.0.0"]
+}

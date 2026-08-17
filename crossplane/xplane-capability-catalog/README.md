@@ -51,6 +51,13 @@ the other two in all three ways a capability can:
   `ParameterTypeMismatch` — an error that names the Tekton parameter and
   nothing about where the value came from. So `defaults` is `{str:any}`, and a
   consumer must not coerce.
+* **credentials that live somewhere else.** A Tekton pipeline reads its Secret
+  by NAME, in its OWN namespace. So the entry declares
+  `credentialsNameField` and `credentialsNamespaceField` and the renderer
+  fills both in — a catalog default for either would be a second source of a
+  derived value, and both failures are silent: an EnvironmentConfig naming a
+  Secret that does not exist reports a missing credential rather than a wrong
+  name, and a Secret beside the provider is simply never read.
 
 Both were transcribed from the capability Helm charts in
 `stuttgart-things/stuttgart-things` (`crossplane/platform/capabilities/`), which

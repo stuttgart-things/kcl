@@ -111,6 +111,23 @@ schema Capability:
     rejects a stringified list with ParameterTypeMismatch — an error that names
     the Tekton parameter and nothing about where the value came from."""
 
+    credentialsNameField?: str
+    """Placement key that must carry the NAME of the credentials Secret.
+
+    Set it whenever the consumer looks the Secret up by a field rather than
+    receiving it directly. The name is derived per environment, so a catalog
+    default would be a second, diverging source of it — and the failure is
+    silent: the EnvironmentConfig names a Secret that does not exist, and the
+    consumer reports a missing credential rather than a wrong name."""
+
+    credentialsNamespaceField?: str
+    """Placement key naming the NAMESPACE the credentials Secret must live in.
+
+    Unset means beside the provider (the XR's spec.namespace). ansible sets it,
+    because its 'credentials' are read by a Tekton pipeline in the pipeline's
+    own namespace — a Secret next to the provider would be one nothing reads,
+    which is the same trap as a cloud-init password in the wrong namespace."""
+
     workloadSecrets: [WorkloadSecret] = []
     """Secrets that belong in the workload namespace rather than beside the
     provider. See WorkloadSecret."""

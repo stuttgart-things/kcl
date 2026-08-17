@@ -1,9 +1,9 @@
 [dependencies]
   [dependencies.xplane-capability-catalog]
     name = "xplane-capability-catalog"
-    full_name = "xplane-capability-catalog_0.1.0"
-    version = "0.1.0"
-    sum = "wm/8y5pwoeu+vDIGFj1TtHwTWP9WqtNEuFIsV7upkvQ="
+    full_name = "xplane-capability-catalog_0.2.0"
+    version = "0.2.0"
+    sum = "nVAEpddlkcMpcbe7sUx8pi1JHSWZsrvvwnGpa2vIhN4="
     reg = "ghcr.io"
     repo = "stuttgart-things/xplane-capability-catalog"
-    oci_tag = "0.1.0"
+    oci_tag = "0.2.0"
