@@ -109,18 +109,27 @@ vaultIssuerEnabled = lambda spec: {str:} -> bool {
 }
 
 certManagerReady = lambda ocds: {str:}, key: str -> bool {
-    """Is cert-manager SERVING on the target?
+    """Is cert-manager's webhook SERVING on the target?
 
-    Reads readyReplicas off an observed Deployment. Deliberately not "does the
-    CRD exist": creating a ClusterIssuer goes through cert-manager's validating
-    webhook, so a present CRD with a webhook that is not serving fails the apply
-    the same way a missing CRD does. readyReplicas is the first moment both hold.
+    Reads the webhook Service's Endpoints. An address appears there only once the
+    backing pod passes its readiness probe AND the Service selects it — i.e. only
+    once a request would actually reach the webhook. Deliberately not the CRD
+    (creating a ClusterIssuer goes through the validating webhook, so a present
+    CRD with a webhook that is not serving fails the apply the same way) and
+    deliberately not the Deployment's readyReplicas, which says a pod is ready but
+    nothing about Service routing.
+
+    Endpoints also has no required properties, so the Observe child can embed a
+    bare metadata-only manifest. A Deployment cannot: `kubeconform -strict`
+    rejects one without `spec`, which is exactly how the first attempt at this
+    gate failed the Configuration's verify job (embedded-INVALID on xr-max).
 
     Absent from ocds -> False. That is the state on the very first reconcile,
-    before the Observe child has been created at all, and it must read as "not
-    ready" rather than as an error.
+    before the Observe child exists at all, and it must read as "not ready"
+    rather than as an error.
     """
-    ((ocds[key].Resource?.status?.atProvider?.manifest?.status?.readyReplicas or 0) if key in ocds else 0) > 0
+    _subsets = (ocds[key].Resource?.status?.atProvider?.manifest?.subsets or []) if key in ocds else []
+    len([s for s in _subsets if len(s?.addresses or []) > 0]) > 0
 }
 
 gateOpen = lambda ready: bool, exists: bool -> bool {

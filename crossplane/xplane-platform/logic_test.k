@@ -670,48 +670,49 @@ test_gateway_name_absent_is_empty = lambda {
 # --- cert-manager gate -------------------------------------------------------
 # The vaultIssuer branch composes an issuer onto a cluster whose cert-manager
 # arrives through ArgoCD, i.e. through something Crossplane cannot see. These
-# three cases are the whole contract of the gate; getting the first one wrong is
-# what would make a fresh Platform emit an issuer before its CRD exists.
+# cases are the whole contract of the gate; getting the first one wrong is what
+# would make a fresh Platform emit an issuer before its CRD exists.
+#
+# The signal is the webhook Service's Endpoints, not the Deployment: an address
+# appears there only once the pod is ready AND the Service selects it. Endpoints
+# also has no required properties, so the Observe child embeds a metadata-only
+# manifest -- a bare Deployment fails `kubeconform -strict` for want of a spec.
+_epKey = "p-cert-manager-observe"
+_ep = lambda subsets: [] -> {str:} {
+    {
+        "p-cert-manager-observe" = {
+            Resource = {
+                status.atProvider.manifest = {subsets = subsets}
+            }
+        }
+    }
+}
+
 test_cert_manager_gate_closed_before_the_observe_exists = lambda {
     # First reconcile: ocds is empty, the Observe child has not been created yet.
-    assert not l.certManagerReady({}, "p-cert-manager-observe")
+    assert not l.certManagerReady({}, _epKey)
 }
 
-test_cert_manager_gate_closed_while_no_replica_is_ready = lambda {
-    # Deployment observed but still rolling out. A present CRD is not enough --
-    # the validating webhook has to be serving.
-    _ocds = {
-        "p-cert-manager-observe" = {
-            Resource = {
-                status.atProvider.manifest.status = {readyReplicas = 0}
-            }
-        }
-    }
-    assert not l.certManagerReady(_ocds, "p-cert-manager-observe")
+test_cert_manager_gate_closed_when_endpoints_have_no_addresses = lambda {
+    # Service exists, no pod backs it yet. This is the state while cert-manager
+    # is still rolling out, and the one a CRD check would miss.
+    assert not l.certManagerReady(_ep([{addresses = []}]), _epKey)
 }
 
-test_cert_manager_gate_opens_on_the_first_ready_replica = lambda {
-    _ocds = {
-        "p-cert-manager-observe" = {
-            Resource = {
-                status.atProvider.manifest.status = {readyReplicas = 1}
-            }
-        }
-    }
-    assert l.certManagerReady(_ocds, "p-cert-manager-observe")
+test_cert_manager_gate_closed_when_the_only_address_is_not_ready = lambda {
+    # Pod scheduled but failing its readiness probe -- kubelet keeps it in
+    # notReadyAddresses, and a request would not reach it.
+    assert not l.certManagerReady(_ep([{notReadyAddresses = [{ip = "10.42.0.1"}]}]), _epKey)
 }
 
-test_cert_manager_gate_survives_a_status_without_readyReplicas = lambda {
-    # A freshly created Deployment has no readyReplicas key at all. That must
-    # read as not-ready, not blow up the render for every other component.
-    _ocds = {
-        "p-cert-manager-observe" = {
-            Resource = {
-                status.atProvider.manifest.status = {replicas = 1}
-            }
-        }
-    }
-    assert not l.certManagerReady(_ocds, "p-cert-manager-observe")
+test_cert_manager_gate_opens_on_the_first_ready_address = lambda {
+    assert l.certManagerReady(_ep([{addresses = [{ip = "10.42.0.46"}]}]), _epKey)
+}
+
+test_cert_manager_gate_survives_endpoints_without_subsets = lambda {
+    # A Service whose Endpoints object exists but carries no subsets at all.
+    # Must read as not-ready, not blow up the render for every other component.
+    assert not l.certManagerReady(_ep([]), _epKey)
 }
 
 # Once the issuer exists the gate must stay open, or Crossplane deletes it the
