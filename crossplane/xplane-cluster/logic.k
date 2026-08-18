@@ -253,6 +253,7 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
     }
     _dist = spec?.distribution or "k3s"
     _paths = ["kubeconfig_path+-" + _serverPaths[_dist]] if _dist in _serverPaths else []
+
     # extraVars belongs here too. It was wired into the base-OS and
     # distribution stages only, so an override aimed at THIS stage —
     # secret_path_kubeconfig is the obvious one — vanished without a word:
