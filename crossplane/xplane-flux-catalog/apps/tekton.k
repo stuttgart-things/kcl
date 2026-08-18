@@ -20,7 +20,7 @@ import ..schema as s
 # certificate-less route pointing at nothing.
 tekton: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/cicd/tekton"
-    defaultVersion = "v1.20.0"
+    defaultVersion = "v1.22.1"
     components = [
         s.Component {
             name = "install"
