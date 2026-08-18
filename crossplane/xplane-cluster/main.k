@@ -140,8 +140,35 @@ _reemit = lambda prev: any, stage: str -> {str:any} {
 # names are stable, so nothing re-runs until runID is bumped. Freezing
 # unconditionally, as this did first, made a broken stage unfixable without
 # deleting the child.
-_distChild = _reemit(_distRun, "distribution") if (len(_distObs) > 0 and _vmIP == "") else l.distributionRun(_name, _ns, _spec, _vmIP)
-_kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and _vmIP == "") else l.kubeconfigRun(_name, _ns, _spec, _vmIP)
+#
+# SECOND reason to re-emit, unrelated to flapping: a FINISHED PipelineRun is
+# immutable. provider-kubernetes rejects any spec change on it with
+#
+#     Once the PipelineRun is complete, no updates are allowed: spec
+#
+# and keeps rejecting it every reconcile. Because the rebuild above is driven by
+# the VM's IP and not by the stage, ANY edit to spec.ansible rewrote EVERY
+# stage's spec — including stages that finished hours ago — so a change aimed at
+# an open stage parked a closed one in a permanent ReconcileError. The rebuild
+# could never have delivered the fix anyway: the write is refused.
+#
+# So a finished stage is sealed. That is not the freeze the comment above warns
+# about, because the documented lever still works: bumping spec.runIDs.<stage>
+# changes pipelineRunName AND crossplaneObjectName, so the repair arrives as a
+# NEW Object instead of an update to a sealed one — which is why the seal is
+# lifted the moment the derived name stops matching what is observed.
+_desiredRunName = lambda stage: str -> str {
+    _rid = l.runIDFor(_spec, stage)
+    _suffix = "-{}".format(_rid) if _rid else ""
+    "{}-{}{}".format(_name, stage, _suffix)
+}
+_sealed = lambda run: {str:any}, stage: str -> bool {
+    _done = (run?.status?.succeeded or "") in ["True", "False"]
+    _done and (run?.spec?.pipelineRunName or "") == _desiredRunName(stage)
+}
+
+_distChild = _reemit(_distRun, "distribution") if (len(_distObs) > 0 and (_vmIP == "" or _sealed(_distRun, "distribution"))) else l.distributionRun(_name, _ns, _spec, _vmIP)
+_kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and (_vmIP == "" or _sealed(_kcRun, "kubeconfig"))) else l.kubeconfigRun(_name, _ns, _spec, _vmIP)
 
 # --- teardown ordering -----------------------------------------------------
 # Only the pairs that matter. Usage is not transitive, so a full mesh would be

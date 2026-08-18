@@ -46,6 +46,25 @@ Three `Usage` resources, only the pairs whose absence strands a finalizer:
 
 ## Re-runs are per stage
 
+### A finished stage is sealed (0.8.0)
+
+Re-emitting a child verbatim is a flap guard — it applies while the VM's IP is
+momentarily missing — but a **finished** `PipelineRun` needs the same treatment
+for an unrelated reason: it is immutable. provider-kubernetes rejects any spec
+change on one with `Once the PipelineRun is complete, no updates are allowed:
+spec`, and keeps rejecting it every reconcile.
+
+Until 0.8.0 the rebuild was keyed on the VM's IP and not on the stage, so ANY
+edit to `spec.ansible` rewrote EVERY stage's spec — including stages that
+finished hours ago. A change aimed at an open stage therefore parked a closed
+one in a permanent `ReconcileError`, and the rebuild could not have delivered
+the change anyway, because the write is refused.
+
+The seal lifts the moment the derived name stops matching what is observed, so
+the documented repair still works: bumping `spec.runIDs.<stage>` changes both
+`pipelineRunName` and `crossplaneObjectName`, and the fix arrives as a NEW
+Object instead of an update to a sealed one.
+
 `spec.runIDs` is a map, not a single value:
 
 ```yaml

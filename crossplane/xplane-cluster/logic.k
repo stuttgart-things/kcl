@@ -253,7 +253,12 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
     }
     _dist = spec?.distribution or "k3s"
     _paths = ["kubeconfig_path+-" + _serverPaths[_dist]] if _dist in _serverPaths else []
-    _vars = renderVars(_stage.vars) + clusterNameVars(_dist, _cluster) + _paths
+    # extraVars belongs here too. It was wired into the base-OS and
+    # distribution stages only, so an override aimed at THIS stage —
+    # secret_path_kubeconfig is the obvious one — vanished without a word:
+    # the XRD documents the field, nothing rejects the value, and the
+    # rendered varsFile simply does not contain it.
+    _vars = renderVars(_stage.vars) + clusterNameVars(_dist, _cluster) + _paths + (stageAnsible(spec, "kubeconfig")?.extraVars or [])
 
     # STATED EXPLICITLY, even though `vault` is also ansible-run's own default.
     # Which Vault the upload authenticates against is a decision this module
