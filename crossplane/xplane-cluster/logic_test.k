@@ -510,3 +510,36 @@ test_every_usage_label_is_prefixed = lambda {
     assert all n in _names {n.startswith("zeta-")}, "every Usage object name carries the cluster"
     assert len(_names) == len({n: True for n in _names}), "and they stay distinct from each other"
 }
+
+# extraVars must reach EVERY stage, not just the two that happened to be wired.
+# It was missing from kubeconfigRun, so an override aimed at the upload — the
+# KV mount under secret_path_kubeconfig is the one people actually want to
+# change — disappeared with no error anywhere: the XRD documents the field, the
+# value is accepted, and the rendered varsFile simply does not carry it.
+test_extra_vars_reach_the_kubeconfig_stage = lambda {
+    _spec = {
+        provider = "proxmox"
+        distribution = "rke2"
+        size = "medium"
+        ansible = {
+            stages = {
+                kubeconfig = {extraVars = ["secret_path_kubeconfig+-cicd-kubeconfigs"]}
+            }
+        }
+    }
+    _vars = l.kubeconfigRun("c", "ns", _spec, "10.0.0.1").spec.ansibleVarsFile
+    assert "secret_path_kubeconfig+-cicd-kubeconfigs" in _vars
+    # the catalog's own vars survive alongside it
+    assert "kubeconfig_path+-/etc/rancher/rke2/rke2.yaml" in _vars
+}
+
+# The shared block reaches the kubeconfig stage too, not only a per-stage one.
+test_shared_extra_vars_reach_the_kubeconfig_stage = lambda {
+    _spec = {
+        provider = "proxmox"
+        distribution = "rke2"
+        size = "medium"
+        ansible = {extraVars = ["shared_var+-1"]}
+    }
+    assert "shared_var+-1" in l.kubeconfigRun("c", "ns", _spec, "10.0.0.1").spec.ansibleVarsFile
+}
