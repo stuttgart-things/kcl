@@ -680,19 +680,37 @@ test_cert_manager_gate_closed_before_the_observe_exists = lambda {
 test_cert_manager_gate_closed_while_no_replica_is_ready = lambda {
     # Deployment observed but still rolling out. A present CRD is not enough --
     # the validating webhook has to be serving.
-    _ocds = {"p-cert-manager-observe" = {Resource = {status.atProvider.manifest.status = {readyReplicas = 0}}}}
+    _ocds = {
+        "p-cert-manager-observe" = {
+            Resource = {
+                status.atProvider.manifest.status = {readyReplicas = 0}
+            }
+        }
+    }
     assert not l.certManagerReady(_ocds, "p-cert-manager-observe")
 }
 
 test_cert_manager_gate_opens_on_the_first_ready_replica = lambda {
-    _ocds = {"p-cert-manager-observe" = {Resource = {status.atProvider.manifest.status = {readyReplicas = 1}}}}
+    _ocds = {
+        "p-cert-manager-observe" = {
+            Resource = {
+                status.atProvider.manifest.status = {readyReplicas = 1}
+            }
+        }
+    }
     assert l.certManagerReady(_ocds, "p-cert-manager-observe")
 }
 
 test_cert_manager_gate_survives_a_status_without_readyReplicas = lambda {
     # A freshly created Deployment has no readyReplicas key at all. That must
     # read as not-ready, not blow up the render for every other component.
-    _ocds = {"p-cert-manager-observe" = {Resource = {status.atProvider.manifest.status = {replicas = 1}}}}
+    _ocds = {
+        "p-cert-manager-observe" = {
+            Resource = {
+                status.atProvider.manifest.status = {replicas = 1}
+            }
+        }
+    }
     assert not l.certManagerReady(_ocds, "p-cert-manager-observe")
 }
 
