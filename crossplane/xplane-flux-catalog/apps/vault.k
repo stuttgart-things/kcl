@@ -12,7 +12,7 @@ import ..schema as s
 # a value someone types into an XR.
 vault: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/vault"
-    defaultVersion = "v1.18.1"
+    defaultVersion = "v1.20.0"
     components = [
         s.Component {
             name = "install"
