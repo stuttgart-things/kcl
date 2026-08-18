@@ -425,10 +425,14 @@ _tokenReqBindingObj = {
 # ArgoCD" from "broken" — which is exactly the question that costs time during a
 # build (stuttgart-things#2505).
 #
-# The gate observes the cert-manager WEBHOOK deployment, not the CRD. A present
-# CRD is not enough: creating a ClusterIssuer goes through the validating
-# webhook, and an apply against a webhook that is not serving fails the same
-# way. readyReplicas is the first moment both are true.
+# The gate observes the ENDPOINTS of cert-manager's webhook Service, not the CRD
+# and not the Deployment. Not the CRD, because creating a ClusterIssuer goes
+# through the validating webhook and an apply against a webhook that is not
+# serving fails the same way. Not the Deployment, for two reasons: readyReplicas
+# says a pod is ready but nothing about Service routing, and a bare Deployment
+# manifest fails `kubeconform -strict` for want of a `spec` — which is how the
+# first version of this gate broke the Configuration's verify job. Endpoints has
+# no required properties, so a metadata-only Observe manifest validates.
 #
 # One-way via l.gateOpen: once a gated child exists, it keeps being emitted. Not
 # emitting an existing child is how Crossplane deletes it, and a gate that could
@@ -441,8 +445,8 @@ _viCmObserveObj = {
     spec = {
         managementPolicies = ["Observe"]
         forProvider.manifest = {
-            apiVersion = "apps/v1"
-            kind = "Deployment"
+            apiVersion = "v1"
+            kind = "Endpoints"
             metadata = {name = _viCmWebhookName, namespace = _viCmNs}
         }
         providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
