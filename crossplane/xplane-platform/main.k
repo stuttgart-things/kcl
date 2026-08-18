@@ -280,6 +280,7 @@ _viPkiMount = _viSpec?.pkiMount or "pki"
 _viIssuerName = _viSpec?.issuerName or "vault-pki-k8s"
 _viCaSecret = _viSpec?.caSecretName or "vault-pki-ca"
 _viTargetRef = _shared.kubernetesProviderConfigRef
+_viCmWebhookName = _viSpec?.certManagerWebhookName or "cert-manager-webhook"
 
 # --- Reviewer JWT provisioning (auto) ---
 # Vault's k8s-auth mount needs a token_reviewer_jwt from the TARGET (an
@@ -413,6 +414,42 @@ _tokenReqBindingObj = {
     }
 }
 
+# --- cert-manager gate -------------------------------------------------
+# The ClusterIssuer, the wildcard Certificate, the CA Secret and the
+# TokenRequest RBAC all land on the TARGET and all need cert-manager to be there
+# first. On a Flux-driven cluster that is true by the time this runs, because
+# apps.cert-manager is a sibling of this branch. On an ARGOCD-driven cluster it
+# is not: cert-manager arrives through an ApplicationSet that Crossplane knows
+# nothing about, so a one-shot apply composes an issuer whose CRD does not exist
+# yet. It converges by retry, but for minutes nobody can tell "waiting for
+# ArgoCD" from "broken" — which is exactly the question that costs time during a
+# build (stuttgart-things#2505).
+#
+# The gate observes the cert-manager WEBHOOK deployment, not the CRD. A present
+# CRD is not enough: creating a ClusterIssuer goes through the validating
+# webhook, and an apply against a webhook that is not serving fails the same
+# way. readyReplicas is the first moment both are true.
+#
+# One-way via l.gateOpen: once a gated child exists, it keeps being emitted. Not
+# emitting an existing child is how Crossplane deletes it, and a gate that could
+# re-close would tear the issuer down every time cert-manager rolls a new pod.
+_viCmObserveKey = "{}-cert-manager-observe".format(_name)
+_viCmObserveObj = {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = _viCmObserveKey, namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = _viCmObserveKey}}
+    spec = {
+        managementPolicies = ["Observe"]
+        forProvider.manifest = {
+            apiVersion = "apps/v1"
+            kind = "Deployment"
+            metadata = {name = _viCmWebhookName, namespace = _viCmNs}
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+}
+_viCmReady = l.certManagerReady(_ocds, _viCmObserveKey)
+
 # --- auto-reviewer Objects (only when autoReviewer) ---
 _viRevSAObj = {
     apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
@@ -533,7 +570,19 @@ _viCertObj = {
     }
 }
 
-_vaultIssuerChildren = ([_vaultK8sAuthXR, _vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj] + _viReviewerObjects + ([_viCertObj] if _viCertEnabled else [])) if _vaultIssuerEnabled else []
+# UNGATED: the Vault side and the reviewer chain. VaultK8sAuth drives Vault
+# through OpenTofu and the reviewer SA/token live in kube-system — none of it
+# touches cert-manager, and all of it is the slow half. Holding it back would
+# serialise two independent waits for no reason.
+_viUngated = [_vaultK8sAuthXR, _viCmObserveObj] + _viReviewerObjects
+
+# GATED on cert-manager: everything that lands in its namespace or needs its
+# CRDs. VaultPkiSecret writes the CA Secret into _viCmNs, the TokenRequest RBAC
+# is a Role/RoleBinding there, and the issuer plus the wildcard Certificate need
+# the CRDs and the webhook.
+_viGated = [_vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj] + ([_viCertObj] if _viCertEnabled else [])
+
+_vaultIssuerChildren = (_viUngated + (_viGated if l.gateOpen(_viCmReady, _issuerKey in _ocds) else [])) if _vaultIssuerEnabled else []
 
 _children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else []) + _vaultIssuerChildren
 
@@ -633,6 +682,12 @@ _xrStatus = _oxr | {
                 authReady = _vaultAuthReady
                 caReady = _vaultPkiReady
                 issuerReady = _issuerReady
+                # The single field that answers "is it broken or is it waiting?".
+                # Without it a gated branch and a failed one look identical from
+                # the outside: not-ready, no issuer, no CA. On an ArgoCD-driven
+                # cluster the wait is normal and can last minutes.
+                certManagerReady = _viCmReady
+                waitingForCertManager = _vaultIssuerEnabled and not _viCmReady and _issuerKey not in _ocds
                 # What Vault actually created, keyed by auth name. This is what
                 # lets external-secrets discover its own cluster's mount instead
                 # of being told the name by hand — the gap that kept it out of
