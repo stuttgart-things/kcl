@@ -108,6 +108,21 @@ vaultIssuerEnabled = lambda spec: {str:} -> bool {
     (spec?.vaultIssuer or {})?.enabled or False
 }
 
+certManagerReady = lambda ocds: {str:}, key: str -> bool {
+    """Is cert-manager SERVING on the target?
+
+    Reads readyReplicas off an observed Deployment. Deliberately not "does the
+    CRD exist": creating a ClusterIssuer goes through cert-manager's validating
+    webhook, so a present CRD with a webhook that is not serving fails the apply
+    the same way a missing CRD does. readyReplicas is the first moment both hold.
+
+    Absent from ocds -> False. That is the state on the very first reconcile,
+    before the Observe child has been created at all, and it must read as "not
+    ready" rather than as an error.
+    """
+    ((ocds[key].Resource?.status?.atProvider?.manifest?.status?.readyReplicas or 0) if key in ocds else 0) > 0
+}
+
 gateOpen = lambda ready: bool, exists: bool -> bool {
     """Should a gated child be emitted?
 

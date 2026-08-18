@@ -666,3 +666,57 @@ test_gateway_name_absent_is_empty = lambda {
         gateway = {}
     }, "gateway.name") == ""
 }
+
+# --- cert-manager gate -------------------------------------------------------
+# The vaultIssuer branch composes an issuer onto a cluster whose cert-manager
+# arrives through ArgoCD, i.e. through something Crossplane cannot see. These
+# three cases are the whole contract of the gate; getting the first one wrong is
+# what would make a fresh Platform emit an issuer before its CRD exists.
+test_cert_manager_gate_closed_before_the_observe_exists = lambda {
+    # First reconcile: ocds is empty, the Observe child has not been created yet.
+    assert not l.certManagerReady({}, "p-cert-manager-observe")
+}
+
+test_cert_manager_gate_closed_while_no_replica_is_ready = lambda {
+    # Deployment observed but still rolling out. A present CRD is not enough --
+    # the validating webhook has to be serving.
+    _ocds = {
+        "p-cert-manager-observe" = {
+            Resource = {
+                status.atProvider.manifest.status = {readyReplicas = 0}
+            }
+        }
+    }
+    assert not l.certManagerReady(_ocds, "p-cert-manager-observe")
+}
+
+test_cert_manager_gate_opens_on_the_first_ready_replica = lambda {
+    _ocds = {
+        "p-cert-manager-observe" = {
+            Resource = {
+                status.atProvider.manifest.status = {readyReplicas = 1}
+            }
+        }
+    }
+    assert l.certManagerReady(_ocds, "p-cert-manager-observe")
+}
+
+test_cert_manager_gate_survives_a_status_without_readyReplicas = lambda {
+    # A freshly created Deployment has no readyReplicas key at all. That must
+    # read as not-ready, not blow up the render for every other component.
+    _ocds = {
+        "p-cert-manager-observe" = {
+            Resource = {
+                status.atProvider.manifest.status = {replicas = 1}
+            }
+        }
+    }
+    assert not l.certManagerReady(_ocds, "p-cert-manager-observe")
+}
+
+# Once the issuer exists the gate must stay open, or Crossplane deletes it the
+# next time cert-manager rolls a pod -- gateOpen is what makes it one-way.
+test_cert_manager_gate_is_one_way_once_the_issuer_exists = lambda {
+    assert l.gateOpen(False, True)
+    assert not l.gateOpen(False, False)
+}
