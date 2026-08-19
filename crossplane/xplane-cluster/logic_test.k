@@ -543,3 +543,38 @@ test_shared_extra_vars_reach_the_kubeconfig_stage = lambda {
     }
     assert "shared_var+-1" in l.kubeconfigRun("c", "ns", _spec, "10.0.0.1").spec.ansibleVarsFile
 }
+
+test_read_ref_is_derived_from_the_upload_target = lambda {
+    """providerConfigRef folgt vaultSecretName, wenn es nicht gesetzt ist.
+
+    Bis 0.8.0 waren beide getrennte Felder mit Defaults, die nur zufaellig
+    zusammenpassten. vaultSecretName: vault-infra gegen den Default
+    vault-kubeconfigs (= vault-vsphere) liess den RemoteCluster im falschen
+    Vault suchen; der Bau stand 40 Minuten, ohne dass eine Ressource darueber
+    einen Fehler meldete. crossplane-configurations#336.
+    """
+    assert l.kubeconfigReadRef({}) == "vault-kubeconfigs"
+    assert l.kubeconfigReadRef({vaultSecretName = "vault"}) == "vault-kubeconfigs"
+    assert l.kubeconfigReadRef({vaultSecretName = "vault-infra"}) == "vault-kubeconfigs-infra"
+}
+
+test_explicit_read_ref_still_wins = lambda {
+    """Der Notausgang bleibt: eine Vault-Paarung, die die Map nicht kennt."""
+    assert l.kubeconfigReadRef({vaultSecretName = "vault-infra", providerConfigRef = "sonderfall"}) == "sonderfall"
+    assert l.kubeconfigReadRef({providerConfigRef = "sonderfall"}) == "sonderfall"
+}
+
+test_unknown_upload_target_falls_back_instead_of_guessing = lambda {
+    """Unbekanntes vaultSecretName -> historischer Default, nicht geraten.
+
+    Weiterraten hiesse, Namen zu erfinden; die XRD lehnt stattdessen die zwei
+    Kombinationen ab, von denen wir wissen, dass sie falsch sind.
+    """
+    assert l.kubeconfigReadRef({vaultSecretName = "vault-irgendwas"}) == "vault-kubeconfigs"
+}
+
+test_access_xr_carries_the_derived_ref = lambda {
+    """Und es kommt auch wirklich an der ClusterAccess-XR an."""
+    _a = l.clusterAccess("c", "default", {clusterName = "c", kubeconfig = {vaultSecretName = "vault-infra"}})
+    assert _a.spec.kubeconfigProviderConfigRef == "vault-kubeconfigs-infra"
+}

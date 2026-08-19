@@ -294,6 +294,40 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
     _ansibleRun(name, ns, "kubeconfig", spec, _stage.playbooks, _vars, renderInventory(_stage.inventoryGroups, ip), _vaultSecret)
 }
 
+# vaultSecretName says WHERE THE UPLOAD WRITES, providerConfigRef says WHERE THE
+# READ COMES FROM. They must mean the same Vault, and until 0.9.0 nothing enforced
+# that: the defaults `vault` and `vault-kubeconfigs` agreed by accident, but the
+# moment someone set vaultSecretName to vault-infra -- which the ArgoCD path
+# requires, because the ClusterSecretStore reads the infra Vault -- the pair came
+# apart and the RemoteCluster looked for the kubeconfig in the other Vault:
+#
+#   cannot read kubeconfig from Vault: secret not found: at kubeconfigs/data/<c>
+#
+# Nothing above it reports an error. The ClusterStack stays Ready=True, because
+# without a ready ClusterAccess the Platform branch is not emitted at all and
+# there is nothing left to wait for. Measured on argoplatform-test2, 2026-08-19:
+# 40 minutes to find. See crossplane-configurations#336.
+#
+# So the read side is DERIVED from the upload side by default. An explicit
+# providerConfigRef still wins -- it is the escape hatch for a Vault pair this
+# map does not know -- but it is no longer required to state the obvious.
+kubeconfigVaultPairs: {str:str} = {
+    "vault" = "vault-kubeconfigs"
+    "vault-infra" = "vault-kubeconfigs-infra"
+}
+
+kubeconfigReadRef = lambda kc: {str:} -> str {
+    """The ClusterProviderConfig the ClusterAccess reads the kubeconfig through.
+
+    Explicit wins; otherwise derived from vaultSecretName. An unknown
+    vaultSecretName falls back to the historical default rather than failing --
+    the XRD rejects the two combinations we know to be wrong, and guessing past
+    that would break setups this map has never seen.
+    """
+    _upload = kc?.vaultSecretName or "vault"
+    kc?.providerConfigRef or kubeconfigVaultPairs[_upload] or "vault-kubeconfigs"
+}
+
 # --- the two downstream XRs ------------------------------------------------
 clusterAccess = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
     _cluster = spec?.clusterName or name
@@ -314,7 +348,7 @@ clusterAccess = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
                 key = "kubeconfig"
             }
             secretNamespace = _kc?.secretNamespace or "crossplane-system"
-            kubeconfigProviderConfigRef = _kc?.providerConfigRef or "vault-kubeconfigs"
+            kubeconfigProviderConfigRef = kubeconfigReadRef(_kc)
         }
     }
 }
