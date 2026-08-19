@@ -73,32 +73,7 @@ _crdName = lambda crd: str -> str {
     "{}-crd-{}".format(_name, crd.split(".")[1])
 }
 _crdObserveObject = lambda crd: str -> any {
-    {
-        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-        kind = "Object"
-        metadata = {
-            name = _crdName(crd)
-            namespace = _xrNs
-            annotations = {"krm.kcl.dev/composition-resource-name" = _crdName(crd)}
-        }
-        spec = {
-            managementPolicies = ["Observe"]
-            providerConfigRef.name = l.kubernetesRef(_spec)
-            # Metadata only, and that survives the verify pipeline for a
-            # reason worth knowing: kubeconform ships NO schema for
-            # CustomResourceDefinition, so with -ignore-missing-schemas it is
-            # Skipped rather than validated. Should a CRD schema ever land in
-            # that set, this would start failing -- CRD v1 requires `spec` --
-            # exactly like the metadata-only Deployment did in xplane-platform
-            # 0.22.0. The fix then is a minimal valid spec here, never dropping
-            # -strict.
-            forProvider.manifest = {
-                apiVersion = "apiextensions.k8s.io/v1"
-                kind = "CustomResourceDefinition"
-                metadata = {name = crd}
-            }
-        }
-    }
+    l.crdObserveObject(_crdName(crd), _xrNs, crd, _k8sPcr)
 }
 
 # Established, not merely present: a CRD exists for a moment before the API

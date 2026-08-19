@@ -124,6 +124,44 @@ providerConfigCrd = lambda pc -> str {
     "{}.{}".format(_plural, _group) if _plural else ""
 }
 
+# The Observe-only Object that watches one CRD on the target.
+#
+# Lives here, not in main.k, so its SHAPE is testable. It was not, and the first
+# version shipped without providerConfigRef.kind: provider-kubernetes then looked
+# for a namespaced ProviderConfig, found none, and never created the Object at
+# all -- while the XR dutifully listed it in resourceRefs and reported "Unsynced
+# resources" for something that did not exist. Every unit test was green.
+crdObserveObject = lambda name: str, ns: str, crd: str, pcRef: str -> any {
+    {
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+        kind = "Object"
+        metadata = {
+            name = name
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = name}
+        }
+        spec = {
+            managementPolicies = ["Observe"]
+            # kind is NOT optional -- see above.
+            providerConfigRef = {
+                name = pcRef
+                kind = "ClusterProviderConfig"
+            }
+            # Metadata only, and that survives the verify pipeline for a reason
+            # worth knowing: kubeconform ships NO schema for
+            # CustomResourceDefinition, so with -ignore-missing-schemas it is
+            # Skipped rather than validated. Should a CRD schema ever land in
+            # that set this would start failing -- CRD v1 requires `spec` --
+            # exactly like the metadata-only Deployment in xplane-platform 0.22.0.
+            forProvider.manifest = {
+                apiVersion = "apiextensions.k8s.io/v1"
+                kind = "CustomResourceDefinition"
+                metadata = {name = crd}
+            }
+        }
+    }
+}
+
 # Distinct CRDs to wait for, in stable order.
 providerConfigCrds = lambda pcs: [any] -> [str] {
     _all = [providerConfigCrd(pc) for pc in pcs]

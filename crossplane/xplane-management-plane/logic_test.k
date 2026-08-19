@@ -162,3 +162,38 @@ test_crd_list_is_deduplicated_and_stable = lambda {
         "clusterproviderconfigs.kubernetes.m.crossplane.io"
     ]
 }
+
+test_crd_observe_object_names_a_cluster_provider_config = lambda {
+    """providerConfigRef.kind darf NICHT fehlen.
+
+    Ohne kind sucht provider-kubernetes eine NAMESPACED ProviderConfig, findet
+    keine und legt das Object gar nicht erst an — waehrend die XR es brav in
+    resourceRefs fuehrt und "Unsynced resources" fuer etwas meldet, das es nicht
+    gibt. Genau so ist 0.5.0 ausgeliefert worden, mit gruenen Unit-Tests.
+    """
+    _o = l.crdObserveObject("x-crd-helm", "default", "clusterproviderconfigs.helm.m.crossplane.io", "ziel-kubernetes")
+    assert _o.spec.providerConfigRef.kind == "ClusterProviderConfig"
+    assert _o.spec.providerConfigRef.name == "ziel-kubernetes"
+}
+
+test_crd_observe_object_observes_and_never_writes = lambda {
+    """Observe-only, und das Manifest identifiziert nur — es beschreibt nicht.
+
+    Eine managementPolicy, die schreiben darf, wuerde hier eine echte CRD auf
+    dem Ziel mit einem leeren Manifest ueberschreiben.
+    """
+    _o = l.crdObserveObject("x-crd-helm", "default", "clusterproviderconfigs.helm.m.crossplane.io", "ziel-kubernetes")
+    assert _o.spec.managementPolicies == ["Observe"]
+    _m = _o.spec.forProvider.manifest
+    assert _m.apiVersion == "apiextensions.k8s.io/v1"
+    assert _m.kind == "CustomResourceDefinition"
+    assert _m.metadata.name == "clusterproviderconfigs.helm.m.crossplane.io"
+    assert "spec" not in _m
+}
+
+test_crd_observe_object_carries_the_composition_resource_name = lambda {
+    """Ohne die Annotation ordnet Crossplane das Object bei jedem Render neu zu."""
+    _o = l.crdObserveObject("x-crd-helm", "default", "c.helm.m.crossplane.io", "ziel")
+    assert _o.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "x-crd-helm"
+    assert _o.metadata.namespace == "default"
+}
