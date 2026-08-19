@@ -578,3 +578,48 @@ test_access_xr_carries_the_derived_ref = lambda {
     _a = l.clusterAccess("c", "default", {clusterName = "c", kubeconfig = {vaultSecretName = "vault-infra"}})
     assert _a.spec.kubeconfigProviderConfigRef == "vault-kubeconfigs-infra"
 }
+
+test_harvester_vm_is_composed_with_its_own_shape = lambda {
+    """Harvester ist nicht nur ein anderer Name — die Form ist anders.
+
+    Boot-Disk als eigenes PVC, cpu als Objekt, Speicher als Quantity-String,
+    cloud-init mit Pflichtfeldern. crossplane-configurations#258 Block B.
+    """
+    _v = l.vmChild("c1", "default", {provider = "harvester", clusterName = "c1"}, cat.getSize("medium"))
+    assert _v.kind == "HarvesterVM"
+    assert _v.apiVersion == "resources.stuttgart-things.com/v1alpha1"
+    assert _v.spec.volume.pvcName == "c1-disk-0"
+    assert _v.spec.volume.storage == "64Gi"
+    assert _v.spec.vm.cpu.cores == 4
+    assert _v.spec.vm.resources.cpu == "4"
+    assert _v.spec.vm.resources.memory == "8192Mi"
+    assert _v.spec.cloudInit.vmName == "c1"
+    assert _v.spec.cloudInit.hostname == "c1"
+}
+
+test_harvester_switches_ansible_on = lambda {
+    """ansible.enabled ist bei HarvesterVM per Default FALSE.
+
+    Bliebe es aus, kaeme die VM nackt hoch — kein Base-OS, kein Kubernetes —
+    und der ClusterStack wartete ewig auf eine Stufe, die nie emittiert wurde.
+    """
+    _v = l.vmChild("c1", "default", {provider = "harvester", clusterName = "c1"}, cat.getSize("medium"))
+    assert _v.spec.ansible.enabled == True
+}
+
+test_harvester_usage_points_at_the_right_group = lambda {
+    """Die Usage muss resources.* sagen, nicht config.*.
+
+    Ein falscher apiVersion faellt nicht auf: die Usage entsteht, zeigt auf ein
+    kind, das es nicht gibt, und schuetzt still gar nichts.
+    """
+    _u = l.usage("HarvesterVM", "c1-vm", "ClusterAccess", "c1-access", "access-uses-vm", True, "c1")
+    assert _u.spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
+    assert _u.spec.of.kind == "HarvesterVM"
+}
+
+test_proxmox_stays_the_default = lambda {
+    """Ein unbekannter oder fehlender provider bleibt proxmox."""
+    _v = l.vmChild("c1", "default", {clusterName = "c1"}, cat.getSize("small"))
+    assert _v.kind == "NativeProxmoxVM"
+}

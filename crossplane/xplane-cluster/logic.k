@@ -128,11 +128,50 @@ vmChild = lambda name: str, ns: str, spec: {str:any}, size: any -> {str:any} {
         }
     }
 
-    # The ONLY place the two providers differ: field names. Staging, gating and
+    # vsphere and proxmox differ only in FIELD NAMES; staging, gating and
     # everything downstream are identical (crossplane-configurations#168,
-    # option A).
+    # option A). Harvester breaks that symmetry and is therefore written out in
+    # full rather than folded into the others:
+    #
+    #   - the boot disk is a PVC of its own (`volume`), not a `disk` field
+    #   - cpu is an OBJECT (cores/sockets/threads), and the scheduler wants a
+    #     separate `resources.cpu` string on top of it
+    #   - memory is a quantity string, not a number of MiB
+    #   - cloud-init is a first-class block with a REQUIRED vmName/hostname
+    #   - ansible.enabled defaults to FALSE there, so the base-OS stage has to
+    #     be switched on explicitly or the cluster never gets provisioned
+    #
+    # Sizes are strings in the catalog (cpu "4", memory "8192" MiB, disk "64"
+    # GiB); the suffixes below are what turns them into Kubernetes quantities.
     _res = {
-        if _provider == "vsphere":
+        if _provider == "harvester":
+            apiVersion = "resources.stuttgart-things.com/v1alpha1"
+            kind = "HarvesterVM"
+            spec = {
+                environmentConfig = spec?.environmentConfig or "labul"
+                volume = {
+                    pvcName = "{}-disk-0".format(_cluster)
+                    storage = "{}Gi".format(size.disk)
+                    if _vm?.imageId:
+                        imageId = _vm.imageId
+                }
+                cloudInit = {
+                    vmName = _cluster
+                    hostname = _cluster
+                }
+                vm = {
+                    cpu.cores = int(size.cpu)
+                    resources = {
+                        cpu = size.cpu
+                        memory = "{}Mi".format(size.memory)
+                    }
+                }
+                # NOT optional: the XRD defaults this to false, and without it
+                # the VM comes up bare -- no base OS, no kubernetes, and the
+                # ClusterStack waits forever on a stage that was never emitted.
+                ansible = _ansible | {enabled = True}
+            }
+        elif _provider == "vsphere":
             apiVersion = "resources.stuttgart-things.com/v1alpha1"
             kind = "NativeVsphereVM"
             spec = {
@@ -461,7 +500,12 @@ usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str, r
         spec = {
             replayDeletion = replay
             of = {
-                apiVersion = "resources.stuttgart-things.com/v1alpha1" if ofKind in ["NativeProxmoxVM", "NativeVsphereVM"] else "config.stuttgart-things.com/v1alpha1"
+                # HarvesterVM lives in the same group as the two native VMs.
+                # Forgetting it here does not fail loudly -- it emits a Usage
+                # pointing at config.stuttgart-things.com/HarvesterVM, a kind
+                # that does not exist, and the protection silently guards
+                # nothing.
+                apiVersion = "resources.stuttgart-things.com/v1alpha1" if ofKind in ["NativeProxmoxVM", "NativeVsphereVM", "HarvesterVM"] else "config.stuttgart-things.com/v1alpha1"
                 kind = ofKind
                 resourceRef.name = ofName
             }

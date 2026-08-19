@@ -63,7 +63,11 @@ _byName = lambda name: str -> [any] {
     [v.Resource for _, v in _ocds if v?.Resource?.metadata?.name == name]
 }
 
-_vmKind = "NativeVsphereVM" if (_spec?.provider or "proxmox") == "vsphere" else "NativeProxmoxVM"
+_provider = _spec?.provider or "proxmox"
+_vmKind = {
+    "vsphere" = "NativeVsphereVM"
+    "harvester" = "HarvesterVM"
+}[_provider] or "NativeProxmoxVM"
 _vmObs = _byKind(_vmKind)
 _vm = _vmObs[0] if _vmObs else {}
 _vmShare = _vm?.status?.share or {}
