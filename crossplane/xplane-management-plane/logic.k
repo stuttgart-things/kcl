@@ -94,6 +94,42 @@ providerConfigsOpen = lambda packagesReady: bool, existing: int -> bool {
     packagesReady or existing > 0
 }
 
+# The CRD a ProviderConfig entry needs before it can be applied at all.
+#
+# WHY THIS EXISTS. A provider PACKAGE reports Healthy BEFORE its CRDs are
+# served. Gating the ProviderConfigs on package health therefore opens a window
+# -- two minutes on u26-rke2-1, none on mgmt-test1 -- in which the apply hits a
+# kind the API server does not know yet. That alone would be a hiccup; what
+# makes it permanent is provider-kubernetes: once its first create fails, the
+# Object stays Ready=False/Creating forever, even though every later reconcile
+# succeeds and the resource demonstrably exists. Thirty hours of a false
+# Ready=False on u26-rke2-1-mgmt, and it would block a whole ClusterStack that
+# composes a ManagementPlane. See crossplane-configurations#294.
+#
+# Derived from the ProviderConfig itself, not from the package: the question is
+# "can I create THIS kind", which is a property of its own group -- not of
+# whatever CRDs some package happens to register.
+providerConfigCrd = lambda pc -> str {
+    """CRD name for a ProviderConfig entry, e.g. clusterproviderconfigs.helm.m.crossplane.io.
+
+    Only the kinds we actually emit are mapped. An unmapped kind returns "" and
+    the caller then does NOT gate on it -- guessing a plural is how one ends up
+    waiting forever for a CRD that never had that name.
+    """
+    _group = pc.apiVersion.split("/")[0]
+    _plural = {
+        "ClusterProviderConfig" = "clusterproviderconfigs"
+        "ProviderConfig" = "providerconfigs"
+    }[pc.kind] or ""
+    "{}.{}".format(_plural, _group) if _plural else ""
+}
+
+# Distinct CRDs to wait for, in stable order.
+providerConfigCrds = lambda pcs: [any] -> [str] {
+    _all = [providerConfigCrd(pc) for pc in pcs]
+    sorted({c: "" for c in _all if c})
+}
+
 # --- validation ------------------------------------------------------------
 validate = lambda spec: {str:} -> bool {
     """Rules that must hold before anything is emitted.

@@ -128,3 +128,37 @@ test_provider_config_readiness_is_not_alltrue = lambda {
     assert l.providerConfigReadiness.policy != "AllTrue"
     assert l.providerConfigReadiness.policy != "SuccessfulCreate"
 }
+
+test_crd_name_is_derived_from_the_provider_config = lambda {
+    """Das Gate braucht den CRD-Namen der ProviderConfig, nicht den eines Pakets.
+
+    Ein Provider-Paket meldet Healthy, BEVOR seine CRDs ausgeliefert werden.
+    crossplane-configurations#294.
+    """
+    assert l.providerConfigCrd({apiVersion = "helm.m.crossplane.io/v1beta1", kind = "ClusterProviderConfig"}) == "clusterproviderconfigs.helm.m.crossplane.io"
+    assert l.providerConfigCrd({apiVersion = "kubernetes.m.crossplane.io/v1alpha1", kind = "ClusterProviderConfig"}) == "clusterproviderconfigs.kubernetes.m.crossplane.io"
+    assert l.providerConfigCrd({apiVersion = "opentofu.m.upbound.io/v1beta1", kind = "ClusterProviderConfig"}) == "clusterproviderconfigs.opentofu.m.upbound.io"
+    assert l.providerConfigCrd({apiVersion = "x.example.com/v1", kind = "ProviderConfig"}) == "providerconfigs.x.example.com"
+}
+
+test_unmapped_kind_is_not_gated_instead_of_guessed = lambda {
+    """Ein unbekanntes kind liefert "" — der Aufrufer wartet dann NICHT darauf.
+
+    Einen Plural zu raten ist der Weg, auf eine CRD zu warten, die nie so hiess.
+    """
+    assert l.providerConfigCrd({apiVersion = "x.example.com/v1", kind = "Etwas"}) == ""
+    assert l.providerConfigCrds([{apiVersion = "x.example.com/v1", kind = "Etwas"}]) == []
+}
+
+test_crd_list_is_deduplicated_and_stable = lambda {
+    """Zwei ProviderConfigs derselben Gruppe ergeben EIN Observe-Object."""
+    _pcs = [
+        {apiVersion = "helm.m.crossplane.io/v1beta1", kind = "ClusterProviderConfig"}
+        {apiVersion = "helm.m.crossplane.io/v1beta1", kind = "ClusterProviderConfig"}
+        {apiVersion = "kubernetes.m.crossplane.io/v1alpha1", kind = "ClusterProviderConfig"}
+    ]
+    assert l.providerConfigCrds(_pcs) == [
+        "clusterproviderconfigs.helm.m.crossplane.io"
+        "clusterproviderconfigs.kubernetes.m.crossplane.io"
+    ]
+}

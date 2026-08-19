@@ -64,9 +64,54 @@ _pcName = lambda i: int, pc -> str {
 }
 _pcObs = [x for i, pc in _profile.providerConfigs for x in _byName(_pcName(i, pc))]
 
+# --- CRD watch: the gate the ProviderConfigs really need --------------------
+# Observe-only Objects on the CRDs the ProviderConfigs belong to. A package is
+# Healthy before its CRDs are served, so package health alone opens the gate too
+# early -- see logic.providerConfigCrd for what that costs. #294.
+_crds = l.providerConfigCrds(_profile.providerConfigs)
+_crdName = lambda crd: str -> str {
+    "{}-crd-{}".format(_name, crd.split(".")[1])
+}
+_crdObserveObject = lambda crd: str -> any {
+    {
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+        kind = "Object"
+        metadata = {
+            name = _crdName(crd)
+            namespace = _xrNs
+            annotations = {"krm.kcl.dev/composition-resource-name" = _crdName(crd)}
+        }
+        spec = {
+            managementPolicies = ["Observe"]
+            providerConfigRef.name = l.kubernetesRef(_spec)
+            # Metadata only, and that survives the verify pipeline for a
+            # reason worth knowing: kubeconform ships NO schema for
+            # CustomResourceDefinition, so with -ignore-missing-schemas it is
+            # Skipped rather than validated. Should a CRD schema ever land in
+            # that set, this would start failing -- CRD v1 requires `spec` --
+            # exactly like the metadata-only Deployment did in xplane-platform
+            # 0.22.0. The fix then is a minimal valid spec here, never dropping
+            # -strict.
+            forProvider.manifest = {
+                apiVersion = "apiextensions.k8s.io/v1"
+                kind = "CustomResourceDefinition"
+                metadata = {name = crd}
+            }
+        }
+    }
+}
+
+# Established, not merely present: a CRD exists for a moment before the API
+# server serves it, and that moment is exactly the window we are closing.
+_crdEstablished = lambda crd: str -> bool {
+    _obs = _byName(_crdName(crd))
+    len([c for o in _obs for c in (o?.status?.atProvider?.manifest?.status?.conditions or []) if c?.type == "Established" and c?.status == "True"]) > 0
+}
+_crdsReady = len([c for c in _crds if _crdEstablished(c)]) == len(_crds)
+
 # --- gates ------------------------------------------------------------------
 _pkgOpen = l.packagesOpen(_coreReady, len(_pkgObs))
-_pcOpen = l.providerConfigsOpen(_pkgReady, len(_pcObs))
+_pcOpen = l.providerConfigsOpen(_pkgReady and _crdsReady, len(_pcObs))
 
 # --- 1) Crossplane core -----------------------------------------------------
 _core = {
@@ -246,4 +291,4 @@ _status = {
     }
 }
 
-items = [_core] + ([_rbac] if l.clusterAdminEnabled(_spec) else []) + ([_packageObject(p) for p in _packages] if _pkgOpen else []) + ([_providerConfigObject(i, pc) for i, pc in _profile.providerConfigs] if _pcOpen else []) + [_status]
+items = [_core] + ([_rbac] if l.clusterAdminEnabled(_spec) else []) + ([_packageObject(p) for p in _packages] if _pkgOpen else []) + ([_crdObserveObject(c) for c in _crds] if _pkgOpen else []) + ([_providerConfigObject(i, pc) for i, pc in _profile.providerConfigs] if _pcOpen else []) + [_status]
