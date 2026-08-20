@@ -165,6 +165,7 @@ test_harvester_is_part_of_a_machinery = lambda {
     _p = c.get("machinery")
     _hv = [x for x in _p.packages if x.name.endswith("-harvester-vm")]
     assert len(_hv) == 1, "harvester-vm fehlt im machinery-Profil"
+
     # Kein providerCrd: rendert ueber provider-kubernetes, registriert keinen
     # eigenen Provider. Ein gesetztes Feld hier waere ein Wartefehler beim
     # Bootstrap.
