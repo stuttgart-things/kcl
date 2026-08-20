@@ -135,10 +135,12 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-proxmoxvm"
-            # v0.12.2: v0.12.0 trennt templateNode vom Ziel-Node, v0.12.2 nimmt
-            # denselben environmentConfig-Durchreicher heraus wie vspherevm
-            # v0.9.2 oben (crossplane-configurations#347).
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.12.2"
+            # v0.12.0 trennt templateNode vom Ziel-Node, v0.12.2 nimmt denselben
+            # environmentConfig-Durchreicher heraus wie vspherevm v0.9.2 oben
+            # (crossplane-configurations#347), v0.13.0 macht den
+            # cloud-init-Datastore ueber die EnvironmentConfig setzbar
+            # (crossplane-configurations#350).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.13.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
