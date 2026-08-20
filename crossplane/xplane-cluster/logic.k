@@ -353,6 +353,12 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
 kubeconfigVaultPairs: {str:str} = {
     "vault" = "vault-kubeconfigs"
     "vault-infra" = "vault-kubeconfigs-infra"
+    # LabDA, 2026-08-20. Eigener Vault (vault-vsphere.tiab.labda.sva.de), NICHT
+    # einer der beiden LabUL-Vaults: LabUL-vSphere wird abgeschaltet, und ein
+    # LabDA-Cluster soll seinen kubeconfig nicht dort ablegen. Der Eintrag hier
+    # ist das, was den Aufrufer davon befreit, kubeconfig.providerConfigRef von
+    # Hand zu setzen -- und genau dieses Handsetzen ist in #336 schiefgegangen.
+    "vault-labda" = "vault-kubeconfigs-labda"
 }
 
 kubeconfigReadRef = lambda kc: {str:} -> str {

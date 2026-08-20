@@ -556,6 +556,21 @@ test_read_ref_is_derived_from_the_upload_target = lambda {
     assert l.kubeconfigReadRef({}) == "vault-kubeconfigs"
     assert l.kubeconfigReadRef({vaultSecretName = "vault"}) == "vault-kubeconfigs"
     assert l.kubeconfigReadRef({vaultSecretName = "vault-infra"}) == "vault-kubeconfigs-infra"
+    assert l.kubeconfigReadRef({vaultSecretName = "vault-labda"}) == "vault-kubeconfigs-labda"
+}
+
+test_labda_pair_needs_no_explicit_ref = lambda {
+    """LabDA ohne providerConfigRef von Hand.
+
+    Der Punkt des Map-Eintrags: ein LabDA-ClusterStack nennt nur
+    vaultSecretName, und die Leseseite folgt. Wer hier von Hand nachhelfen
+    muesste, koennte die beiden Seiten wieder auseinanderlaufen lassen -- der
+    Fehler aus #336, der 40 Minuten gekostet hat, weil der ClusterStack dabei
+    Ready=True bleibt.
+    """
+    _spec = {clusterName = "seed", kubeconfig = {vaultSecretName = "vault-labda"}}
+    _a = l.clusterAccess("seed", "crossplane-system", _spec)
+    assert _a.spec.kubeconfigProviderConfigRef == "vault-kubeconfigs-labda"
 }
 
 test_explicit_read_ref_still_wins = lambda {
