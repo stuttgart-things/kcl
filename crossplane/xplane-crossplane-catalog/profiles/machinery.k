@@ -96,7 +96,11 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-platform"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.3.11"
+            # v0.6.2, nicht v0.3.11: der Katalog war gegenueber dem
+            # Referenz-Cluster u26-kind3 vier Configurations weit
+            # zurueckgefallen (2026-08-20 abgeglichen). Ein Profil, das
+            # beschreibt, was eine Machinery IST, darf das nicht.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.6.2"
             pulls = ["cni", "flux-init", "flux-apps", "ip-reservation", "vault-auth", "vault-pki-secrets"]
         }
         s.Package {
@@ -105,21 +109,51 @@ machinery: s.Profile = {
             # >=v0.4.0 carries spec.managementPlaneEnabled — without it a
             # management cluster built from this profile cannot build further
             # management clusters, only workload ones.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.4.0"
+            #
+            # v0.6.1 ist aus demselben Grund ein Muss, eine Ebene weiter: erst
+            # v0.6.0 kennt `harvester` im Provider-Enum und erst v0.6.1 das
+            # Vault-Paar vault-labda -> vault-kubeconfigs-labda. Ein Seed auf
+            # v0.4.0 kann also genau die LabDA-Cluster NICHT bauen, fuer die er
+            # aufgestellt wird — aufgefallen beim ersten LabDA-Seed
+            # (crossplane-configurations#258, 2026-08-20).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.6.1"
             pulls = ["platform", "remote-cluster", "vspherevm", "proxmoxvm", "ansible-run", "management-plane"]
         }
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-vspherevm"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.9.0"
+            # v0.9.2 NICHT v0.9.0: v0.9.0 reicht spec.environmentConfig an die
+            # emittierte AnsibleRun durch. Das benennt eine Hypervisor-Env, die
+            # ansible-run gegen sein EIGENES Label aufloest, wo es sie nicht
+            # gibt — jeder ansible-run-Default faellt still weg,
+            # ansibleExtraCollections eingeschlossen, und der Base-OS-Lauf
+            # scheitert an einer Collection-Version. crossplane-configurations#347.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.9.2"
             providerCrd = "clusterproviderconfigs.vspherevm.m.stuttgart-things.com"
             pulls = ["ansible-run"]
         }
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-proxmoxvm"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.11.0"
+            # v0.12.2: v0.12.0 trennt templateNode vom Ziel-Node, v0.12.2 nimmt
+            # denselben environmentConfig-Durchreicher heraus wie vspherevm
+            # v0.9.2 oben (crossplane-configurations#347).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.12.2"
             pulls = ["ansible-run"]
+        }
+        # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
+        # gar nicht, obwohl das machinery-Playbook ihn auf jeden Machinery-
+        # Cluster legt — der Katalog beschrieb also eine Machinery, die es so
+        # nicht gibt.
+        #
+        # KEIN providerCrd, und das ist kein Versehen: harvester-vm rendert eine
+        # KubeVirt VirtualMachine ueber provider-kubernetes und registriert
+        # keinen eigenen Provider.
+        s.Package {
+            kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-harvester-vm"
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/harvester-vm:v0.1.9"
+            pulls = ["volume-claim", "cloud-config", "ansible-run"]
         }
         s.Package {
             kind = "Configuration"
