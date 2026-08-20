@@ -1,9 +1,9 @@
 [dependencies]
   [dependencies.xplane-crossplane-catalog]
     name = "xplane-crossplane-catalog"
-    full_name = "xplane-crossplane-catalog_0.2.0"
-    version = "0.2.0"
-    sum = "m3nTr7+8Gk3KYoTzMlmL+zZitNgdkuoDChpoYfYz5YI="
+    full_name = "xplane-crossplane-catalog_0.3.0"
+    version = "0.3.0"
+    sum = "oCA22bbtPvqZ8Med0r498PGBeZG1mv+Pf5fH5bIbCDQ="
     reg = "ghcr.io"
     repo = "stuttgart-things/xplane-crossplane-catalog"
-    oci_tag = "0.2.0"
+    oci_tag = "0.3.0"
