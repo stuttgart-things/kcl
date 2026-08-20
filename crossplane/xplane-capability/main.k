@@ -95,6 +95,12 @@ _objName = lambda capName: str -> str {
     capName + "-" + _environment
 }
 
+# Praefixt die komponierten Object-Namen mit clusterName. Die Regel samt
+# Begruendung liegt in logic.k, damit sie testbar ist.
+_resNameFor = lambda suffix: str -> str {
+    logic.resourceName(_clusterName, suffix)
+}
+
 # `<capability>-creds-<env>` — NOT the charts' `proxmox-creds-<env>`. The
 # difference is deliberate: on a cluster that still has the chart installed,
 # colliding on the Secret name would give two owners to one object, and the ESO
@@ -199,7 +205,7 @@ _object = lambda resName: str, manifest: {str:}, readiness: {str:str} = _readyFr
 _externalSecret = lambda capName: str -> {str:} {
     _c = cat.get(capName)
     _v = _capSpec(capName)?.vault or {}
-    _resName = capName + "-credentials"
+    _resName = _resNameFor(capName + "-credentials")
     _object(_resName, {
         apiVersion = "external-secrets.io/v1"
         kind = "ExternalSecret"
@@ -243,7 +249,7 @@ _externalSecret = lambda capName: str -> {str:} {
 _workloadSecret = lambda capName: str, w: capschema.WorkloadSecret, idx: int -> {str:} {
     _v = _capSpec(capName)?.vault or {}
     _secretName = capName + "-" + w.nameSuffix
-    _resName = capName + "-" + w.nameSuffix + "-secret"
+    _resName = _resNameFor(capName + "-" + w.nameSuffix + "-secret")
     _object(_resName, {
         apiVersion = "external-secrets.io/v1"
         kind = "ExternalSecret"
@@ -285,7 +291,7 @@ _workloadSecretNames = lambda capName: str -> {str:str} {
 
 _secretStore = lambda capName: str -> {str:} {
     _v = _vaultOf(capName)
-    _resName = capName + "-secret-store"
+    _resName = _resNameFor(capName + "-secret-store")
 
     # Cluster-scoped: a ClusterSecretStore has no namespace, and an
     # ExternalSecret in any namespace may reference it — which is what the
@@ -325,7 +331,7 @@ _secretStore = lambda capName: str -> {str:} {
 _providerConfig = lambda capName: str -> {str:} {
     _c = cat.get(capName)
     _pc = _c.providerConfig
-    _resName = capName + "-provider-config"
+    _resName = _resNameFor(capName + "-provider-config")
     _object(_resName, {
         apiVersion = _pc.apiVersion
         kind = _pc.kind
@@ -345,7 +351,7 @@ _providerConfig = lambda capName: str -> {str:} {
 
 _environmentConfig = lambda capName: str -> {str:} {
     _c = cat.get(capName)
-    _resName = capName + "-environment-config"
+    _resName = _resNameFor(capName + "-environment-config")
 
     # providerConfigName/-Kind are DERIVED, never taken from the XR: they name
     # the object rendered two functions up, and letting an XR state them makes

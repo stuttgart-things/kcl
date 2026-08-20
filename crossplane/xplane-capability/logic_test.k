@@ -159,3 +159,20 @@ test_credentials_land_where_their_consumer_reads_them = lambda {
     _pp = logic.placement("proxmoxvm", _full)
     assert logic.credentialsNamespace("proxmoxvm", _pp, "crossplane-system") == "crossplane-system"
 }
+
+# Ein fehlendes Cluster-Praefix bricht nichts — es erzeugt eine Kollision, die
+# erst auf einem ZWEITEN Cluster im selben Namespace sichtbar wird, und dort als
+# "Unready resources" statt als Namensproblem. Deshalb hier festgenagelt.
+# Siehe crossplane-configurations#356.
+test_composed_object_names_carry_the_cluster = lambda {
+    assert logic.resourceName("seed-labda-1", "vspherevm-secret-store") == "seed-labda-1-vspherevm-secret-store"
+    assert logic.resourceName("u26-rke2-1", "ansible-run-credentials") == "u26-rke2-1-ansible-run-credentials"
+}
+
+# Der Punkt der Uebung: dieselbe Capability auf zwei Clustern darf sich im
+# selben Namespace nicht auf einen Namen einigen.
+test_two_clusters_do_not_collide_on_one_name = lambda {
+    _a = logic.resourceName("u26-rke2-1", "ansible-run-secret-store")
+    _b = logic.resourceName("seed-labda-1", "ansible-run-secret-store")
+    assert _a != _b, "two clusters produced the same composed object name: " + _a
+}

@@ -107,3 +107,30 @@ credentialsNamespace = lambda capName: str, placementOf: {str:}, providerNs: str
     _f = cat.get(capName)?.credentialsNamespaceField
     str(placementOf[_f]) if _f else providerNs
 }
+
+# Der Name der komponierten Object-Ressource AUF DEM MANAGEMENT-CLUSTER — nicht
+# zu verwechseln mit dem Namen der Ressource auf dem ZIELCLUSTER, der aus
+# Capability + Environment gebildet wird.
+#
+# clusterName MUSS hinein. Ohne das Praefix heisst das Object nur nach der
+# Capability ("ansible-run-secret-store"), und zwei Capability-XRs im selben
+# Namespace kollidieren zwangslaeufig auf jeder Capability, die beide aktiviert
+# haben. Am 2026-08-20 auf kind3 passiert: u26-rke2-1-capability hielt die
+# ansible-run-Namen, ein neues seed-labda-1-capability fuehrte dieselben Objects
+# in seinen resourceRefs und blieb auf Ready=False stehen — waehrend seine
+# vspherevm-Haelfte durchlief, weil u26 zufaellig proxmoxvm faehrt.
+#
+# Ueberschrieben wurde nichts: Crossplane beansprucht keine Ressource, die
+# bereits das crossplane.io/composite-Label eines anderen Composites traegt.
+# Darauf zu bauen waere aber falsch — die beiden XRs zeigten auf verschiedene
+# Cluster UND verschiedene Vaults, und ohne diese Sicherung haette das neue XR
+# den Store des anderen Clusters auf den falschen Vault umgebogen, still und
+# ohne Meldung. Siehe crossplane-configurations#356.
+#
+# Hier statt inline in main.k, weil ein Fehler hier nicht bricht sondern
+# verwechselt: ein falsches Praefix erzeugt eine Kollision, die erst auf einem
+# zweiten Cluster sichtbar wird.
+resourceName = lambda clusterName: str, suffix: str -> str {
+    assert clusterName, "clusterName is required — composed object names must be unique per cluster"
+    clusterName + "-" + suffix
+}
