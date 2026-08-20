@@ -127,10 +127,20 @@ credentialsNamespace = lambda capName: str, placementOf: {str:}, providerNs: str
 # den Store des anderen Clusters auf den falschen Vault umgebogen, still und
 # ohne Meldung. Siehe crossplane-configurations#356.
 #
+# ENVIRONMENT GEHOERT DAZU, nicht nur clusterName. Das XRD sagt zu spec.environment
+# ausdruecklich "Set it when one cluster serves two environments (labda AND
+# labul)" -- der vorgesehene Weg fuer zwei Umgebungen sind also ZWEI
+# Capability-XRs auf demselben Cluster. Praefixt man nur mit clusterName, tragen
+# deren Objects fuer dieselbe Capability wieder denselben Namen, und die
+# Kollision ist zurueck, ausgerechnet im vom XRD vorgesehenen Fall. Fuer
+# VERSCHIEDENE Capabilities (proxmoxvm vs vspherevm) reicht clusterName, weil der
+# Capability-Name im Suffix steckt -- das deckt aber nur die Haelfte ab.
+#
 # Hier statt inline in main.k, weil ein Fehler hier nicht bricht sondern
 # verwechselt: ein falsches Praefix erzeugt eine Kollision, die erst auf einem
-# zweiten Cluster sichtbar wird.
-resourceName = lambda clusterName: str, suffix: str -> str {
+# zweiten Cluster oder in einer zweiten Umgebung sichtbar wird.
+resourceName = lambda clusterName: str, environment: str, suffix: str -> str {
     assert clusterName, "clusterName is required — composed object names must be unique per cluster"
-    clusterName + "-" + suffix
+    assert environment, "environment is required — one cluster may serve two of them"
+    clusterName + "-" + environment + "-" + suffix
 }

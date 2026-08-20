@@ -98,7 +98,7 @@ _objName = lambda capName: str -> str {
 # Praefixt die komponierten Object-Namen mit clusterName. Die Regel samt
 # Begruendung liegt in logic.k, damit sie testbar ist.
 _resNameFor = lambda suffix: str -> str {
-    logic.resourceName(_clusterName, suffix)
+    logic.resourceName(_clusterName, _environment, suffix)
 }
 
 # `<capability>-creds-<env>` — NOT the charts' `proxmox-creds-<env>`. The

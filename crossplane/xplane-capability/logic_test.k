@@ -165,14 +165,24 @@ test_credentials_land_where_their_consumer_reads_them = lambda {
 # "Unready resources" statt als Namensproblem. Deshalb hier festgenagelt.
 # Siehe crossplane-configurations#356.
 test_composed_object_names_carry_the_cluster = lambda {
-    assert logic.resourceName("seed-labda-1", "vspherevm-secret-store") == "seed-labda-1-vspherevm-secret-store"
-    assert logic.resourceName("u26-rke2-1", "ansible-run-credentials") == "u26-rke2-1-ansible-run-credentials"
+    assert logic.resourceName("seed-labda-1", "labda", "vspherevm-secret-store") == "seed-labda-1-labda-vspherevm-secret-store"
+    assert logic.resourceName("u26-rke2-1", "labul", "ansible-run-credentials") == "u26-rke2-1-labul-ansible-run-credentials"
 }
 
 # Der Punkt der Uebung: dieselbe Capability auf zwei Clustern darf sich im
 # selben Namespace nicht auf einen Namen einigen.
 test_two_clusters_do_not_collide_on_one_name = lambda {
-    _a = logic.resourceName("u26-rke2-1", "ansible-run-secret-store")
-    _b = logic.resourceName("seed-labda-1", "ansible-run-secret-store")
+    _a = logic.resourceName("u26-rke2-1", "labul", "ansible-run-secret-store")
+    _b = logic.resourceName("seed-labda-1", "labda", "ansible-run-secret-store")
     assert _a != _b, "two clusters produced the same composed object name: " + _a
+}
+
+# Der Fall, den das XRD ausdruecklich vorsieht: EIN Cluster, ZWEI Umgebungen,
+# also zwei Capability-XRs mit derselben Capability. Ein Praefix aus nur
+# clusterName haette hier wieder denselben Namen erzeugt -- die Kollision waere
+# im vom XRD vorgesehenen Szenario zurueckgewesen.
+test_two_environments_on_one_cluster_do_not_collide = lambda {
+    _a = logic.resourceName("u26-rke2-1", "labul", "vspherevm-secret-store")
+    _b = logic.resourceName("u26-rke2-1", "labda", "vspherevm-secret-store")
+    assert _a != _b, "two environments on one cluster produced the same name: " + _a
 }
