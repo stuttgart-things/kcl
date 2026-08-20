@@ -130,10 +130,43 @@ test_get_rejects_an_unknown_profile = lambda {
 # A management cluster must be able to build FURTHER management clusters — that
 # is what makes the seed disposable rather than load-bearing forever. It needs
 # cluster >=v0.4.0 (spec.managementPlaneEnabled) and management-plane behind it.
+#
+# UNTERGRENZE, KEIN EXAKTER PIN. Bis 2026-08-20 stand hier
+# `endswith(":v0.4.0")`, und das hat die Aussage des Tests verdreht: gepruefte
+# Absicht ist "kann Control Planes bauen", nicht "traegt genau diesen Tag". Ein
+# Bump des Katalogs liess den Test rot werden, obwohl die Faehigkeit erhalten
+# blieb — ein Test, der beim Richtigmachen bricht, wird irgendwann angepasst
+# statt gelesen.
 test_the_profile_can_build_control_planes = lambda {
     _p = c.get("machinery")
     _cl = [x for x in _p.packages if x.name.endswith("-cluster")][0]
-    assert _cl.package.endswith(":v0.4.0")
+    _v = [int(n) for n in _cl.package.split(":v")[1].split(".")]
+    assert _v[0] > 0 or _v[1] >= 4, "cluster muss >= v0.4.0 sein (spec.managementPlaneEnabled)"
     assert "management-plane" in _cl.pulls
     assert "management-plane" in c.transitive(_p)
+}
+
+# Die zweite Untergrenze, und der Grund, warum der Katalog am 2026-08-20
+# ueberhaupt angefasst wurde: erst cluster v0.6.0 kennt `harvester` im
+# Provider-Enum und erst v0.6.1 das Vault-Paar vault-labda ->
+# vault-kubeconfigs-labda. Ein Seed unterhalb davon kann die LabDA-Cluster
+# nicht bauen, fuer die er aufgestellt wird (crossplane-configurations#258).
+test_the_profile_can_build_in_labda = lambda {
+    _p = c.get("machinery")
+    _cl = [x for x in _p.packages if x.name.endswith("-cluster")][0]
+    _v = [int(n) for n in _cl.package.split(":v")[1].split(".")]
+    assert _v[0] > 0 or _v[1] > 6 or (_v[1] == 6 and _v[2] >= 1), "cluster muss >= v0.6.1 sein (vault-labda, harvester)"
+}
+
+# harvester-vm gehoert ins Profil, weil das machinery-Playbook es auf jeden
+# Machinery-Cluster legt. Fehlte bis 2026-08-20 — der Katalog beschrieb eine
+# Machinery, die es so nicht gibt.
+test_harvester_is_part_of_a_machinery = lambda {
+    _p = c.get("machinery")
+    _hv = [x for x in _p.packages if x.name.endswith("-harvester-vm")]
+    assert len(_hv) == 1, "harvester-vm fehlt im machinery-Profil"
+    # Kein providerCrd: rendert ueber provider-kubernetes, registriert keinen
+    # eigenen Provider. Ein gesetztes Feld hier waere ein Wartefehler beim
+    # Bootstrap.
+    assert not _hv[0]?.providerCrd
 }
