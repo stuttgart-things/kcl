@@ -1,0 +1,57 @@
+# Does every version the package catalog pins actually exist in its registry?
+#
+# SCHEDULED, NOT ONLY ON CHANGES — that is the whole design.
+#
+# The catalog drifts without anyone touching it. Its pins name packages built in
+# other repositories; every release there moves the fleet forward and leaves the
+# profile where it was. A workflow gated on catalog paths would never fire on the
+# failure it exists for.
+#
+# Measured 2026-08-20: the machinery profile had fallen four Configurations
+# behind the reference cluster and carried no harvester-vm at all. Nobody noticed
+# for weeks. It surfaced only when a freshly built LabDA seed came up on
+# cluster v0.4.0 — which knows neither `harvester` in the provider enum nor the
+# vault-labda mapping, and therefore could not build the clusters it had been
+# stood up for.
+name: Catalog Parity
+
+on:
+  schedule:
+    # Daily, early enough that the drift table is in the inbox before anyone
+    # pins a version by hand.
+    - cron: '0 6 * * *'
+  pull_request:
+    paths:
+      - 'crossplane/xplane-crossplane-catalog/**'
+      - 'tests/lint/catalog-parity.py'
+      - '.github/workflows/catalog-parity.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  catalog-parity:
+    name: Catalog pins exist in their registries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install KCL
+        # The pins are read through `kcl run`, not by regexing the .k source: a
+        # profile that builds its package list some other way still gets checked.
+        run: |
+          set -euo pipefail
+          curl -sSL https://kcl-lang.io/script/install-cli.sh | /bin/bash
+          kcl --version
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # No --strict: "behind newest" is a WARNING by design. Pinning is the
+      # point of a catalog, and being behind is often correct. What is not
+      # acceptable is being behind WITHOUT KNOWING — so the table is printed on
+      # every run and only a pin that CANNOT BE PULLED fails the job.
+      - run: python3 tests/lint/catalog-parity.py
