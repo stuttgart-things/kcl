@@ -135,6 +135,24 @@ NEXT_PAGE = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
 MAX_PAGES = 50
 
 
+class NotPublic(Exception):
+    """The registry answered that there is nothing anonymously pullable here.
+
+    Distinct from "unreachable", and the distinction is load-bearing: a pin
+    nobody can pull breaks a cluster exactly as thoroughly whether the package
+    was never pushed or merely left private, and BOTH must be reported. A
+    private package silently skipped is the failure this check exists to catch.
+
+    Measured on ghcr.io (2026-08-20), which separates the two at the token
+    endpoint: 403 = never pushed, 401 = exists but private. `task push` reports
+    success for the second; only the visibility flip is missing.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 def fetch_tags(host: str, repo: str) -> list[str] | None:
     """Published tags, [] if the repository has none/does not exist, None if the
     registry declined to answer.
@@ -166,7 +184,12 @@ def fetch_tags(host: str, repo: str) -> list[str] | None:
                     raise
                 token = _token(host, e.headers.get("WWW-Authenticate", ""))
                 if not token:
-                    return None
+                    # The realm refused to mint an anonymous token. For a public
+                    # repository it always does; a refusal therefore means the
+                    # artifact is not publicly pullable, which is an ANSWER.
+                    raise NotPublic(
+                        "no anonymous token — the repository is private or "
+                        "does not exist") from None
                 continue
             with r:
                 tags.extend(json.load(r).get("tags") or [])
@@ -177,12 +200,14 @@ def fetch_tags(host: str, repo: str) -> list[str] | None:
             url = nxt if nxt.startswith("http") else f"https://{host}{nxt}"
         return tags
     except urllib.error.HTTPError as e:
-        # 403/404 are ANSWERS: no public artifact under this name. GHCR in
+        # 401/403/404 are ANSWERS: no public artifact under this name. GHCR in
         # particular does not 404 for a package that was never pushed — it
-        # answers 403 at the token step. Folding a private package in here is
-        # intentional: a package Crossplane cannot pull anonymously is broken
-        # for this fleet either way.
-        return [] if e.code in (403, 404) else None
+        # answers 403 at the token step, and 401 for one that exists but is
+        # private. Both belong in the report; only a registry that declines to
+        # answer at all (5xx, rate limit) is a skip.
+        if e.code in (401, 403, 404):
+            raise NotPublic(f"registry answered {e.code}") from None
+        return None
     except Exception:
         return None
 
@@ -215,7 +240,14 @@ def main() -> int:
             continue
         host, repo, tag = parts
 
-        tags = fetch_tags(host, repo)
+        try:
+            tags = fetch_tags(host, repo)
+        except NotPublic as e:
+            errors.append(
+                f"{pin['profile']}/{pin['name']}: {host}/{repo}:{tag} is not "
+                f"anonymously pullable ({e.reason}) — a cluster built from this "
+                f"profile cannot install it")
+            continue
         if tags is None:
             skipped.append(f"{host}/{repo}")
             continue
