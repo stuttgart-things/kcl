@@ -24,19 +24,25 @@ machinery: s.Profile = {
         s.Package {
             kind = "Provider"
             name = "crossplane-contrib-provider-helm"
-            package = "xpkg.crossplane.io/crossplane-contrib/provider-helm:v1.3.0"
+            # v1.4.0 hebt das eingebettete Helm-SDK von v3 auf v4. Die
+            # Release-API ist unveraendert, das Laufzeitverhalten nicht:
+            # Server-Side-Apply ist fuer NEU installierte Releases der Default
+            # und `wait` haengt jetzt an kstatus. Durch Release-Objekte geht
+            # jede Platform-App (cert-manager, openebs, cni, flux-init) — ein
+            # Upgrade hier ist deshalb nie Teil einer reinen CVE-Runde.
+            package = "xpkg.crossplane.io/crossplane-contrib/provider-helm:v1.4.0"
             clusterRole = "cluster-admin"
         }
         s.Package {
             kind = "Provider"
             name = "upbound-provider-opentofu"
-            package = "xpkg.upbound.io/upbound/provider-opentofu:v1.1.4"
+            package = "xpkg.upbound.io/upbound/provider-opentofu:v1.1.6"
             clusterRole = "cluster-admin"
         }
         s.Package {
             kind = "Provider"
             name = "stuttgart-things-provider-kubeconfig-xpkg"
-            package = "ghcr.io/stuttgart-things/provider-kubeconfig-xpkg:v0.13.1"
+            package = "ghcr.io/stuttgart-things/provider-kubeconfig-xpkg:v0.13.2"
         }
         # Not pulled by anything: ip-reservation classes clusterbook as a
         # cluster precondition rather than a package dependency, so without this
@@ -62,33 +68,44 @@ machinery: s.Profile = {
             # CR from it. Two nodes, two distinct sources — healthy. Aligning
             # the mirrors gives two nodes with an IDENTICAL source and freezes
             # the resolver for every package on the cluster.
-            package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.1"
+            package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.2"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
             kind = "Function"
             name = "function-auto-ready"
-            # <v0.7.0 is a hard ceiling: v0.7.0 makes Configurations report
-            # Unhealthy and the deploy-crossplane wait times out.
-            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.5"
+            # <v0.7.0 bleibt eine harte Decke, und der Grund ist praeziser
+            # als "v0.7.0 ist kaputt": 30 Stellen in crossplane-configurations
+            # deklarieren dependsOn function-auto-ready >=v0.6.5,<v0.7.0. Mit
+            # v0.7.0 melden diese Package-Revisions "incompatible dependencies"
+            # und der deploy-crossplane-Wait laeuft in den Timeout. Erst
+            # anheben, wenn die Configurations die Spanne weiten.
+            #
+            # v0.6.7 statt v0.6.5 (2026-08-21): die 0.6er-Linie lebt WEITER,
+            # v0.6.6 und v0.6.7 sind NACH v0.7.0 erschienen und sind reine
+            # CVE-Backports (Go 1.25.12, x/net, x/text, grpc). Unter der Decke
+            # zu bleiben heisst also nicht, auf Sicherheitsfixes zu verzichten.
+            # Der catalog-parity-Check sieht das nicht: er vergleicht gegen das
+            # hoechste Semver und zeigte deshalb auf das verbotene v0.7.0.
+            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.7"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         s.Package {
             kind = "Function"
             name = "function-go-templating"
-            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.2"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.3"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         s.Package {
             kind = "Function"
             name = "function-environment-configs"
-            package = "xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.7.2"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.7.3"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
             kind = "Function"
             name = "function-patch-and-transform"
-            package = "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.7"
+            package = "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.9"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
 

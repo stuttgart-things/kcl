@@ -225,3 +225,7 @@ _kcl_test.k
 # dependencies here. It is a rebuildable cache, not source — and committing it
 # makes CI lint-test the vendored copy as if it were a module of this repo.
 **/oci/ghcr.io/
+
+### Python ###
+__pycache__/
+*.py[cod]
