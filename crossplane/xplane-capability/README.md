@@ -6,6 +6,7 @@ act on an external system, onto a target cluster, one set per enabled capability
 
 | object | why |
 |---|---|
+| `Namespace` | the ones this module writes into, so they are not a precondition — see below |
 | `ClusterSecretStore` | where the credentials come from — only where a capability names its own KV mount |
 | `ExternalSecret` (credentials) | the provider may log in |
 | `ClusterProviderConfig` | it knows where to connect |
@@ -113,6 +114,40 @@ the symptom is not a missing Secret: cloud-init applies its `lock_passwd`
 default, LOCKS the guest account, and every password-based `AnsibleRun` reports
 the host `UNREACHABLE`.
 
+## The namespaces are created, not assumed
+
+Every namespace in the table above is emitted as a `Namespace` object with
+`managementPolicies: [Observe, Create]` — adopt it if it exists, create it if it
+does not, never modify or delete it.
+
+It has to be this module, because *which* namespace it is comes out of a
+capability's own placement. `ansible-run` puts its credentials in `tekton-ci`
+because a Tekton pipeline reads them there. On `u26-rke2-1` that namespace
+existed, because that cluster's Platform installs the `tekton` app; on
+`seed-labda-1`, which runs only cert-manager, external-secrets and openebs, the
+object sat at
+
+```
+create failed: cannot create object: namespaces "tekton-ci" not found
+```
+
+with the `vspherevm` half of the same XR green — a capability held up by a
+precondition nothing declared.
+
+Two consequences of the policy set:
+
+* **no `Delete`** — the namespace and everything in it survives the capability
+  being torn down. With `Delete`, switching off `ansible-run` would take the
+  cluster's Tekton pipelines with it.
+* **no `Update`** — a namespace that already has an owner (the `tekton` app,
+  another Capability XR, a human) keeps it. Two Capability XRs may name the same
+  namespace and neither writes to it.
+
+No exception list, so `default` and `crossplane-system` are emitted too. They are
+adopted on the first observe and never touched again; a list of "these always
+exist" would be Kubernetes trivia in the module with exactly one hole in it — the
+day someone points `spec.namespace` at something of their own.
+
 ## Failing the render
 
 A capability with a missing or unknown placement field aborts the whole render,
@@ -158,16 +193,21 @@ every field is legitimately absent.
 | `test_an_existing_store_needs_no_vault_facts` | requiring Vault facts from a cluster that reuses a store it already trusts |
 | `test_status_less_objects_do_not_derive_readiness_from_themselves` | an EnvironmentConfig or ClusterProviderConfig stuck at Ready=False forever |
 | `test_secret_objects_derive_readiness_from_themselves` | a capability reporting ready while Vault answers 403 |
+| `test_the_credentials_namespace_is_ensured` | the `tekton-ci` failure above coming back |
+| `test_a_shared_namespace_is_emitted_once` | two capabilities naming one namespace producing two composed objects with the same name — a render error that appears only when someone enables the second capability |
+| `test_namespaces_come_out_in_a_stable_order` | a render that changes with dict iteration, which every differ reads as a change |
+| `test_an_empty_namespace_is_dropped` | `namespace: ""` reaching the API server as an empty `metadata.name` |
 
 ## Readiness
 
-Not one policy for all four objects.
+Not one policy for all of them.
 
 | object | policy | why |
 |---|---|---|
 | `ClusterSecretStore` | `DeriveFromObject` | its `Valid` condition IS the proof that the Vault login works |
 | `ExternalSecret` | `DeriveFromObject` | its `Ready` condition is the only signal that Vault answered — a capability whose credentials 403 must not report ready |
 | `EnvironmentConfig` | `DeriveFromCelQuery` (`true`) | it has no conditions at all |
+| `Namespace` | `DeriveFromCelQuery` (`true`) | same — no conditions, only `status.phase` |
 | `ClusterProviderConfig` | `DeriveFromCelQuery` (`true`) | same, and measured: [#294](https://github.com/stuttgart-things/crossplane-configurations/issues/294) found `SuccessfulCreate` never evaluated and `AllTrue` false on an empty condition list |
 
 Using `DeriveFromObject` everywhere leaves the two status-less objects at

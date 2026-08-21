@@ -108,7 +108,7 @@ test_no_capabilities_means_no_store_requirements = lambda {
 # present and correct — found on u26-rke2-1 on the first apply, and measured for
 # ClusterProviderConfig in crossplane-configurations#294.
 test_status_less_objects_do_not_derive_readiness_from_themselves = lambda {
-    _statusLess = ["EnvironmentConfig", "ClusterProviderConfig"]
+    _statusLess = ["EnvironmentConfig", "ClusterProviderConfig", "Namespace"]
     _wrong = [k for k in _statusLess if logic.readinessFor(k).policy == "DeriveFromObject"]
     assert _wrong == [], "these have no conditions to derive from: " + str(_wrong)
 }
@@ -185,4 +185,39 @@ test_two_environments_on_one_cluster_do_not_collide = lambda {
     _a = logic.resourceName("u26-rke2-1", "labul", "vspherevm-secret-store")
     _b = logic.resourceName("u26-rke2-1", "labda", "vspherevm-secret-store")
     assert _a != _b, "two environments on one cluster produced the same name: " + _a
+}
+
+# Der Fall, der das ausgeloest hat: ansible-run legt seine Credentials nach
+# `tekton-ci`, weil eine Tekton-Pipeline sie dort liest. Auf einem Cluster ohne
+# die tekton-App gibt es den Namespace nicht, und das Object bleibt auf
+# `create failed: namespaces "tekton-ci" not found` stehen — seed-labda-1,
+# 2026-08-21. Der Namespace muss also aus derselben placement fallen, aus der
+# auch die Credentials fallen.
+test_the_credentials_namespace_is_ensured = lambda {
+    _ap = logic.placement("ansible-run", {namespace = "tekton-ci", storageClass = "openebs-hostpath"})
+    _ns = logic.credentialsNamespace("ansible-run", _ap, "crossplane-system")
+    assert logic.targetNamespaces([_ns]) == ["tekton-ci"]
+}
+
+# Zwei Capabilities duerfen denselben Namespace nennen — der Regelfall, sobald
+# eine zweite ihre Credentials neben dem Provider ablegt. Ohne Deduplizierung
+# entstuenden zwei komponierte Objects mit demselben Namen, und zwar erst in dem
+# Moment, in dem jemand die zweite Capability aktiviert.
+test_a_shared_namespace_is_emitted_once = lambda {
+    assert logic.targetNamespaces(["crossplane-system", "crossplane-system", "tekton-ci"]) == ["crossplane-system", "tekton-ci"]
+}
+
+# Sortiert, damit die Reihenfolge nicht an der Iteration eines dicts haengt: ein
+# wechselndes Render ist fuer jeden Differ eine Aenderung.
+test_namespaces_come_out_in_a_stable_order = lambda {
+    assert logic.targetNamespaces(["tekton-ci", "default", "crossplane-system"]) == ["crossplane-system", "default", "tekton-ci"]
+}
+
+# Ein leerer Namespace ist kein Namespace. Ein XRD-Default oder eine halb
+# gefuellte values-Datei liefert "" statt eines fehlenden Schluessels, und ein
+# Object mit leerem metadata.name wuerde vom API-Server abgelehnt — mit einer
+# Meldung ueber den Namen, nicht ueber die Capability, aus der er stammt.
+test_an_empty_namespace_is_dropped = lambda {
+    assert logic.targetNamespaces(["", "tekton-ci"]) == ["tekton-ci"]
+    assert logic.targetNamespaces([]) == []
 }

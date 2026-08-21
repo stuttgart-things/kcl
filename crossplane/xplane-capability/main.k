@@ -182,7 +182,7 @@ _validStores = logic.validateStores(_enabled, {n: _vaultOf(n) for n in _enabled}
 _readyOnCreate = {policy = "DeriveFromCelQuery", celQuery = "true"}
 _readyFromObject = {policy = "DeriveFromObject"}
 
-_object = lambda resName: str, manifest: {str:}, readiness: {str:str} = _readyFromObject -> {str:} {
+_object = lambda resName: str, manifest: {str:}, readiness: {str:str} = _readyFromObject, managementPolicies: [str] = [] -> {str:} {
     {
         apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
@@ -198,9 +198,34 @@ _object = lambda resName: str, manifest: {str:}, readiness: {str:str} = _readyFr
             }
             forProvider = {manifest = manifest}
             readiness = readiness
+            # Leer heisst Default (volle Kontrolle) — nicht `[]`, was
+            # provider-kubernetes als "gar nichts tun" liest.
+            **({managementPolicies = managementPolicies} if managementPolicies else {})
         }
     }
 }
+
+# Der Zielnamespace, nicht die Objekte darin. Anders als alles andere hier hat er
+# einen moeglichen Vorbesitzer — er kann von der tekton-App, von einem anderen
+# Capability-XR oder von Hand stammen — also Observe+Create: uebernehmen wenn da,
+# anlegen wenn nicht, und niemals aendern oder loeschen. Ohne Delete ueberlebt der
+# Namespace samt Inhalt das Abraeumen der Capability; mit Delete wuerde das
+# Deaktivieren einer Capability die Tekton-Pipelines des Clusters mitnehmen.
+#
+# readyOnCreate aus demselben Grund wie bei EnvironmentConfig: ein Namespace hat
+# keine conditions, DeriveFromObject liesse das Object dauerhaft auf Ready=False.
+_namespaceObject = lambda ns: str -> {str:} {
+    _object(_resNameFor("namespace-" + ns), {
+        apiVersion = "v1"
+        kind = "Namespace"
+        metadata = {name = ns}
+    }, _readyOnCreate, ["Observe", "Create"])
+}
+
+# Wo dieses Modul ueberall hinschreibt: die Credentials jeder aktiven Capability
+# und — sofern eine davon welche deklariert — der Workload-Namespace.
+_usedNamespaces = [_credsNamespace(n) for n in _enabled] + [_workloadNs for n in _enabled if len(cat.get(n).workloadSecrets) > 0]
+_namespaceObjects = [_namespaceObject(ns) for ns in logic.targetNamespaces(_usedNamespaces)]
 
 _externalSecret = lambda capName: str -> {str:} {
     _c = cat.get(capName)
@@ -414,4 +439,7 @@ _xrStatus = _oxr | {
     }
 }
 
-items = _objects + [_xrStatus]
+# Namespaces zuerst. Crossplane garantiert keine Reihenfolge — provider-kubernetes
+# holt den Rueckstand ohnehin per Retry auf —, aber so steht im Render an erster
+# Stelle, was zuerst existieren muss.
+items = _namespaceObjects + _objects + [_xrStatus]

@@ -95,7 +95,7 @@ schema Readiness:
 # so the choice is testable: both directions are failures that hide rather than
 # break, so nothing else would catch a change.
 readinessFor = lambda kind: str -> Readiness {
-    Readiness {policy = "DeriveFromCelQuery", celQuery = "true"} if kind in ["EnvironmentConfig", "ClusterProviderConfig"] else Readiness {policy = "DeriveFromObject"}
+    Readiness {policy = "DeriveFromCelQuery", celQuery = "true"} if kind in ["EnvironmentConfig", "ClusterProviderConfig", "Namespace"] else Readiness {policy = "DeriveFromObject"}
 }
 
 # Which namespace a capability's credentials Secret belongs in. Beside the
@@ -143,4 +143,34 @@ resourceName = lambda clusterName: str, environment: str, suffix: str -> str {
     assert clusterName, "clusterName is required — composed object names must be unique per cluster"
     assert environment, "environment is required — one cluster may serve two of them"
     clusterName + "-" + environment + "-" + suffix
+}
+
+# Die Namespaces auf dem ZIELCLUSTER, in die dieses Modul schreibt — und die es
+# deshalb selbst sicherstellt, statt sie vorauszusetzen.
+#
+# Am 2026-08-21 auf seed-labda-1 aufgelaufen: die ansible-run-Capability legt
+# ihre Credentials nach `tekton-ci`, weil eine Tekton-Pipeline sie dort liest
+# (siehe credentialsNamespace). Auf u26-rke2-1 existierte der Namespace, weil
+# dessen Platform-XR die tekton-App installiert; seed-labda-1 faehrt nur
+# cert-manager, external-secrets und openebs. Das Object blieb auf
+# `create failed: namespaces "tekton-ci" not found` stehen — die halbe Capability
+# ready, die andere Haelfte an einer Vorbedingung, die nirgends deklariert war.
+#
+# Der Namespace gehoert hierher und nicht in die Plattform-Schicht: WELCHER es
+# ist, weiss nur die Capability (er kommt aus ihrer placement), und eine
+# Capability, die ihn voraussetzt, ist genau dann kaputt, wenn der Cluster die
+# App nicht faehrt, die ihn zufaellig mitbringt.
+#
+# Ohne Ausnahmeliste, also auch `default` und `crossplane-system`, die es auf
+# jedem Zielcluster ohnehin gibt: das Object uebernimmt sie beim ersten Observe
+# und ruehrt sie nie wieder an. Eine Liste "die gibt es immer" waere
+# Kubernetes-Trivia im Modul und haette genau ein Loch — den Tag, an dem jemand
+# spec.namespace auf etwas Eigenes setzt.
+#
+# Dedupliziert, weil zwei Capabilities denselben Namespace nennen duerfen —
+# zweimal derselbe komponierte Objectname waere ein Render-Fehler, und zwar einer
+# der erst auftritt, wenn jemand die zweite Capability aktiviert. Sortiert, damit
+# die Reihenfolge nicht an der Iteration eines dicts haengt.
+targetNamespaces = lambda used: [str] -> [str] {
+    sorted([n for n in {u: True for u in used if u}])
 }
