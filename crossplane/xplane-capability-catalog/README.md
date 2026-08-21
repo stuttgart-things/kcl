@@ -86,6 +86,20 @@ on an `EnvironmentConfig` rewrites the clone block of every VM already built
 under it, and the provider answers with destroy + recreate — unattended, under
 `compositionUpdatePolicy: Automatic`.
 
+**A field the catalog does not carry is not an error — it is silence, which is
+worse.** `proxmoxvm`'s Composition resolves the cloud-init drive as
+`spec.cloudInit.datastoreId` → EnvironmentConfig `cloudInitDatastore` → the root
+disk's datastore. Until 0.5.0 the catalog had no such key, so every
+capability-built EnvironmentConfig omitted it and every VM fell through to the
+last link — on LabUL that is `V5010-01-1`, where PVE's stop/start round trip on
+the cidata image is broken and the VM becomes unbootable on its first restart.
+Nothing failed and nothing said so. When a Composition reads an environment key,
+this catalog has to know it.
+
+It stays `optional` with no default: `DD-sthings` is a fact about LabUL, not a
+structural one, and a catalog default would be wrong on every other Proxmox
+cluster.
+
 ## Workload secrets
 
 `proxmoxvm` declares one. It is not a credential for the provider; it is the
