@@ -30,7 +30,7 @@ test_providers_and_configurations_use_derived_names = lambda {
 # path and our four-segment ghcr one. Pinned because everything above rests on
 # it matching what Crossplane actually does.
 test_derived_name_matches_crossplane = lambda {
-    assert c.derivedName("xpkg.crossplane.io/crossplane-contrib/provider-helm:v1.3.0") == "crossplane-contrib-provider-helm"
+    assert c.derivedName("xpkg.crossplane.io/crossplane-contrib/provider-helm:v1.4.0") == "crossplane-contrib-provider-helm"
     assert c.derivedName("ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.3.11") == "stuttgart-things-crossplane-configurations-platform"
     assert c.derivedName("ghcr.io/stuttgart-things/provider-clusterbook-xpkg:v0.4.2") == "stuttgart-things-provider-clusterbook-xpkg"
 }
@@ -86,12 +86,24 @@ test_function_kcl_stays_on_the_other_mirror = lambda {
     assert _k[0].package.startswith("xpkg.upbound.io/")
 }
 
-# function-auto-ready v0.7.0 makes Configurations report Unhealthy, which times
-# out the install wait. The ceiling is a fleet fact, not a preference.
+# Die Decke, und zwar als Decke geprueft statt als eine erlaubte Version.
+#
+# 30 dependsOn-Eintraege in crossplane-configurations verlangen
+# >=v0.6.5,<v0.7.0; mit v0.7.0 melden die Package-Revisions "incompatible
+# dependencies" und der Install-Wait laeuft in den Timeout. Das ist eine
+# Fleet-Tatsache, keine Vorliebe.
+#
+# Vorher stand hier `endswith(":v0.6.5")`. Das ist derselbe Fehler, der
+# test_the_profile_can_build_control_planes einmal auf v0.4.0 festgenagelt
+# hat: eine Untergrenze/Obergrenze als Gleichheit geschrieben. Der Test war
+# dadurch gegen genau die Bumps rot, die er erlauben soll — v0.6.6 und v0.6.7
+# sind reine CVE-Backports UNTERHALB der Decke.
 test_function_auto_ready_stays_below_070 = lambda {
     _a = [p for p in c.byKind(c.get("machinery"), "Function") if p.name == "function-auto-ready"]
     assert len(_a) == 1
-    assert _a[0].package.endswith(":v0.6.5")
+    _v = [int(n) for n in _a[0].package.split(":v")[1].split(".")]
+    assert _v[0] == 0 and _v[1] == 6, "function-auto-ready muss auf der 0.6er-Linie bleiben (dependsOn <v0.7.0)"
+    assert _v[2] >= 5, "unterhalb v0.6.5 verletzt die untere Grenze der dependsOn-Spanne"
 }
 
 # provider-kubernetes must NOT be an entry: every Configuration pulls it, so
