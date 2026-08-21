@@ -136,3 +136,19 @@ test_entry_names_match_their_consumers_selectors = lambda {
     assert _wrong == [], "these emit a label their Composition does not select: " + str(_wrong)
     assert sorted([n for n in _consumers]) == c.names, "a new entry needs its consumer's selector checked here"
 }
+
+# Die proxmoxvm-Composition loest ihren cloud-init-Datastore als
+# spec.cloudInit.datastoreId -> EnvironmentConfig `cloudInitDatastore` ->
+# Datastore der Rootplatte auf. Kennt der Katalog den Schluessel nicht, kann die
+# von der Capability erzeugte EnvironmentConfig ihn nicht tragen und jede so
+# gebaute VM faellt auf das letzte Glied der Kette durch — auf LabUL ist das der
+# Storage, auf dem der cidata-Umlauf kaputt ist und die VM beim ersten
+# Stop/Start unbootbar wird. Bis 0.5.0 war das der Fall, ohne Fehler und ohne
+# Hinweis im Status.
+#
+# Nagelt nur die Existenz fest, nicht den Wert: ein Storage-Name ist eine
+# Standort-Wahrheit und gehoert ins XR, nicht in den Katalog.
+test_proxmox_can_place_the_cloudinit_drive = lambda {
+    assert "cloudInitDatastore" in c.fields("proxmoxvm"), "die Composition liest den Schluessel; ohne Katalogeintrag wird er stillschweigend verworfen"
+    assert "cloudInitDatastore" not in c.get("proxmoxvm").defaults, "kein Default: DD-sthings gilt fuer LabUL, nicht fuer jeden Proxmox-Cluster"
+}

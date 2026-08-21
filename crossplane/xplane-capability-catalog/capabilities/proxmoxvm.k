@@ -54,7 +54,29 @@ proxmoxvm: s.Capability = {
     # compositionUpdatePolicy Automatic. Requires proxmoxvm >= v0.11.0, whose
     # `none` sentinel is how an individual XR declines it.
     #
+    # cloudInitDatastore steuert das 4-MB-cidata-Image von der Datenplatte weg.
+    # Es ist die eine Platte, die PVE bei jedem Stop/Start freigibt und neu
+    # anlegt, und auf manchen Storages ist genau dieser Umlauf kaputt: auf LabULs
+    # `V5010-01-1` kann PVE `/dev/V5010-01-1/vm-<id>-cloudinit.qcow2` nicht
+    # statten, der Stop laesst das LV ohne Device-Node in den VG-Metadaten zurueck
+    # und der naechste Start stirbt an `lvcreate ... already exists`. Die VM ist
+    # dann nicht mehr bootbar. Am 2026-08-20 hostseitig bestaetigt: dieselbe VM
+    # mit cidata auf dem NFS-Store `DD-sthings` stoppt und startet sauber.
+    #
+    # HIER, WEIL DIE COMPOSITION ES HIER SUCHT. proxmoxvm loest
+    # `initialization.datastoreId` als spec.cloudInit.datastoreId ->
+    # EnvironmentConfig `cloudInitDatastore` -> Datastore der Rootplatte auf. Der
+    # Katalog kannte den Schluessel bis 0.5.0 nicht, also hat die von der
+    # Capability erzeugte EnvironmentConfig ihn nie getragen und JEDE so gebaute
+    # VM landete auf dem letzten Glied der Kette — dem kaputten Storage. Kein
+    # Fehler, kein Hinweis im Status: die VM entsteht und wird erst beim ersten
+    # Stop/Start unbootbar.
+    #
+    # Optional und ohne Default, obwohl LabUL `DD-sthings` will: ein
+    # Storage-Name ist eine Standort-Wahrheit, keine strukturelle. Ein Katalog-
+    # Default waere auf jedem anderen Proxmox-Cluster schlicht falsch.
+    #
     # snippetsDatastore is NOT the hostname lever (that is the PVE VM name);
     # it only pins the cloud-init instance-id.
-    optional = ["cloneDatastore", "snippetsDatastore", "smbiosManufacturer", "smbiosProduct", "ciPasswordSecretName"]
+    optional = ["cloneDatastore", "cloudInitDatastore", "snippetsDatastore", "smbiosManufacturer", "smbiosProduct", "ciPasswordSecretName"]
 }
