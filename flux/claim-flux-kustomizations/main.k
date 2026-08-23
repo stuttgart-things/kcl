@@ -281,40 +281,29 @@ if _templateName == "gitops":
             wait = _wait
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path
-
             if _targetNamespace:
                 targetNamespace = _targetNamespace
-
             if _namePrefix:
                 namePrefix = _namePrefix
-
             if _nameSuffix:
                 nameSuffix = _nameSuffix
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             if _substitute:
                 postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                     substitute = _substitute
                 }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -322,7 +311,6 @@ if _templateName == "gitops":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -331,10 +319,8 @@ if _templateName == "gitops":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
-
             if _commonLabels or _commonAnnotations:
                 commonMetadata = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecCommonMetadata {
                     if _commonLabels:
@@ -379,14 +365,11 @@ if _templateName == "clusterbook":
             timeout = _timeout if _timeout else "5m"
             prune = _prune
             wait = True
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-apps"
             }
-
             path = _path if _path != "./" else "./apps/clusterbook"
-
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "CLUSTERBOOK_NAMESPACE": str(_clusterbookNamespace)
@@ -407,7 +390,6 @@ if _templateName == "clusterbook":
             }
         }
     }
-
 
 # Template: Uptime Kuma (app deployment with monitoring substitutions)
 if _templateName == "uptime-kuma":
@@ -440,14 +422,11 @@ if _templateName == "uptime-kuma":
             }
             path = _path if _path != "./" else "./apps/uptime-kuma"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "UPTIME_KUMA_NAMESPACE": str(_uptimeKumaNamespace)
@@ -504,14 +483,11 @@ if _templateName == "nfs-csi":
             }
             path = _path if _path != "./" else "./infra/nfs-csi"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "NFS_SERVER_FQDN": str(_nfsServerFqdn)
@@ -567,14 +543,11 @@ if _templateName == "trust-manager":
             }
             path = _path if _path != "./" else "./infra/trust-manager"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "TRUST_MANAGER_NAMESPACE": str(_trustManagerNamespace)
@@ -630,14 +603,11 @@ if _templateName == "flux-web":
             }
             path = _path if _path != "./" else "./apps/flux-web"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "FLUX_WEB_NAMESPACE": str(_fluxWebNamespace)
@@ -692,14 +662,11 @@ if _templateName == "headlamp":
             }
             path = _path if _path != "./" else "./apps/headlamp"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "HEADLAMP_NAMESPACE": str(_headlampNamespace)
@@ -754,14 +721,11 @@ if _templateName == "prometheus":
             }
             path = _path if _path != "./" else "./infra/prometheus"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "PROMETHEUS_NAMESPACE": str(_prometheusNamespace)
@@ -811,26 +775,19 @@ if _templateName == "vault-httproute":
             wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-apps"
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path if _path != "./" else "./apps/vault/httproute"
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "VAULT_NAMESPACE": str(_vaultHttprouteNamespace)
@@ -840,7 +797,6 @@ if _templateName == "vault-httproute":
                     "VAULT_DOMAIN": str(_vaultHttprouteDomain)
                 }
             }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -848,7 +804,6 @@ if _templateName == "vault-httproute":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -857,7 +812,6 @@ if _templateName == "vault-httproute":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
         }
@@ -886,26 +840,19 @@ if _templateName == "vault-autounseal":
             wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-apps"
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path if _path != "./" else "./apps/vault/autounseal"
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "VAULT_NAMESPACE": str(_vaultAutounsealNamespace)
@@ -915,7 +862,6 @@ if _templateName == "vault-autounseal":
                     "VAULT_AUTOUNSEAL_LABEL_SELECTOR": str(_vaultAutounsealLabelSelector)
                 }
             }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -923,7 +869,6 @@ if _templateName == "vault-autounseal":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -932,7 +877,6 @@ if _templateName == "vault-autounseal":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
         }
@@ -961,26 +905,19 @@ if _templateName == "vault":
             wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-apps"
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path if _path != "./" else "./apps/vault"
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "VAULT_VERSION": str(_vaultVersion)
@@ -1006,7 +943,6 @@ if _templateName == "vault":
                     "ISSUER_KIND": str(_vaultIssuerKind)
                 }
             }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -1014,7 +950,6 @@ if _templateName == "vault":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -1023,7 +958,6 @@ if _templateName == "vault":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
         }
@@ -1052,26 +986,19 @@ if _templateName == "openebs":
             wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-infra"
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path if _path != "./" else "./infra/openebs"
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "VERSION": str(_openebsVersion)
@@ -1082,7 +1009,6 @@ if _templateName == "openebs":
                     "REPLICATED_MAYASTOR_ENABLED": str(_openebsReplicatedMayastorEnabled)
                 }
             }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -1090,7 +1016,6 @@ if _templateName == "openebs":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -1099,7 +1024,6 @@ if _templateName == "openebs":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
         }
@@ -1128,26 +1052,19 @@ if _templateName == "cilium-gateway":
             wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-infra"
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path if _path != "./" else "./infra/cilium/components/gateway"
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "CILIUM_GATEWAY_NAME": str(_ciliumGatewayName)
@@ -1156,7 +1073,6 @@ if _templateName == "cilium-gateway":
                     "CILIUM_GATEWAY_TLS_SECRET": str(_ciliumGatewayTlsSecret)
                 }
             }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -1164,7 +1080,6 @@ if _templateName == "cilium-gateway":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -1173,7 +1088,6 @@ if _templateName == "cilium-gateway":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
         }
@@ -1202,26 +1116,19 @@ if _templateName == "cert-manager-selfsigned":
             wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-infra"
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path if _path != "./" else "./infra/cert-manager/components/selfsigned"
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "CERT_MANAGER_NAMESPACE": str(_certManagerNamespace)
@@ -1232,7 +1139,6 @@ if _templateName == "cert-manager-selfsigned":
                     "CERT_MANAGER_SELFSIGNED_ISSUER": str(_certManagerSelfsignedIssuer)
                 }
             }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -1240,7 +1146,6 @@ if _templateName == "cert-manager-selfsigned":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -1249,7 +1154,6 @@ if _templateName == "cert-manager-selfsigned":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
         }
@@ -1278,29 +1182,21 @@ if _templateName == "cert-manager":
             wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName if _sourceRefName else "flux-infra"
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path if _path != "./" else "./infra/cert-manager/components/install"
-
             if _targetNamespace:
                 targetNamespace = _targetNamespace
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "CERT_MANAGER_NAMESPACE": str(_certManagerNamespace)
@@ -1308,7 +1204,6 @@ if _templateName == "cert-manager":
                     "CERT_MANAGER_INSTALL_CRDS": str(_certManagerInstallCrds)
                 }
             }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -1316,7 +1211,6 @@ if _templateName == "cert-manager":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -1325,10 +1219,8 @@ if _templateName == "cert-manager":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
-
             if _commonLabels or _commonAnnotations:
                 commonMetadata = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecCommonMetadata {
                     if _commonLabels:
@@ -1359,43 +1251,33 @@ if _templateName == "infrastructure":
             retryInterval = _retryInterval if _retryInterval else "2m"
             timeout = _timeout if _timeout else "5m"
             prune = _prune
-            wait = True  # Infrastructure always waits for resources to be ready
+            # Infrastructure always waits for resources to be ready
+            wait = True
             force = _force
             suspend = _suspend
-
             sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
                 kind = _sourceRefKind
                 name = _sourceRefName
                 if _sourceRefNamespace:
                     namespace = _sourceRefNamespace
             }
-
             path = _path
-
             if _targetNamespace:
                 targetNamespace = _targetNamespace
-
             if _namePrefix:
                 namePrefix = _namePrefix
-
             if _nameSuffix:
                 nameSuffix = _nameSuffix
-
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
-
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             if _substitute:
                 postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                     substitute = _substitute
                 }
-
             if _decryptionProvider == "sops" and _decryptionSecretRef:
                 decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
                     provider = "sops"
@@ -1403,7 +1285,6 @@ if _templateName == "infrastructure":
                         name = _decryptionSecretRef
                     }
                 }
-
             if _kubeConfigSecretRef:
                 kubeConfig = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfig {
                     secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecKubeConfigSecretRef {
@@ -1412,10 +1293,8 @@ if _templateName == "infrastructure":
                             key = _kubeConfigSecretKey
                     }
                 }
-
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
-
             if _commonLabels or _commonAnnotations:
                 commonMetadata = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecCommonMetadata {
                     if _commonLabels:
@@ -1457,14 +1336,11 @@ if _templateName == "crossplane-install":
             }
             path = _path if _path != "./" else "./cicd/crossplane/components/install"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "CROSSPLANE_NAMESPACE": str(_crossplaneNamespace)
@@ -1517,14 +1393,11 @@ if _templateName == "crossplane-functions":
             }
             path = _path if _path != "./" else "./cicd/crossplane/components/functions"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "CROSSPLANE_NAMESPACE": str(_crossplaneNamespace)
@@ -1574,14 +1447,11 @@ if _templateName == "crossplane-configs":
             }
             path = _path if _path != "./" else "./cicd/crossplane/components/configs"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "CROSSPLANE_CONFIG_CLOUD_CONFIG_VERSION": str(_crossplaneConfigCloudConfigVersion)
@@ -1636,14 +1506,11 @@ if _templateName == "minio":
             }
             path = _path if _path != "./" else "./apps/minio"
             if _dependsOnNames:
-                dependsOn = [
-                    flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                        name = depName
-                        if _dependsOnNamespace:
-                            namespace = _dependsOnNamespace
-                    }
-                    for depName in _dependsOnNames
-                ]
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "MINIO_NAMESPACE": str(_minioNamespace)
@@ -1710,14 +1577,11 @@ if _templateName == "minio-httproute":
                 flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
                     name = "minio"
                 }
-            ] + [
-                flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
-                    name = depName
-                    if _dependsOnNamespace:
-                        namespace = _dependsOnNamespace
-                }
-                for depName in _dependsOnNames
-            ]
+            ] + [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                name = depName
+                if _dependsOnNamespace:
+                    namespace = _dependsOnNamespace
+            } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
                     "MINIO_NAMESPACE": str(_minioNamespace)
@@ -1759,10 +1623,8 @@ if _templateName == "gitrepository":
             url = _gitRepoUrl
             interval = _interval
             timeout = _timeout if _timeout else "60s"
-
             if _suspend:
                 suspend = _suspend
-
             ref = source.SourceToolkitFluxcdIoV1GitRepositorySpecRef {
                 if _gitRepoCommit:
                     commit = _gitRepoCommit
@@ -1773,10 +1635,10 @@ if _templateName == "gitrepository":
                 else:
                     branch = _gitRepoBranch
             }
-
             if _gitRepoSecretRefName:
                 secretRef = source.SourceToolkitFluxcdIoV1GitRepositorySpecSecretRef {
                     name = _gitRepoSecretRefName
                 }
         }
     }
+
