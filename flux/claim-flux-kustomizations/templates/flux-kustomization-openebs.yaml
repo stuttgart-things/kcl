@@ -89,8 +89,9 @@ spec:
     - name: openebsVersion
       title: OpenEBS Version
       type: string
-      default: "4.2.0"
-      description: "OpenEBS Helm chart version (VERSION)"
+      # renovate: datasource=helm depName=openebs registryUrl=https://openebs.github.io/openebs
+      default: "4.5.1"
+      description: "OpenEBS Helm chart version (OPENEBS_VERSION)"
 
     - name: openebsVolumesnapshotsEnabled
       title: Volume Snapshots Enabled
