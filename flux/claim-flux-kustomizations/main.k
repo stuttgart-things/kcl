@@ -186,7 +186,7 @@ _vaultIssuerName = _spec?.vaultIssuerName or option("vaultIssuerName") or "vault
 _vaultIssuerKind = _spec?.vaultIssuerKind or option("vaultIssuerKind") or "ClusterIssuer"
 
 # OpenEBS specific parameters (for openebs template)
-_openebsVersion = _spec?.openebsVersion or option("openebsVersion") or "4.2.0"
+_openebsVersion = _spec?.openebsVersion or option("openebsVersion") or "4.5.1"
 _openebsVolumesnapshotsEnabled = _spec?.openebsVolumesnapshotsEnabled or option("openebsVolumesnapshotsEnabled") or "false"
 _openebsCsiNodeInitContainersEnabled = _spec?.openebsCsiNodeInitContainersEnabled or option("openebsCsiNodeInitContainersEnabled") or "false"
 _openebsLocalLvmEnabled = _spec?.openebsLocalLvmEnabled or option("openebsLocalLvmEnabled") or "false"
@@ -1001,7 +1001,7 @@ if _templateName == "openebs":
                 } for depName in _dependsOnNames]
             postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                 substitute = {
-                    "VERSION": str(_openebsVersion)
+                    "OPENEBS_VERSION": str(_openebsVersion)
                     "VOLUMESNAPSHOTS_ENABLED": str(_openebsVolumesnapshotsEnabled)
                     "CSI_NODE_INIT_CONTAINERS_ENABLED": str(_openebsCsiNodeInitContainersEnabled)
                     "LOCAL_LVM_ENABLED": str(_openebsLocalLvmEnabled)
