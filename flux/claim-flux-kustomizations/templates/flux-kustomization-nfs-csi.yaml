@@ -78,7 +78,7 @@ spec:
     - name: nfsCsiVersion
       title: NFS CSI Version
       type: string
-      default: "v4.13.1"
+      default: "4.13.4"
       description: "NFS CSI driver version (NFS_CSI_VERSION)"
     - name: nfsCsiEnableCrds
       title: Enable CRDs

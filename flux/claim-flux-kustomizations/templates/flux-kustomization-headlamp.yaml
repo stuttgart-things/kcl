@@ -63,7 +63,7 @@ spec:
     - name: headlampVersion
       title: Headlamp Version
       type: string
-      default: "0.40.0"
+      default: "0.44.0"
       description: "Headlamp Helm chart version (HEADLAMP_VERSION)"
     - name: headlampGatewayName
       title: Gateway Name

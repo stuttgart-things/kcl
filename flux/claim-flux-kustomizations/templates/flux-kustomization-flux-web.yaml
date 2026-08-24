@@ -63,7 +63,7 @@ spec:
     - name: fluxWebVersion
       title: Flux Web Version
       type: string
-      default: "0.43.0"
+      default: "0.58.1"
       description: "Flux Web Helm chart version (FLUX_WEB_VERSION)"
     - name: fluxWebGatewayName
       title: Gateway Name

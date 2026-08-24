@@ -117,7 +117,7 @@ spec:
     - name: certManagerVersion
       title: Cert-Manager Version
       type: string
-      default: v1.19.1
+      default: v1.21.1
       description: "Cert-Manager chart version (CERT_MANAGER_VERSION)"
 
     - name: certManagerInstallCrds
