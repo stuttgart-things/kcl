@@ -65,7 +65,7 @@ spec:
     - name: trustManagerVersion
       title: Trust Manager Version
       type: string
-      default: "0.22.0"
+      default: "v0.24.0"
       description: "Trust-manager Helm chart version (TRUST_MANAGER_VERSION)"
     - name: trustBundleCaSecret
       title: CA Bundle Secret

@@ -108,13 +108,13 @@ _nfsServerFqdn = _spec?.nfsServerFqdn or option("nfsServerFqdn") or ""
 _nfsSharePath = _spec?.nfsSharePath or option("nfsSharePath") or "/data/nfs"
 _nfsCsiClusterName = _spec?.nfsCsiClusterName or option("nfsCsiClusterName") or ""
 _nfsCsiNamespace = _spec?.nfsCsiNamespace or option("nfsCsiNamespace") or "kube-system"
-_nfsCsiVersion = _spec?.nfsCsiVersion or option("nfsCsiVersion") or "v4.13.1"
+_nfsCsiVersion = _spec?.nfsCsiVersion or option("nfsCsiVersion") or "4.13.4"
 _nfsCsiEnableCrds = _spec?.nfsCsiEnableCrds or option("nfsCsiEnableCrds") or "false"
 _nfsCsiEnableSnapshotter = _spec?.nfsCsiEnableSnapshotter or option("nfsCsiEnableSnapshotter") or "true"
 
 # Trust Manager specific parameters (for trust-manager template)
 _trustManagerNamespace = _spec?.trustManagerNamespace or option("trustManagerNamespace") or "cert-manager"
-_trustManagerVersion = _spec?.trustManagerVersion or option("trustManagerVersion") or "0.22.0"
+_trustManagerVersion = _spec?.trustManagerVersion or option("trustManagerVersion") or "v0.24.0"
 _trustBundleCaSecret = _spec?.trustBundleCaSecret or option("trustBundleCaSecret") or "cluster-ca-secret"
 _trustBundleCaKey = _spec?.trustBundleCaKey or option("trustBundleCaKey") or "ca.crt"
 _trustBundleTargetKey = _spec?.trustBundleTargetKey or option("trustBundleTargetKey") or "trust-bundle.pem"
@@ -123,7 +123,7 @@ _trustBundleVaultCaKey = _spec?.trustBundleVaultCaKey or option("trustBundleVaul
 
 # Flux Web specific parameters (for flux-web template)
 _fluxWebNamespace = _spec?.fluxWebNamespace or option("fluxWebNamespace") or "flux-system"
-_fluxWebVersion = _spec?.fluxWebVersion or option("fluxWebVersion") or "0.43.0"
+_fluxWebVersion = _spec?.fluxWebVersion or option("fluxWebVersion") or "0.58.1"
 _fluxWebGatewayName = _spec?.fluxWebGatewayName or option("fluxWebGatewayName") or "gateway"
 _fluxWebGatewayNamespace = _spec?.fluxWebGatewayNamespace or option("fluxWebGatewayNamespace") or "default"
 _fluxWebHostname = _spec?.fluxWebHostname or option("fluxWebHostname") or "flux"
@@ -131,7 +131,7 @@ _fluxWebDomain = _spec?.fluxWebDomain or option("fluxWebDomain") or ""
 
 # Headlamp specific parameters (for headlamp template)
 _headlampNamespace = _spec?.headlampNamespace or option("headlampNamespace") or "headlamp"
-_headlampVersion = _spec?.headlampVersion or option("headlampVersion") or "0.40.0"
+_headlampVersion = _spec?.headlampVersion or option("headlampVersion") or "0.44.0"
 _headlampGatewayName = _spec?.headlampGatewayName or option("headlampGatewayName") or "gateway"
 _headlampGatewayNamespace = _spec?.headlampGatewayNamespace or option("headlampGatewayNamespace") or "default"
 _headlampHostname = _spec?.headlampHostname or option("headlampHostname") or "headlamp"
@@ -139,7 +139,7 @@ _headlampDomain = _spec?.headlampDomain or option("headlampDomain") or ""
 
 # Prometheus specific parameters (for prometheus template)
 _prometheusNamespace = _spec?.prometheusNamespace or option("prometheusNamespace") or "monitoring"
-_prometheusVersion = _spec?.prometheusVersion or option("prometheusVersion") or "28.13.0"
+_prometheusVersion = _spec?.prometheusVersion or option("prometheusVersion") or "28.16.0"
 _prometheusStorageClass = _spec?.prometheusStorageClass or option("prometheusStorageClass") or "openebs-hostpath"
 _prometheusStorageSize = _spec?.prometheusStorageSize or option("prometheusStorageSize") or "10Gi"
 _prometheusRetention = _spec?.prometheusRetention or option("prometheusRetention") or "15d"
@@ -208,7 +208,7 @@ _certManagerSelfsignedIssuer = _spec?.certManagerSelfsignedIssuer or option("cer
 
 # Cert-manager specific parameters (for cert-manager template)
 _certManagerNamespace = _spec?.certManagerNamespace or option("certManagerNamespace") or "cert-manager"
-_certManagerVersion = _spec?.certManagerVersion or option("certManagerVersion") or "v1.19.1"
+_certManagerVersion = _spec?.certManagerVersion or option("certManagerVersion") or "v1.21.1"
 _certManagerInstallCrds = _spec?.certManagerInstallCrds or option("certManagerInstallCrds") or "true"
 
 # Crossplane-specific parameters (for crossplane/crossplane-install template)

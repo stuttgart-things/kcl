@@ -64,7 +64,7 @@ spec:
     - name: prometheusVersion
       title: Prometheus Chart Version
       type: string
-      default: "28.13.0"
+      default: "28.16.0"
       description: "Prometheus Helm chart version (PROMETHEUS_VERSION)"
     - name: prometheusStorageClass
       title: Storage Class

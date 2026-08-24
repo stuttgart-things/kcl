@@ -6,7 +6,7 @@ wait enabled, prune, and post-build variable substitution.
 
 Usage:
     kcl run templates/cert-manager.k -D sourceRefName=flux-infra
-    kcl run templates/cert-manager.k -D sourceRefName=flux-infra -D certManagerVersion=v1.19.1
+    kcl run templates/cert-manager.k -D sourceRefName=flux-infra -D certManagerVersion=v1.21.1
 """
 
 import k8s.apimachinery.pkg.apis.meta.v1 as v1
@@ -42,7 +42,7 @@ _dependsOnNamespace = _spec?.dependsOnNamespace or option("dependsOnNamespace") 
 
 # Cert-manager specific substitution parameters
 _certManagerNamespace = _spec?.certManagerNamespace or option("certManagerNamespace") or "cert-manager"
-_certManagerVersion = _spec?.certManagerVersion or option("certManagerVersion") or "v1.19.1"
+_certManagerVersion = _spec?.certManagerVersion or option("certManagerVersion") or "v1.21.1"
 _certManagerInstallCrds = _spec?.certManagerInstallCrds or option("certManagerInstallCrds") or "true"
 
 # Additional post-build substitutions (comma-separated key=value pairs)
