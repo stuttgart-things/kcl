@@ -64,10 +64,10 @@ _byName = lambda name: str -> [any] {
 }
 
 _provider = _spec?.provider or "proxmox"
-_vmKind = {
-    "vsphere" = "NativeVsphereVM"
-    "harvester" = "HarvesterVM"
-}[_provider] or "NativeProxmoxVM"
+
+# From logic.k, not restated here: the same map is what groupOf is checked
+# against, so the kind this resolves to always has an API group for its Usage.
+_vmKind = l.vmKind(_provider)
 _vmObs = _byKind(_vmKind)
 _vm = _vmObs[0] if _vmObs else {}
 _vmShare = _vm?.status?.share or {}

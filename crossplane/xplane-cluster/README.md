@@ -40,6 +40,8 @@ Three `Usage` resources, only the pairs whose absence strands a finalizer:
 
 `Usage` orders **deletion only, never creation** — build order stays the ready gates. The AnsibleRuns need no protection: they only create PipelineRuns on the management cluster, and those disappearing blocks nobody.
 
+Both sides of every `Usage` resolve their `apiVersion` through one kind→group map, `logic.groupOf`. A kind that is missing from it is a **KCL error at render time**, not a plausible default — which matters because a wrong group here is invisible: the `Usage` is admitted, goes `Ready`, and points at a group/kind pair that does not exist, so it guards nothing and the teardown runs through unordered with no error anywhere. `logic.vmKindOf` (provider→VM kind) is asserted against that map, so a fourth provider cannot be added without giving its kind a group.
+
 ## Provider differences: exactly one
 
 `vm.memory` (Proxmox) vs `vm.ram` (vSphere), plus the fact that only Proxmox has a `cloudInit` block. Staging, gating and everything downstream are identical — that is option **A** of crossplane-configurations#168. A unit test asserts there is no second difference; if one appears, the "provider is a one-word switch" claim is no longer true and the README should stop saying it.
