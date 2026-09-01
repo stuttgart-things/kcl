@@ -87,6 +87,23 @@ stageAnsible = lambda spec: {str:any}, stage: str -> {str:any} {
 }
 
 # --- the VM child ----------------------------------------------------------
+
+# provider -> the kind vmChild emits for it. Lives here rather than in main.k
+# because it is the same fact the `if _provider ==` chain below encodes, and
+# because `groupOf` is checked against it: a provider added to this map without
+# a group entry is a compile error, not a Usage that guards nothing.
+#
+# An unknown or absent provider is proxmox, matching vmChild's `else` branch.
+vmKindOf = {
+    "proxmox" = "NativeProxmoxVM"
+    "vsphere" = "NativeVsphereVM"
+    "harvester" = "HarvesterVM"
+}
+
+vmKind = lambda provider: str -> str {
+    vmKindOf[provider] or vmKindOf["proxmox"]
+}
+
 vmChild = lambda name: str, ns: str, spec: {str:any}, size: any -> {str:any} {
     _provider = spec?.provider or "proxmox"
     _cluster = spec?.clusterName or name
@@ -474,6 +491,36 @@ managementPlaneChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
 
 # --- teardown ordering -----------------------------------------------------
 
+# The one place a composed kind is mapped to its API group. BOTH sides of a
+# Usage read it, which is the point: the group used to be an allowlist on `of`
+# ("these three kinds are resources.*, everything else is config.*") and a bare
+# hardcode on `by`. Either one is wrong by DEFAULT for a kind nobody remembered
+# to add -- and wrong here is silent. The Usage is admitted, goes Ready, and
+# points at a group/kind pair that does not exist, so it protects nothing;
+# teardown then runs straight through, unordered, with no error to notice.
+#
+# A missing entry is now a KCL error at render time instead.
+groupOf = {
+    "NativeProxmoxVM" = "resources.stuttgart-things.com/v1alpha1"
+    "NativeVsphereVM" = "resources.stuttgart-things.com/v1alpha1"
+    "HarvesterVM" = "resources.stuttgart-things.com/v1alpha1"
+    "ClusterStack" = "config.stuttgart-things.com/v1alpha1"
+    "ClusterAccess" = "config.stuttgart-things.com/v1alpha1"
+    "Platform" = "config.stuttgart-things.com/v1alpha1"
+    "ManagementPlane" = "config.stuttgart-things.com/v1alpha1"
+}
+
+# Ties the two maps together, so a fourth provider cannot be half-added: the
+# module fails to compile until its kind has a group.
+assert all _p, _k in vmKindOf {
+    _k in groupOf
+}, "every kind in vmKindOf needs a groupOf entry, else its Usage guards nothing"
+
+apiVersionOf = lambda kind: str -> str {
+    assert kind in groupOf, "no API group known for kind {} -- add it to groupOf".format(kind)
+    groupOf[kind]
+}
+
 # `of` is what must die LAST, `by` is the user. replayDeletion re-issues the
 # delete on the protected resource once the user is gone — without it a
 # `kubectl delete` is swallowed and has to be issued twice.
@@ -506,17 +553,12 @@ usage = lambda ofKind: str, ofName: str, byKind: str, byName: str, label: str, r
         spec = {
             replayDeletion = replay
             of = {
-                # HarvesterVM lives in the same group as the two native VMs.
-                # Forgetting it here does not fail loudly -- it emits a Usage
-                # pointing at config.stuttgart-things.com/HarvesterVM, a kind
-                # that does not exist, and the protection silently guards
-                # nothing.
-                apiVersion = "resources.stuttgart-things.com/v1alpha1" if ofKind in ["NativeProxmoxVM", "NativeVsphereVM", "HarvesterVM"] else "config.stuttgart-things.com/v1alpha1"
+                apiVersion = apiVersionOf(ofKind)
                 kind = ofKind
                 resourceRef.name = ofName
             }
             by = {
-                apiVersion = "config.stuttgart-things.com/v1alpha1"
+                apiVersion = apiVersionOf(byKind)
                 kind = byKind
                 resourceRef.name = byName
             }

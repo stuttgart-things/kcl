@@ -211,12 +211,57 @@ test_usage_protects_the_vm_from_the_platform = lambda {
 }
 
 test_usage_resolves_the_group_per_kind = lambda {
+    """Every kind that reaches `of`, not just the one that once got it wrong.
+
+    A wrong group here does not fail: the Usage is admitted, goes Ready, and
+    points at a kind that does not exist, so it guards nothing and the teardown
+    runs through unordered. Nothing observable says so — which is why all three
+    VM kinds are pinned, not only the one that was fixed after the fact.
+    """
+    assert l.usage("NativeProxmoxVM", "a", "Platform", "b", "u", True, "c").spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
     assert l.usage("NativeVsphereVM", "a", "Platform", "b", "u", True, "c").spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
+    assert l.usage("HarvesterVM", "a", "Platform", "b", "u", True, "c").spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
     assert l.usage("ClusterAccess", "a", "Platform", "b", "u", True, "c").spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
 
     # The teardown guard points at the COMPOSITE, which lives in the same group
     # as ClusterAccess and Platform — so it needs no special case in the lambda.
     assert l.usage("ClusterStack", "a", "Platform", "b", "u", False, "c").spec.of.apiVersion == "config.stuttgart-things.com/v1alpha1"
+}
+
+# `by` was the weaker half: `of` at least had a kind list, `by` was a bare
+# hardcoded config.* for every caller. It happens to be right for all three
+# users today — a future `by` out of resources.* would have pointed nowhere,
+# just as silently. Both sides read the same map now, so pin both.
+test_usage_resolves_the_group_on_the_by_side_too = lambda {
+    assert l.usage("ClusterStack", "a", "Platform", "b", "u", False, "c").spec.by.apiVersion == "config.stuttgart-things.com/v1alpha1"
+    assert l.usage("ClusterAccess", "a", "ManagementPlane", "b", "u", True, "c").spec.by.apiVersion == "config.stuttgart-things.com/v1alpha1"
+
+    # Not a shape main.k emits — it is the assertion that `by` is resolved at
+    # all rather than assumed to be config.*.
+    assert l.usage("Platform", "a", "HarvesterVM", "b", "u", True, "c").spec.by.apiVersion == "resources.stuttgart-things.com/v1alpha1"
+}
+
+# The coupling the two maps used to lack. A fourth provider entered in
+# vmKindOf without a groupOf entry no longer renders a dud Usage — logic.k's
+# top-level assert refuses to compile. This test covers the other half: that
+# the kind the map promises is the kind vmChild actually builds, and that its
+# group matches the VM's own apiVersion.
+test_every_provider_kind_has_a_group_and_a_child = lambda {
+    assert [_k for _p, _k in l.vmKindOf if _k not in l.groupOf] == []
+
+    _built = [l.vmChild("c", "default", {provider = _p, clusterName = "c"}, cat.getSize("small")) for _p, _ in l.vmKindOf]
+    _kinds = [_k for _, _k in l.vmKindOf]
+    assert [_v.kind for _v in _built] == _kinds
+    assert [_v.apiVersion for _v in _built] == [l.groupOf[_k] for _k in _kinds]
+}
+
+test_vm_kind_falls_back_to_proxmox = lambda {
+    """Unknown or absent provider is proxmox — same as vmChild's else branch."""
+    assert l.vmKind("proxmox") == "NativeProxmoxVM"
+    assert l.vmKind("vsphere") == "NativeVsphereVM"
+    assert l.vmKind("harvester") == "HarvesterVM"
+    assert l.vmKind("openstack") == "NativeProxmoxVM"
+    assert l.vmKind("") == "NativeProxmoxVM"
 }
 
 # The guard that makes a one-phase teardown impossible rather than silently
