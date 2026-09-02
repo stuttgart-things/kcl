@@ -15,7 +15,7 @@ import ..schema as s
 # (components/extra-certificate exists too — add it when something needs it.)
 certManager: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/infra/cert-manager"
-    defaultVersion = "v1.51.0"
+    defaultVersion = "v1.54.4"
     components = [
         s.Component {
             name = "install"
