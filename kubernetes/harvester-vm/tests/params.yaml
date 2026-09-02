@@ -7,6 +7,11 @@ imageNamespace: default
 imageId: image-t9w92
 storage: 20Gi
 storageClass: longhorn
+# Composed as <storageClass>-<imageId> unless storageClassName is set.
+# Harvester's per-image classes are named lh-<uuid>; look yours up with
+#   kubectl get virtualmachineimages -n <ns> \
+#     -o custom-columns='NAME:.metadata.name,SC:.status.storageClassName'
+# storageClassName: lh-68e4c918-0059-48bf-acaf-0de0ebe1eb65
 volumeMode: Block
 accessModes: '["ReadWriteMany"]'
 secretName: dev5-cloud-init # pragma: allowlist secret`

@@ -18,6 +18,7 @@ _pvcConfig = schema.PersistentVolumeClaimConfig {
     imageId = option("imageId") or "image-t9w92"
     storage = option("storage") or "10Gi"
     storageClass = option("storageClass") or "longhorn"
+    storageClassName = option("storageClassName") or ""
     volumeMode = option("volumeMode") or "Block"
     accessModes = option("accessModes") or ["ReadWriteMany"]
 }
@@ -89,6 +90,15 @@ _vmConfig = schema.VirtualMachineConfig {
 # Construct full network name
 _fullNetworkName = "${_vmConfig.networkNamespace}/${_vmConfig.networkName}"
 
+# Resolve the PVC's storage class. Harvester generates one StorageClass per VM
+# image and names it "lh-<uuid>", which "<storageClass>-<imageId>" cannot
+# produce -- and imageId cannot be bent to match, because the PVC annotation
+# needs it correct. A PVC bound to a class that does not exist stays Pending,
+# KubeVirt never instantiates the VM, and the cause is two layers down from the
+# symptom. So storageClassName, when set, wins verbatim; the composition stays
+# the default for callers that relied on it.
+_storageClassName = _pvcConfig.storageClassName or "${_pvcConfig.storageClass}-${_pvcConfig.imageId}"
+
 # Define the PVC resource
 _pvc = {
     apiVersion = "v1"
@@ -107,7 +117,7 @@ _pvc = {
                 storage = _pvcConfig.storage
             }
         }
-        storageClassName = "${_pvcConfig.storageClass}-${_pvcConfig.imageId}"
+        storageClassName = _storageClassName
         volumeMode = _pvcConfig.volumeMode
     }
 }
