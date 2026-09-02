@@ -18,6 +18,38 @@ kcl run main.k \
   --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}'
 ```
 
+### Storage class
+
+The PVC's class comes from one of two places:
+
+| Set | Resulting `spec.storageClassName` |
+|---|---|
+| `storageClass` only (default) | `<storageClass>-<imageId>`, e.g. `longhorn-image-t9w92` |
+| `storageClassName` | the value verbatim; `storageClass` is ignored |
+
+Harvester creates one StorageClass per VM image and names it `lh-<uuid>`, not
+`<class>-<image>`. `imageId` cannot be bent to match, because the PVC's
+`harvesterhci.io/imageId` annotation needs it correct. So on a current cluster,
+look the class up and pass it directly:
+
+```bash
+kubectl get virtualmachineimages -n default \
+  -o custom-columns='NAME:.metadata.name,SC:.status.storageClassName'
+```
+
+```bash
+kcl run main.k \
+  -D enableVm=false -D enableCloudConfig=false -D enablePvc=true \
+  -D pvcName=dev2-disk-0 \
+  -D imageId=sthings-u26 \
+  -D storageClassName=lh-68e4c918-0059-48bf-acaf-0de0ebe1eb65 \
+  --format yaml | yq eval -P '.items[]' -
+```
+
+Getting this wrong does not fail loudly: the PVC binds to a class that does not
+exist and stays `Pending`, the VirtualMachine applies fine, KubeVirt never
+instantiates it, and a waiting caller only sees the VMI never appear.
+
 ## CLOUD CONFIG SECRET
 
 ```bash
@@ -118,7 +150,7 @@ EOF
 
 # Render all resources using parameters file
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
-  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.2.0 \
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.3.0 \
   --parameters-file params.yaml \
   --parameters "userdata=${CLOUDCFG_B64}" \
   export --path /tmp/harvester-dev5.yaml
@@ -157,7 +189,7 @@ EOF
 
 # Render all resources with Dagger
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
-  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.3.0 \
   --parameters "enablePvc=true,enableCloudConfig=true,enableVm=true,name=dev5-disk-0,namespace=default,imageNamespace=default,imageId=image-t9w92,storage=20Gi,storageClass=longhorn,volumeMode=Block,accessModes=[\"ReadWriteMany\"],userdata=${CLOUDCFG_B64},secretName=dev5-cloud-init,vmName=dev5,hostname=dev5,description=dev5-complete-vm-setup,osLabel=linux,runStrategy=RerunOnFailure,cpuCores=4,cpuSockets=1,cpuThreads=1,memory=8Gi,pvcName=dev5-disk-0,networkName=vms,evictionStrategy=LiveMigrateIfPossible,terminationGracePeriod=120" \
   export --path /tmp/harvester-dev5.yaml
 ```
@@ -167,7 +199,7 @@ dagger call -m github.com/stuttgart-things/dagger/kcl run \
 ```bash
 # Use parameters file but override specific values via CLI
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
-  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.3.0 \
   --parameters-file params.yaml \
   --parameters "userdata=${CLOUDCFG_B64},cpuCores=8,memory=16Gi" \
   export --path /tmp/harvester-dev5.yaml
@@ -216,7 +248,7 @@ kcl run main.k \
 
 ```bash
     dagger call -m github.com/stuttgart-things/dagger/kcl run \
-    --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+    --oci-source ghcr.io/stuttgart-things/harvester-vm:0.3.0 \
     --parameters "enablePvc=true,enableCloudConfig=false,enableVm=false,pvcName=dev5-disk-0,namespace=default,imageNamespace=default,imageId=image-t9w92,storage=20Gi,storageClass=longhorn,volumeMode=Block,accessModes=[\"ReadWriteMany\"]" \
     export --path /tmp/harvester-dev5-pvc.yaml
 ```
@@ -243,7 +275,7 @@ EOF
 
 ```bash
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
-  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.3.0 \
   --parameters "userdata=${CLOUDCFG_B64},enablePvc=false,enableCloudConfig=true,enableVm=false,secretName=dev5-cloud-init" \
   export --path /tmp/harvester-dev5-cloud.yaml
 ```
@@ -255,7 +287,7 @@ dagger call -m github.com/stuttgart-things/dagger/kcl run \
 
 ```bash
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
-  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.1.0 \
+  --oci-source ghcr.io/stuttgart-things/harvester-vm:0.3.0 \
   --parameters "enablePvc=false,enableCloudConfig=false,enableVm=true,secretName=dev5-cloud-init,vmName=dev5,hostname=dev5,description=dev5-complete-vm-setup,osLabel=linux,runStrategy=RerunOnFailure,cpuCores=4,cpuSockets=1,cpuThreads=1,memory=8Gi,pvcName=dev5-disk-0,networkName=vms,evictionStrategy=LiveMigrateIfPossible,terminationGracePeriod=120" \
   export --path /tmp/harvester-dev5-vm.yaml
 ```

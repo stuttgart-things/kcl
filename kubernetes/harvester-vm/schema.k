@@ -9,7 +9,12 @@ schema PersistentVolumeClaimConfig:
         imageId: str, required - Harvester image ID (e.g., "image-t9w92")
         storage: str, default "10Gi" - Storage size request
         accessModes: [str], default ["ReadWriteMany"] - Access modes for the volume
-        storageClass: str, required - Storage class base name (e.g., "longhorn")
+        storageClass: str, required - Storage class base name (e.g., "longhorn"),
+            composed into "<storageClass>-<imageId>" unless storageClassName is set
+        storageClassName: str, default "" - Storage class used verbatim, bypassing
+            the composition. Harvester names the class it generates per image
+            "lh-<uuid>", which no combination of storageClass and imageId can
+            produce, so an image-backed volume on a current cluster needs this.
         volumeMode: str, default "Block" - Volume mode (Block or Filesystem)
     """
     name: str
@@ -19,6 +24,7 @@ schema PersistentVolumeClaimConfig:
     storage: str = "10Gi"
     accessModes: [str] = ["ReadWriteMany"]
     storageClass: str
+    storageClassName: str = ""
     volumeMode: str = "Block"
 
     check:
@@ -95,3 +101,4 @@ schema VirtualMachineConfig:
         cpuCores > 0, "cpuCores must be greater than 0"
         cpuSockets > 0, "cpuSockets must be greater than 0"
         cpuThreads > 0, "cpuThreads must be greater than 0"
+
