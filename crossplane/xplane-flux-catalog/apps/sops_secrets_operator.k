@@ -34,7 +34,7 @@ import ..schema as s
 # cluster with external-secrets could pull it from Vault instead.
 sopsSecretsOperator: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/sops-secrets-operator"
-    defaultVersion = "v1.54.1"
+    defaultVersion = "v1.54.3"
     components = [
         s.Component {
             name = "install"
