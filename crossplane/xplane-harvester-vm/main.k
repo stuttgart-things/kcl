@@ -1,65 +1,72 @@
-import k8s.api.core.v1 as k8sv1
-
 # ================================
 # XR PARAMS
 # ================================
 _params = option("params")
 
-_name = _params?.oxr?.spec.name or ""
-_namespace = _params?.oxr?.spec.namespace or "default"
-_vmName = _params?.oxr?.spec.vmName or _name
-_hostname = _params?.oxr?.spec.hostname or _vmName
-_description = _params?.oxr?.spec.description or "${_vmName} vm"
+_name = _params?.oxr?.spec?.name or ""
+_namespace = _params?.oxr?.spec?.namespace or "default"
+_vmName = _params?.oxr?.spec?.vmName or _name
+_hostname = _params?.oxr?.spec?.hostname or _vmName
+_description = _params?.oxr?.spec?.description or "${_vmName} vm"
 
-_providerConfig = _params?.oxr?.spec.providerConfigRef or "harvester"
+_providerConfig = _params?.oxr?.spec?.providerConfigRef or "harvester"
 
 # ================================
 # PVC CONFIG
 # ================================
-_pvcName = _params?.oxr?.spec.pvcName or "${_vmName}-disk-0"
-_imageNamespace = _params?.oxr?.spec.imageNamespace or "default"
-_imageId = _params?.oxr?.spec.imageId or "image-generic"
-_storage = _params?.oxr?.spec.storage or "10Gi"
-_storageClass = _params?.oxr?.spec.storageClass or "longhorn"
-_volumeMode = _params?.oxr?.spec.volumeMode or "Block"
-_accessModes = _params?.oxr?.spec.accessModes or ["ReadWriteMany"]
+_pvcName = _params?.oxr?.spec?.pvcName or "${_vmName}-disk-0"
+_imageNamespace = _params?.oxr?.spec?.imageNamespace or "default"
+_imageId = _params?.oxr?.spec?.imageId or "image-generic"
+_storage = _params?.oxr?.spec?.storage or "10Gi"
+_storageClass = _params?.oxr?.spec?.storageClass or "longhorn"
+_volumeMode = _params?.oxr?.spec?.volumeMode or "Block"
+_accessModes = _params?.oxr?.spec?.accessModes or ["ReadWriteMany"]
+
+# Resolve the PVC's storage class. Harvester generates one StorageClass per VM
+# image and names it "lh-<uuid>", which "<storageClass>-<imageId>" cannot
+# produce -- and imageId cannot be bent to match, because the PVC annotation
+# needs it correct. A PVC bound to a class that does not exist stays Pending
+# and KubeVirt never instantiates the VM, so the Object reports healthy while
+# nothing boots. spec.storageClassName, when set, wins verbatim; the
+# composition stays the default for XRs that relied on it.
+_storageClassName = _params?.oxr?.spec?.storageClassName or "${_storageClass}-${_imageId}"
 
 # ================================
 # SECRET CONFIG
 # ================================
-_secretName = _params?.oxr?.spec.secretName or "${_vmName}-cloud-init"
-_userdata = _params?.oxr?.spec.userdata or ""
-_networkdata = _params?.oxr?.spec.networkdata or ""
+_secretName = _params?.oxr?.spec?.secretName or "${_vmName}-cloud-init"
+_userdata = _params?.oxr?.spec?.userdata or ""
+_networkdata = _params?.oxr?.spec?.networkdata or ""
 
 # ================================
 # VM CONFIG
 # ================================
-_osLabel = _params?.oxr?.spec.osLabel or "linux"
-_runStrategy = _params?.oxr?.spec.runStrategy or "RerunOnFailure"
-_cpuCores = _params?.oxr?.spec.cpuCores or 4
-_cpuSockets = _params?.oxr?.spec.cpuSockets or 1
-_cpuThreads = _params?.oxr?.spec.cpuThreads or 1
-_memory = _params?.oxr?.spec.memory or "8Gi"
-_diskName = _params?.oxr?.spec.diskName or "disk-0"
-_machineType = _params?.oxr?.spec.machineType or "q35"
-_networkNamespace = _params?.oxr?.spec.networkNamespace or _namespace
-_networkName = _params?.oxr?.spec.networkName or "vms"
-_evictionStrategy = _params?.oxr?.spec.evictionStrategy or "LiveMigrateIfPossible"
-_terminationGracePeriod = _params?.oxr?.spec.terminationGracePeriod or 120
+_osLabel = _params?.oxr?.spec?.osLabel or "linux"
+_runStrategy = _params?.oxr?.spec?.runStrategy or "RerunOnFailure"
+_cpuCores = _params?.oxr?.spec?.cpuCores or 4
+_cpuSockets = _params?.oxr?.spec?.cpuSockets or 1
+_cpuThreads = _params?.oxr?.spec?.cpuThreads or 1
+_memory = _params?.oxr?.spec?.memory or "8Gi"
+_diskName = _params?.oxr?.spec?.diskName or "disk-0"
+_machineType = _params?.oxr?.spec?.machineType or "q35"
+_networkNamespace = _params?.oxr?.spec?.networkNamespace or _namespace
+_networkName = _params?.oxr?.spec?.networkName or "vms"
+_evictionStrategy = _params?.oxr?.spec?.evictionStrategy or "LiveMigrateIfPossible"
+_terminationGracePeriod = _params?.oxr?.spec?.terminationGracePeriod or 120
 
 _fullNetworkName = "${_networkNamespace}/${_networkName}"
 
 # ================================
 # ENABLE FLAGS
 # ================================
-_enablePvc = _params?.oxr?.spec.enablePvc == True
-_enableSecret = _params?.oxr?.spec.enableSecret == True
-_enableVm = False if _params?.oxr?.spec.enableVm == False else True
+_enablePvc = _params?.oxr?.spec?.enablePvc == True
+_enableSecret = _params?.oxr?.spec?.enableSecret == True
+_enableVm = False if _params?.oxr?.spec?.enableVm == False else True
 
 # ================================
 # NAMESPACE OBJECT
 # ================================
-_enableNamespaceValue = _params?.oxr?.spec.enableNamespace
+_enableNamespaceValue = _params?.oxr?.spec?.enableNamespace
 _enableNamespace = False if _enableNamespaceValue == False else False
 
 namespaceObj = {
@@ -123,7 +130,7 @@ pvcObj = {
                             storage = _storage
                         }
                     }
-                    storageClassName = "${_storageClass}-${_imageId}"
+                    storageClassName = _storageClassName
                     volumeMode = _volumeMode
                 }
             }
@@ -230,12 +237,12 @@ vmObj = {
                                     disks = [
                                         {
                                             name = _diskName
-                                            disk = { bus = "virtio" }
+                                            disk = {bus = "virtio"}
                                             bootOrder = 1
                                         }
                                         {
                                             name = "cloudinitdisk"
-                                            disk = { bus = "virtio" }
+                                            disk = {bus = "virtio"}
                                         }
                                     ]
                                     interfaces = [
@@ -247,7 +254,7 @@ vmObj = {
                                     ]
                                 }
                                 features = {
-                                    acpi = { enabled = True }
+                                    acpi = {enabled = True}
                                 }
                             }
                             networks = [
@@ -268,8 +275,8 @@ vmObj = {
                                 {
                                     name = "cloudinitdisk"
                                     cloudInitNoCloud = {
-                                        secretRef = { name = _secretName }
-                                        networkDataSecretRef = { name = _secretName }
+                                        secretRef = {name = _secretName}
+                                        networkDataSecretRef = {name = _secretName}
                                     }
                                 }
                             ]
