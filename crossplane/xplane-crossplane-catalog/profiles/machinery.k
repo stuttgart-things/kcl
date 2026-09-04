@@ -106,7 +106,15 @@ machinery: s.Profile = {
         s.Package {
             kind = "Function"
             name = "function-patch-and-transform"
-            package = "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.10"
+            # v0.10.9, NICHT v0.10.10: die 0.10.10 ist auf xpkg.upbound.io
+            # nicht veroeffentlicht (list-tags endet bei v0.10.9), nur der
+            # Pull-Through loest sie auf -- catalog-parity faengt das ab.
+            # Auf xpkg.crossplane.io gaebe es sie, aber der Mirror ist hier
+            # kein Detail: ein Wechsel kann denselben Source-String erzeugen
+            # wie ein dependsOn-abgeleiteter Knoten, und zwei Knoten mit
+            # IDENTISCHER Quelle frieren den Resolver fuer den ganzen Cluster
+            # ein. Also das Neueste, das dieser Mirror wirklich hat.
+            package = "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.9"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
 
