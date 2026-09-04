@@ -68,7 +68,7 @@ machinery: s.Profile = {
             # CR from it. Two nodes, two distinct sources — healthy. Aligning
             # the mirrors gives two nodes with an IDENTICAL source and freezes
             # the resolver for every package on the cluster.
-            package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.2"
+            package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.3"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
@@ -81,30 +81,39 @@ machinery: s.Profile = {
             # und der deploy-crossplane-Wait laeuft in den Timeout. Erst
             # anheben, wenn die Configurations die Spanne weiten.
             #
-            # v0.6.7 statt v0.6.5 (2026-08-21): die 0.6er-Linie lebt WEITER,
-            # v0.6.6 und v0.6.7 sind NACH v0.7.0 erschienen und sind reine
-            # CVE-Backports (Go 1.25.12, x/net, x/text, grpc). Unter der Decke
-            # zu bleiben heisst also nicht, auf Sicherheitsfixes zu verzichten.
-            # Der catalog-parity-Check sieht das nicht: er vergleicht gegen das
-            # hoechste Semver und zeigte deshalb auf das verbotene v0.7.0.
-            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.7"
+            # v0.6.8 statt v0.6.5 (zuletzt 2026-09-04): die 0.6er-Linie lebt
+            # WEITER, v0.6.6 bis v0.6.8 sind NACH v0.7.0 erschienen und sind
+            # reine CVE-Backports (Go 1.25.12, x/net, x/text, grpc). Unter der
+            # Decke zu bleiben heisst also nicht, auf Sicherheitsfixes zu
+            # verzichten. Der catalog-parity-Check sieht das nicht: er
+            # vergleicht gegen das hoechste Semver und zeigt deshalb auf das
+            # verbotene v0.7.0 -- v0.6.8 IST hier das Neueste, das geht.
+            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.8"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         s.Package {
             kind = "Function"
             name = "function-go-templating"
-            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.3"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.4"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         s.Package {
             kind = "Function"
             name = "function-environment-configs"
-            package = "xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.7.3"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.7.4"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
             kind = "Function"
             name = "function-patch-and-transform"
+            # v0.10.9, NICHT v0.10.10: die 0.10.10 ist auf xpkg.upbound.io
+            # nicht veroeffentlicht (list-tags endet bei v0.10.9), nur der
+            # Pull-Through loest sie auf -- catalog-parity faengt das ab.
+            # Auf xpkg.crossplane.io gaebe es sie, aber der Mirror ist hier
+            # kein Detail: ein Wechsel kann denselben Source-String erzeugen
+            # wie ein dependsOn-abgeleiteter Knoten, und zwei Knoten mit
+            # IDENTISCHER Quelle frieren den Resolver fuer den ganzen Cluster
+            # ein. Also das Neueste, das dieser Mirror wirklich hat.
             package = "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.9"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
