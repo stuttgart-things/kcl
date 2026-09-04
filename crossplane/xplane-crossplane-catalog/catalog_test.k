@@ -96,7 +96,7 @@ test_function_kcl_stays_on_the_other_mirror = lambda {
 # Vorher stand hier `endswith(":v0.6.5")`. Das ist derselbe Fehler, der
 # test_the_profile_can_build_control_planes einmal auf v0.4.0 festgenagelt
 # hat: eine Untergrenze/Obergrenze als Gleichheit geschrieben. Der Test war
-# dadurch gegen genau die Bumps rot, die er erlauben soll — v0.6.6 und v0.6.7
+# dadurch gegen genau die Bumps rot, die er erlauben soll — v0.6.6 bis v0.6.8
 # sind reine CVE-Backports UNTERHALB der Decke.
 test_function_auto_ready_stays_below_070 = lambda {
     _a = [p for p in c.byKind(c.get("machinery"), "Function") if p.name == "function-auto-ready"]
