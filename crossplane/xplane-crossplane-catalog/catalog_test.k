@@ -80,6 +80,18 @@ test_provider_helm_keeps_the_long_name = lambda {
 # path; the differing mirror is what keeps the two Lock nodes distinct. Aligning
 # them yields two nodes with an IDENTICAL source and every Function on the
 # cluster goes Healthy=False (verified on kind1, 2026-07-18).
+# Der Mirror allein reicht NICHT: der Revision-Name kommt aus dem Digest,
+# dieselbe Version auf beiden Mirrors ist dasselbe Image und damit derselbe
+# Knoten. Katalog 0.5.0 hob function-kcl auf v0.12.3 -- die Version, die der
+# dependsOn-Knoten auf crossplane.io schon fuehrt -- und cicd-test4 meldete
+# fuer JEDES Paket "cannot initialize dependency graph from the packages in
+# the lock". Der Pin muss unter dem dependsOn-Knoten bleiben.
+test_function_kcl_stays_below_the_dependson_node = lambda {
+    _f = [p for p in c.byKind(c.get("machinery"), "Function") if p.name == "function-kcl"]
+    assert len(_f) == 1
+    assert _f[0].package.endswith(":v0.12.2"), "function-kcl darf nicht auf die Version des dependsOn-Knotens (crossplane.io v0.12.3) angehoben werden -- gleicher Digest, gleicher Revision-Name, Lock-Kollision"
+}
+
 test_function_kcl_stays_on_the_other_mirror = lambda {
     _k = [p for p in c.byKind(c.get("machinery"), "Function") if p.name == "function-kcl"]
     assert len(_k) == 1
