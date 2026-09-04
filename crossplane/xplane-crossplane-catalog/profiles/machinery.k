@@ -68,7 +68,18 @@ machinery: s.Profile = {
             # CR from it. Two nodes, two distinct sources — healthy. Aligning
             # the mirrors gives two nodes with an IDENTICAL source and freezes
             # the resolver for every package on the cluster.
-            package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.3"
+            #
+            # DIE VERSION IST TEIL DERSELBEN TRENNUNG, nicht nur der Mirror.
+            # Der Revision-Name wird aus dem Digest abgeleitet: dieselbe Version
+            # auf beiden Mirrors ist DASSELBE Image, also derselbe Suffix. Ein
+            # Bump auf v0.12.3 (2026-09-04, Katalog 0.5.0) liess
+            # function-kcl-601b48f70f03 und
+            # crossplane-contrib-function-kcl-601b48f70f03 entstehen -- ein
+            # Knoten zweimal -- und cicd-test4 meldete fuer JEDES Paket
+            # "cannot initialize dependency graph from the packages in the lock",
+            # bei Installed=True und laufenden Pods. Der dependsOn-Knoten steht
+            # heute auf crossplane.io v0.12.3; dieser Pin muss darunter bleiben.
+            package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.2"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
