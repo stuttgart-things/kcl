@@ -20,4 +20,4 @@ spec:
       metadata:
         name: cloud-init
       spec:
-        source: oci://ghcr.io/stuttgart-things/harvester-vm:0.2.0
+        source: oci://ghcr.io/stuttgart-things/harvester-vm?tag=0.2.0

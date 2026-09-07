@@ -60,8 +60,14 @@ tasks:
         IMAGE="ghcr.io/stuttgart-things/${MODULE_NAME}"
         echo "🔍 Checking existing versions in ${IMAGE}..."
 
+        # Registry tags carry NO 'v' prefix: 'kcl mod push' tags with the bare
+        # kcl.mod version, so harvester-vm publishes 0.2.0/0.3.0, never v0.2.0.
+        # The previous filter grepped '^v[0-9]...', matched nothing on every
+        # module, and so always fell into the "no released versions" branch --
+        # the operator got no list of what exists and no warning when the
+        # version about to be pushed was already published.
         TAGS=$(oras repo tags "${IMAGE}" 2>/dev/null || true)
-        SEMVER_TAGS=$(echo "$TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+        SEMVER_TAGS=$(echo "$TAGS" | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' || true)
 
         if [ -z "$SEMVER_TAGS" ]; then
           echo "⚠️  No released versions found in registry"
@@ -102,6 +108,23 @@ tasks:
 
         if [ -z "$NEW_VERSION" ]; then
           echo "❌ No version provided, exiting"
+          exit 1
+        fi
+
+        if ! echo "${NEW_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+          echo "❌ '${NEW_VERSION}' is not a semver version (no 'v' prefix here)"
+          exit 1
+        fi
+
+        # Published tags are immutable. Re-pushing an existing version replaces
+        # the artifact consumers already pinned, and the swap is invisible: the
+        # tag still resolves, it just serves different module source from then
+        # on. CI refuses this (publish-to-oci skips a version that exists), so
+        # this workstation path is the only way it can happen -- refuse here too.
+        # See #231.
+        if echo "$SEMVER_TAGS" | grep -qx -e "${NEW_VERSION}" -e "v${NEW_VERSION}"; then
+          echo "❌ ${MODULE_NAME} ${NEW_VERSION} is already published in ${IMAGE}"
+          echo "   Published tags are immutable -- bump to an unused version."
           exit 1
         fi
 

@@ -12,7 +12,7 @@ Consumed from the Composition as an OCI source:
     apiVersion: krm.kcl.dev/v1alpha1
     kind: KCLInput
     spec:
-      source: oci://ghcr.io/stuttgart-things/xplane-ip-reservation:0.1.0
+      source: oci://ghcr.io/stuttgart-things/xplane-ip-reservation?tag=0.1.0
 ```
 
 ## What it emits

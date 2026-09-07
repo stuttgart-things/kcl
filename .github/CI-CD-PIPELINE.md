@@ -124,6 +124,45 @@ Follow [Semantic Versioning](https://semver.org/):
 - **MINOR** (0.1.0): New features (backwards compatible)
 - **PATCH** (0.0.1): Bug fixes
 
+Published tags are **immutable**. Never republish a version that already exists
+in the registry — consumers pin the tag, and a republish swaps the module source
+under them without any visible signal. `publish-to-oci` skips a version that is
+already published and `task push-module` refuses one; if a released artifact is
+wrong, ship the fix as a new version.
+
+## 📌 Consuming a published module
+
+`kcl` takes the version from a `tag` query parameter or a `--tag` flag — **never
+from a `:version` suffix in the URL path**. An inline suffix is parsed as part of
+the repository name, the tag stays empty, and the reference silently resolves to
+the *latest* published version:
+
+```bash
+# ❌ not a pin — resolves to whatever version was published last
+kcl mod pull oci://ghcr.io/stuttgart-things/harvester-vm:0.2.0
+
+# ✅ pinned
+kcl mod pull oci://ghcr.io/stuttgart-things/harvester-vm --tag 0.2.0
+kcl run oci://ghcr.io/stuttgart-things/harvester-vm --tag 0.2.0
+```
+
+The same holds for a `function-kcl` composition step, which resolves its source
+through the same code — use the query form there:
+
+```yaml
+        # ❌ floats to the newest version
+        source: oci://ghcr.io/stuttgart-things/harvester-vm:0.2.0
+        # ✅ pinned
+        source: oci://ghcr.io/stuttgart-things/harvester-vm?tag=0.2.0
+```
+
+…and in `kcl.mod` dependencies:
+
+```toml
+[dependencies]
+harvester-vm = { oci = "oci://ghcr.io/stuttgart-things/harvester-vm", tag = "0.2.0", version = "0.2.0" }
+```
+
 ### 3. Commit and Push
 ```bash
 git add .

@@ -266,7 +266,12 @@ jobs:
           # with "package version 'x.y.z' already exists".
           NAME="${{ steps.metadata.outputs.name }}"
           VERSION="${{ steps.metadata.outputs.version }}"
-          TAGS=$(gh api "/orgs/${{ github.repository_owner }}/packages/container/${NAME}/versions" \
+          # --paginate is required: the packages API returns 30 versions per
+          # page, so without it a module with more releases than that reports
+          # exists=false for every older tag and the publish step tries to
+          # overwrite one. Published tags are immutable — a republish would
+          # swap the artifact under consumers that pinned the tag (#231).
+          TAGS=$(gh api --paginate "/orgs/${{ github.repository_owner }}/packages/container/${NAME}/versions" \
                    --jq '.[].metadata.container.tags[]' 2>/dev/null || true)
           if echo "${TAGS}" | grep -qx "${VERSION}"; then
             echo "exists=true" >> $GITHUB_OUTPUT
