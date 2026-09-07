@@ -13,7 +13,7 @@ import ..schema as s
 # at build time, so a Secret applied by the same Kustomization is too late.
 dapr: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/apps/dapr"
-    defaultVersion = "v1.49.1"
+    defaultVersion = "v1.56.3"
     components = [
         s.Component {
             name = "control-plane"
