@@ -21,4 +21,4 @@ spec:
       metadata:
         name: vault-auth
       spec:
-        source: oci://ghcr.io/stuttgart-things/xplane-vault-auth-base:0.4.0
+        source: oci://ghcr.io/stuttgart-things/xplane-vault-auth-base?tag=0.4.0

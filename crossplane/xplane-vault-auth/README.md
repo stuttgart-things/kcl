@@ -25,7 +25,7 @@ rm terraform.tfvars
 ## Render
 
 ```bash
-kcl run --quiet oci://ghcr.io/stuttgart-things/xplane-vault-auth:0.2.0 \
+kcl run --quiet oci://ghcr.io/stuttgart-things/xplane-vault-auth --tag 0.2.0 \
   -D params='{
     "oxr": {
       "spec": {

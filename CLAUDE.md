@@ -67,7 +67,31 @@ oras repo tags ghcr.io/stuttgart-things/<module-name>
 
 - Version is stored in each module's `kcl.mod` file
 - The `push-module` task auto-updates `kcl.mod` before pushing
-- Registry tags use unversioned semver (no `v` prefix in `kcl.mod`, `v` prefix on OCI tags)
+- Registry tags are bare semver, no `v` prefix (`harvester-vm` publishes `0.2.0`, `0.3.0`)
+- Published tags are **immutable** — never republish an existing version; CI skips
+  it and `task push-module` refuses it. Ship fixes as a new version instead
+
+### Pinning a module version
+
+`kcl` reads the version from `--tag` or a `?tag=` query parameter. A `:version`
+suffix in the URL path is **not** a pin: it is parsed as part of the repository
+name, the tag stays empty, and the reference resolves to the latest published
+version.
+
+```bash
+kcl mod pull oci://ghcr.io/stuttgart-things/<module> --tag 0.2.0   # ✅
+kcl mod pull oci://ghcr.io/stuttgart-things/<module>:0.2.0         # ❌ floats
+```
+
+In a `function-kcl` composition step and in `kcl.mod` dependencies:
+
+```yaml
+source: oci://ghcr.io/stuttgart-things/<module>?tag=0.2.0
+```
+
+```toml
+<module> = { oci = "oci://ghcr.io/stuttgart-things/<module>", tag = "0.2.0", version = "0.2.0" }
+```
 
 ## Claims CLI
 
