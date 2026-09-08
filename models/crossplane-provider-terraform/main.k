@@ -1,8 +1,6 @@
 # Crossplane Terraform Provider Module
 # This module provides KCL resources for managing Terraform Workspaces via Crossplane
-
 import models.v1beta1.tf_upbound_io_v1beta1_workspace as workspace
-import k8s.api.core.v1 as corev1
 
 # Main schema for Terraform Workspace configuration
 schema TerraformWorkspace:
@@ -15,36 +13,29 @@ schema TerraformWorkspace:
     # Basic workspace configuration
     name: str
     namespace?: str = "default"
-    labels?: {str: str}
-    annotations?: {str: str}
-
+    labels?: {str:str}
+    annotations?: {str:str}
     # Terraform configuration
     source: "Remote" | "Inline" | "Flux" = "Remote"
     module: str
     entrypoint?: str = ""
     inlineFormat?: "HCL" | "JSON" = "HCL"
-
     # Terraform variables
-    variables?: {str: str}
+    variables?: {str:str}
     variableFiles?: [TerraformVarFile]
     environmentVariables?: [TerraformEnvVar]
-
     # CLI arguments
     initArgs?: [str] = []
     planArgs?: [str] = []
     applyArgs?: [str] = []
     destroyArgs?: [str] = []
-
     # Provider configuration
     providerConfigRef?: str = "default"
-
     # Connection secrets
     connectionSecret?: TerraformConnectionSecret
-
     # Management policies
     managementPolicies?: [str] = ["*"]
     deletionPolicy?: "Delete" | "Orphan" = "Delete"
-
     # Advanced options
     enableTerraformCLILogging?: bool = False
 
@@ -96,52 +87,46 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
     # Build environment variables
     envVars = []
     if config.environmentVariables:
-        envVars = [
-            {
-                name = env.name
-                value = env.value
-                configMapKeyRef = {
-                    name = env.configMapRef.name
-                    namespace = env.configMapRef.namespace
-                    key = env.configMapRef.key
-                } if env.configMapRef else Undefined
-                secretKeyRef = {
-                    name = env.secretRef.name
-                    namespace = env.secretRef.namespace
-                    key = env.secretRef.key
-                } if env.secretRef else Undefined
-            } for env in config.environmentVariables
-        ]
+        envVars = [{
+            name = env.name
+            value = env.value
+            configMapKeyRef = {
+                name = env.configMapRef.name
+                namespace = env.configMapRef.namespace
+                key = env.configMapRef.key
+            } if env.configMapRef else Undefined
+            secretKeyRef = {
+                name = env.secretRef.name
+                namespace = env.secretRef.namespace
+                key = env.secretRef.key
+            } if env.secretRef else Undefined
+        } for env in config.environmentVariables]
 
     # Build variable files
     varFiles = []
     if config.variableFiles:
-        varFiles = [
-            {
-                source = varFile.source
-                format = varFile.format or "HCL"
-                configMapKeyRef = {
-                    name = varFile.configMapRef.name
-                    namespace = varFile.configMapRef.namespace
-                    key = varFile.configMapRef.key
-                } if varFile.configMapRef else Undefined
-                secretKeyRef = {
-                    name = varFile.secretRef.name
-                    namespace = varFile.secretRef.namespace
-                    key = varFile.secretRef.key
-                } if varFile.secretRef else Undefined
-            } for varFile in config.variableFiles
-        ]
+        varFiles = [{
+            source = varFile.source
+            format = varFile.format or "HCL"
+            configMapKeyRef = {
+                name = varFile.configMapRef.name
+                namespace = varFile.configMapRef.namespace
+                key = varFile.configMapRef.key
+            } if varFile.configMapRef else Undefined
+            secretKeyRef = {
+                name = varFile.secretRef.name
+                namespace = varFile.secretRef.namespace
+                key = varFile.secretRef.key
+            } if varFile.secretRef else Undefined
+        } for varFile in config.variableFiles]
 
     # Build variables
     vars = []
     if config.variables:
-        vars = [
-            {
-                key = k
-                value = v
-            } for k, v in config.variables
-        ]
+        vars = [{
+            key = k
+            value = v
+        } for k, v in config.variables]
 
     # Create the Workspace resource
     [
@@ -179,7 +164,7 @@ generateTerraformWorkspace = lambda config: TerraformWorkspace -> [workspace.Wor
 # Utility functions for common Terraform workspace patterns
 
 # Simple Git-based Terraform workspace
-gitTerraformWorkspace = lambda name: str, gitUrl: str, path: str, variables: {str: str} -> [workspace.Workspace] {
+gitTerraformWorkspace = lambda name: str, gitUrl: str, path: str, variables: {str:str} -> [workspace.Workspace] {
     """
     Create a simple Terraform workspace from a Git repository.
 
@@ -204,7 +189,7 @@ gitTerraformWorkspace = lambda name: str, gitUrl: str, path: str, variables: {st
 }
 
 # Inline Terraform workspace
-inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, variables: {str: str} -> [workspace.Workspace] {
+inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, variables: {str:str} -> [workspace.Workspace] {
     """
     Create a Terraform workspace with inline Terraform code.
 
@@ -228,7 +213,7 @@ inlineTerraformWorkspace = lambda name: str, terraformCode: str, format: str, va
 }
 
 # Terraform workspace with secrets
-secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secretNamespace: str, variables: {str: str} -> [workspace.Workspace] {
+secretTerraformWorkspace = lambda name: str, gitUrl: str, secretName: str, secretNamespace: str, variables: {str:str} -> [workspace.Workspace] {
     """
     Create a Terraform workspace with connection secrets for outputs.
 
