@@ -376,21 +376,73 @@ jobs:
       # disabled" (reported as a misleading "please check registry, username
       # and password is valid"). 'kcl mod push' reads ~/.docker/config.json,
       # so writing that file is enough — no kcl-side login required.
+      # GITHUB_TOKEN can only write to packages that are *linked* to this
+      # repository, and a package only gets linked by being published from it.
+      # Most module packages here were first pushed from a workstation with a
+      # personal token, so they are linked to nothing and the workflow token
+      # cannot write them:
+      #
+      #   POST .../blobs/uploads/: 403 denied: permission_denied: write_package
+      #
+      # Making a package public does not help -- public grants anonymous *read*.
+      # GitHub exposes no API for the linkage either, so the alternative was
+      # clicking through Manage Actions access on every package by hand.
+      #
+      # GHCR_TOKEN is an org PAT with write:packages, which is not bound to the
+      # linkage. It is optional: without it this falls back to GITHUB_TOKEN and
+      # behaves exactly as before, so an unset secret costs nothing until a
+      # module that needs it is published.
+      - name: Report which credential is in use
+        if: steps.check-version.outputs.exists == 'false'
+        env:
+          HAVE_PAT: ${{ secrets.GHCR_TOKEN != '' }}
+        run: |
+          if [ "${HAVE_PAT}" = "true" ]; then
+            echo "🔑 Publishing as GHCR_TOKEN (org PAT)"
+          else
+            echo "🔑 Publishing as GITHUB_TOKEN — GHCR_TOKEN is not set"
+            echo "   This can only push to packages linked to this repository."
+            echo "   A package that was first pushed from a workstation is not"
+            echo "   linked, and will fail with permission_denied: write_package."
+          fi
+
       - name: Login to GitHub Container Registry
         if: steps.check-version.outputs.exists == 'false'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_USER || github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Push module to OCI registry
         if: steps.check-version.outputs.exists == 'false'
         working-directory: ${{ matrix.module }}
         run: |
-          echo "==> Publishing ${{ steps.metadata.outputs.name }}:${{ steps.metadata.outputs.version }}"
-          kcl mod push ${{ steps.metadata.outputs.oci_ref }}
-          echo "✅ Published to ${{ steps.metadata.outputs.oci_ref }}:${{ steps.metadata.outputs.version }}"
+          NAME="${{ steps.metadata.outputs.name }}"
+          VERSION="${{ steps.metadata.outputs.version }}"
+          REF="${{ steps.metadata.outputs.oci_ref }}"
+
+          echo "==> Publishing ${NAME}:${VERSION}"
+          set +e
+          kcl mod push "${REF}" >"${RUNNER_TEMP}/push.log" 2>&1
+          PUSH_RC=$?
+          set -e
+          cat "${RUNNER_TEMP}/push.log"
+
+          if [ "${PUSH_RC}" -ne 0 ]; then
+            # The one failure worth explaining rather than just echoing: it says
+            # nothing about the actual cause, which is package ownership.
+            if grep -q 'permission_denied: write_package' "${RUNNER_TEMP}/push.log"; then
+              echo "::error::Cannot write ${NAME}: the credential in use has no write access to that package."
+              echo "Either set the GHCR_TOKEN secret (an org PAT with write:packages),"
+              echo "or link the package to this repository:"
+              echo "  https://github.com/orgs/${{ github.repository_owner }}/packages/container/${NAME}/settings"
+              echo "  -> Manage Actions access -> Add repository -> this repo, role Write"
+            fi
+            exit "${PUSH_RC}"
+          fi
+
+          echo "✅ Published to ${REF}:${VERSION}"
 
       - name: Make package public
         if: steps.check-version.outputs.exists == 'false'
