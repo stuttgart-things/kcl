@@ -298,23 +298,70 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Ask the packages API which tags exist. The previous check ran
-          #   kcl mod metadata <ref> --tag <version>
-          # which fails with "unknown flag: --tag" — 'kcl mod metadata' has no
-          # such flag — so it ALWAYS reported exists=false. That went unnoticed
-          # while CI was the only publisher (the version was always new), and
-          # surfaced the first time a module was pushed from a workstation:
-          # the merge run then tried to republish and 'kcl mod push' exits 1
-          # with "package version 'x.y.z' already exists".
+          # Ask the registry which tags exist. Two earlier versions of this
+          # check both answered "does not exist" when they could not actually
+          # tell, and each time the publish step then ran anyway:
+          #
+          #   kcl mod metadata <ref> --tag <version>   -- no such flag, always
+          #                                               failed, always
+          #                                               reported exists=false
+          #   gh api .../versions 2>/dev/null || true  -- swallowed the API
+          #                                               error, so a package
+          #                                               the token could not
+          #                                               read looked empty
+          #
+          # The second one bit for real: eight modules had private GHCR
+          # packages this token cannot read, so every published version of
+          # theirs was reported new and `kcl mod push` died on
+          # "403 denied: permission_denied: read_package".
+          #
+          # The registry is asked directly now, rather than the packages API,
+          # for two reasons. It is the same system `kcl mod push` writes to, so
+          # the guard and the thing it guards agree by construction; and it
+          # distinguishes the three cases the packages API does not -- that API
+          # masks an inaccessible package as 404, exactly like a package that
+          # was never published, which is the distinction this check turns on.
+          #
+          #   200            -> the tag list is authoritative
+          #   404 NAME_UNKNOWN -> nothing published yet, first release
+          #   anything else  -> we cannot tell; fail closed rather than risk
+          #                     overwriting a published tag (#231)
+          #
+          # No pagination worry either: /tags/list returns them all.
           NAME="${{ steps.metadata.outputs.name }}"
           VERSION="${{ steps.metadata.outputs.version }}"
-          # --paginate is required: the packages API returns 30 versions per
-          # page, so without it a module with more releases than that reports
-          # exists=false for every older tag and the publish step tries to
-          # overwrite one. Published tags are immutable — a republish would
-          # swap the artifact under consumers that pinned the tag (#231).
-          TAGS=$(gh api --paginate "/orgs/${{ github.repository_owner }}/packages/container/${NAME}/versions" \
-                   --jq '.[].metadata.container.tags[]' 2>/dev/null || true)
+          REPO="${{ github.repository_owner }}/${NAME}"
+
+          BASIC=$(printf 'x:%s' "${GH_TOKEN}" | base64 -w0)
+          PULL_TOKEN=$(curl -sSL -H "Authorization: Basic ${BASIC}" \
+            "https://ghcr.io/token?scope=repository:${REPO}:pull&service=ghcr.io" \
+            | jq -r '.token // empty')
+          if [ -z "${PULL_TOKEN}" ]; then
+            echo "::error::Could not obtain a pull token for ${REPO}; refusing to publish blind."
+            exit 1
+          fi
+
+          HTTP=$(curl -sSL -o "${RUNNER_TEMP}/tags.json" -w '%{http_code}' \
+            -H "Authorization: Bearer ${PULL_TOKEN}" \
+            "https://ghcr.io/v2/${REPO}/tags/list")
+
+          case "${HTTP}" in
+            200)
+              TAGS=$(jq -r '.tags[]? // empty' "${RUNNER_TEMP}/tags.json")
+              ;;
+            404)
+              echo "ℹ️  Nothing published under ${REPO} yet — this will be its first release"
+              TAGS=""
+              ;;
+            *)
+              echo "::error::Registry returned HTTP ${HTTP} for ${REPO}; refusing to publish blind."
+              cat "${RUNNER_TEMP}/tags.json"
+              echo "A 403 here means the package exists but this repository cannot read it:"
+              echo "make it public like the other module packages, or grant this repo access."
+              exit 1
+              ;;
+          esac
+
           if echo "${TAGS}" | grep -qx "${VERSION}"; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "⚠️  Version ${VERSION} already exists in registry — skipping publish"
