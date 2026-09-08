@@ -8,9 +8,7 @@ Usage:
 _enable_tekton: bool = option("enable_tekton") or False
 _enable_crossplane: bool = option("enable_crossplane") or False
 
-import base
-import tekton
-import crossplane
-
-# Build kubernetes list on a single line or use list comprehension
-kubernetes = (tekton.kubernetes if _enable_tekton else []) + (crossplane.kubernetes if _enable_crossplane else [])
+# base.k, tekton.k and crossplane.k are siblings in this package, so their
+# values are already in scope -- importing them would be a self-import and
+# a redeclaration.
+kubernetes = (tekton_kubernetes if _enable_tekton else []) + (crossplane_kubernetes if _enable_crossplane else [])

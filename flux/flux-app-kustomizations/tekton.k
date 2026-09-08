@@ -1,8 +1,8 @@
 """
 Tekton Kustomization
-Usage: kcl run base.k tekton.k
+Part of the flux-app-kustomizations package; enable with -D enable_tekton=true
 """
-import base
+
 import flux_kustomization.v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
 
 # Tekton Configuration
@@ -11,15 +11,15 @@ tekton_version: str = option("tekton_version") or "0.76.1"
 tekton_path: str = option("tekton_path") or "./cicd/tekton"
 
 # Tekton Kustomization using Flux schema
-kubernetes = [flux.Kustomization {
+tekton_kubernetes = [flux.Kustomization {
     metadata.name = "tekton"
-    metadata.namespace = base.flux_namespace
-    spec.interval = base.default_interval
-    spec.retryInterval = base.default_retry_interval
-    spec.timeout = base.default_timeout
+    metadata.namespace = flux_namespace
+    spec.interval = default_interval
+    spec.retryInterval = default_retry_interval
+    spec.timeout = default_timeout
     spec.sourceRef = {
-        kind = base.source_repo_kind
-        name = base.source_repo_name
+        kind = source_repo_kind
+        name = source_repo_name
     }
     spec.path = tekton_path
     spec.prune = True
