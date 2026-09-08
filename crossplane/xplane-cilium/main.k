@@ -1,34 +1,34 @@
-import crossplane_provider_helm.v1beta1.helm_crossplane_io_v1beta1_release as helm
+import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as helm
 
 # --- Get XR spec fields ---
-name = option("params")?.oxr?.spec.name or "cilium"
-targetNamespace = option("params")?.oxr?.spec.targetNamespace or "kube-system"
-version = option("params")?.oxr?.spec.version or "1.18.0"
-config = option("params")?.oxr?.spec.config or "kind"
-clusterName = option("params")?.oxr?.spec.clusterName or "kind"
+name = option("params")?.oxr?.spec?.name or "cilium"
+targetNamespace = option("params")?.oxr?.spec?.targetNamespace or "kube-system"
+version = option("params")?.oxr?.spec?.version or "1.18.0"
+config = option("params")?.oxr?.spec?.config or "kind"
+clusterName = option("params")?.oxr?.spec?.clusterName or "kind"
 
-kubeProxyReplacement = option("params")?.oxr?.spec.kubeProxyReplacement or True
-routingMode = option("params")?.oxr?.spec.routingMode or "native"
-ipv4NativeRoutingCIDR = option("params")?.oxr?.spec.ipv4NativeRoutingCIDR or "10.244.0.0/16"
-k8sServiceHost = option("params")?.oxr?.spec.k8sServiceHost or (clusterName + "-control-plane")
-k8sServicePort = option("params")?.oxr?.spec.k8sServicePort or 6443
+kubeProxyReplacement = option("params")?.oxr?.spec?.kubeProxyReplacement or True
+routingMode = option("params")?.oxr?.spec?.routingMode or "native"
+ipv4NativeRoutingCIDR = option("params")?.oxr?.spec?.ipv4NativeRoutingCIDR or "10.244.0.0/16"
+k8sServiceHost = option("params")?.oxr?.spec?.k8sServiceHost or (clusterName + "-control-plane")
+k8sServicePort = option("params")?.oxr?.spec?.k8sServicePort or 6443
 
-l2announcements_enabled = option("params")?.oxr?.spec.l2announcements_enabled or True
-l2announcements_leaseDuration = option("params")?.oxr?.spec.l2announcements_leaseDuration or "3s"
-l2announcements_leaseRenewDeadline = option("params")?.oxr?.spec.l2announcements_leaseRenewDeadline or "1s"
-l2announcements_leaseRetryPeriod = option("params")?.oxr?.spec.l2announcements_leaseRetryPeriod or "500ms"
+l2announcements_enabled = option("params")?.oxr?.spec?.l2announcements_enabled or True
+l2announcements_leaseDuration = option("params")?.oxr?.spec?.l2announcements_leaseDuration or "3s"
+l2announcements_leaseRenewDeadline = option("params")?.oxr?.spec?.l2announcements_leaseRenewDeadline or "1s"
+l2announcements_leaseRetryPeriod = option("params")?.oxr?.spec?.l2announcements_leaseRetryPeriod or "500ms"
 
-devices = option("params")?.oxr?.spec.devices or ["eth0", "net0"]
-externalIPs_enabled = option("params")?.oxr?.spec.externalIPs_enabled or True
-autoDirectNodeRoutes = option("params")?.oxr?.spec.autoDirectNodeRoutes or True
-operator_replicas = option("params")?.oxr?.spec.operator_replicas or 2
+devices = option("params")?.oxr?.spec?.devices or ["eth0", "net0"]
+externalIPs_enabled = option("params")?.oxr?.spec?.externalIPs_enabled or True
+autoDirectNodeRoutes = option("params")?.oxr?.spec?.autoDirectNodeRoutes or True
+operator_replicas = option("params")?.oxr?.spec?.operator_replicas or 2
 
 cilium_release = helm.Release {
     apiVersion = "helm.crossplane.io/v1beta1"
     kind = "Release"
-    metadata = { name = name }
+    metadata = {name = name}
     spec = {
-        providerConfigRef: { name = clusterName }
+        providerConfigRef: {name = clusterName}
         forProvider: {
             chart: {
                 name = "cilium"
@@ -50,9 +50,9 @@ cilium_release = helm.Release {
                     leaseRetryPeriod = l2announcements_leaseRetryPeriod
                 }
                 devices = devices
-                externalIPs = { enabled = externalIPs_enabled }
+                externalIPs = {enabled = externalIPs_enabled}
                 autoDirectNodeRoutes = autoDirectNodeRoutes
-                operator = { replicas = operator_replicas }
+                operator = {replicas = operator_replicas}
             }
         }
     }
