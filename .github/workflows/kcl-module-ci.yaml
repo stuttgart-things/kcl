@@ -163,10 +163,40 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: |
           echo "==> Linting KCL code..."
-          kcl lint . || {
-            echo "❌ Linting failed"
-            exit 1
-          }
+          # CRD-model modules (most of models/*) ship only versioned
+          # subpackages -- v1/, v1beta2/, ... -- and have no root-level .k file.
+          # `kcl lint .` has no input there and exits 1, so the whole job went
+          # red the moment anyone touched one. Lint the subpackages instead of
+          # skipping the module.
+          if ls *.k >/dev/null 2>&1; then
+            kcl lint . || {
+              echo "❌ Linting failed"
+              exit 1
+            }
+          else
+            # Only subpackages that hold real module source are linted.
+            # examples/ is excluded because those directories hold standalone
+            # illustrative snippets, several of which declare the same names,
+            # so compiling them as one package is an ImmutableError by
+            # construction. *_test.k is excluded because kcl itself does not
+            # feed test files to lint -- a directory holding nothing else just
+            # reports "No input KCL files" -- and the `kcl test` step covers
+            # them anyway.
+            echo "ℹ️  No root-level .k file -- linting subpackages"
+            FOUND=0
+            for PKG in $(find . -name '*.k' ! -name '*_test.k' -not -path './oci/*' -not -path './examples/*' -printf '%h\n' | sort -u); do
+              FOUND=1
+              echo "  - ${PKG}"
+              kcl lint "${PKG}" || {
+                echo "❌ Linting failed in ${PKG}"
+                exit 1
+              }
+            done
+            [ "${FOUND}" = 1 ] || {
+              echo "❌ No .k files anywhere in the module"
+              exit 1
+            }
+          fi
           echo "✅ Linting passed"
 
       - name: Run tests
@@ -187,11 +217,18 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: |
           echo "==> Testing module execution with default values..."
-          kcl run . || {
-            echo "❌ Module execution failed"
-            exit 1
-          }
-          echo "✅ Module executes successfully"
+          # Same shape check as the lint step: a module with no root-level .k
+          # file has nothing to execute, and `kcl run .` fails with
+          # "No input KCL files" rather than telling you that.
+          if ls *.k >/dev/null 2>&1; then
+            kcl run . || {
+              echo "❌ Module execution failed"
+              exit 1
+            }
+            echo "✅ Module executes successfully"
+          else
+            echo "⏭️  No root-level .k file -- nothing to execute"
+          fi
 
       - name: Validate module structure
         working-directory: ${{ matrix.module }}
@@ -200,8 +237,13 @@ jobs:
 
           # Check for required files
           [ -f "kcl.mod" ] || { echo "❌ kcl.mod not found"; exit 1; }
-          [ -f "main.k" ] || { echo "❌ main.k not found"; exit 1; }
           [ -f "README.md" ] || { echo "❌ README.md not found"; exit 1; }
+          # main.k is the entrypoint of a runnable module. CRD-model modules
+          # have no root-level .k file at all and are exempt; a module that has
+          # root .k files but no main.k is still an error.
+          if ls *.k >/dev/null 2>&1; then
+            [ -f "main.k" ] || { echo "❌ main.k not found"; exit 1; }
+          fi
 
           # Extract module name and version
           MODULE_NAME=$(grep '^name = ' kcl.mod | cut -d '"' -f 2)
