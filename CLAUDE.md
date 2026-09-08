@@ -63,6 +63,16 @@ All modules are published to `ghcr.io/stuttgart-things/<module-name>`. Check exi
 oras repo tags ghcr.io/stuttgart-things/<module-name>
 ```
 
+## Publishing credentials
+
+CI publishes with `GHCR_TOKEN` (a PAT with `write:packages`) when that secret is
+set, and falls back to `GITHUB_TOKEN` when it is not. The fallback can only push
+to packages *linked* to this repository; a package first pushed from a
+workstation is linked to nothing and fails with
+`403 permission_denied: write_package`. Public visibility does not help — that
+grants anonymous read, not write. See
+[.github/CI-CD-PIPELINE.md](.github/CI-CD-PIPELINE.md#ghcr_token-optional-but-needed-for-most-packages).
+
 ## Module Version Management
 
 - Version is stored in each module's `kcl.mod` file

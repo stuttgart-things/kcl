@@ -347,6 +347,43 @@ The pipeline requires:
 - `packages: write` - Publish to GHCR
 - `GITHUB_TOKEN` - Automatically provided by GitHub Actions
 
+### `GHCR_TOKEN` (optional, but needed for most packages)
+
+`GITHUB_TOKEN` can only write to packages **linked** to this repository, and a
+package only becomes linked by being published *from* it. Most module packages
+here were first pushed from a workstation with a personal token, so they are
+linked to nothing and the workflow cannot write them:
+
+```
+POST .../blobs/uploads/: 403 denied: permission_denied: write_package
+```
+
+Making the package public does not help — public grants anonymous *read*. There
+is no API for the linkage either, so the alternative is clicking through
+**Manage Actions access** on every package by hand.
+
+Set two org (or repo) secrets to avoid that:
+
+| secret | value |
+|---|---|
+| `GHCR_TOKEN` | a PAT with `write:packages` — the same kind of token `task push-module` already needs |
+| `GHCR_USER` | the account that token belongs to (optional; defaults to `github.actor`) |
+
+Both are optional. Without them the workflow falls back to `GITHUB_TOKEN` and
+behaves exactly as before, so an unset secret only costs you the modules whose
+packages are unlinked. The publish job prints which credential it is using.
+
+A PAT with org-wide package write is broader than `GITHUB_TOKEN`, which is
+minted per run and scoped to this repository. A GitHub App with
+`packages: write`, or a fine-grained PAT limited to packages, is the tighter
+option if that matters.
+
+### Package visibility is still manual
+
+Nothing here changes it: GitHub exposes no API for container package
+visibility, so a new package stays private until someone flips it in
+**Danger Zone → Change visibility**. The pipeline only reports the state.
+
 ## 📖 Additional Resources
 
 - [KCL Documentation](https://kcl-lang.io/)
