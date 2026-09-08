@@ -153,7 +153,6 @@ esoRelease = helm.Release {
             waitTimeout: "10m"
             values: {
                 installCRDs: True
-
                 # Webhook configuration
                 webhook: {
                     port: 10250
@@ -161,7 +160,6 @@ esoRelease = helm.Release {
                     certCheckInterval: "5m"
                     lookaheadInterval: "168h"
                 }
-
                 # Cert controller - conditionally disable probes for vcluster
                 certController: {
                     create: True
@@ -183,7 +181,6 @@ esoRelease = helm.Release {
                         }
                     }
                 }
-
                 # Main controller - also disable probes for vcluster
                 replicaCount: 1
                 readinessProbe: _esoProbeConfig if isVcluster else {
@@ -202,12 +199,10 @@ esoRelease = helm.Release {
                         memory: "128Mi"
                     }
                 }
-
                 # Monitoring
                 serviceMonitor: {
                     enabled: True
                 }
-
                 # Logging
                 logLevel: "info"
             }
@@ -219,154 +214,144 @@ esoRelease = helm.Release {
 # Now include cluster name in resource naming
 
 # Generate ServiceAccount objects for each auth
-serviceAccounts = [
-    k8s.Object {
-        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-        kind = "Object"
-        metadata = {
-            name = "serviceaccount-${auth.name}-${safeClusterName}"
-            namespace = _namespace
-            annotations = {
-                "krm.kcl.dev/composition-resource-name" = "vault-serviceaccount-${auth.name}-${safeClusterName}"
-            }
-        }
-        spec = {
-            forProvider = {
-                manifest = {
-                    apiVersion = "v1"
-                    kind = "ServiceAccount"
-                    metadata = {
-                        name = auth.name
-                        namespace = auth.namespace
-                    }
-                    automountServiceAccountToken = True
-                }
-            }
-            managementPolicies = ["*"]
-            providerConfigRef = _providerConfigRef
+serviceAccounts = [k8s.Object {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = "serviceaccount-${auth.name}-${safeClusterName}"
+        namespace = _namespace
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-serviceaccount-${auth.name}-${safeClusterName}"
         }
     }
-    for auth in k8sAuths
-]
-
-# Generate Secret objects for each auth
-secrets = [
-    k8s.Object {
-        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-        kind = "Object"
-        metadata = {
-            name = "secret-${auth.name}-${safeClusterName}"
-            namespace = _namespace
-            annotations = {
-                "krm.kcl.dev/composition-resource-name" = "vault-secret-${auth.name}-${safeClusterName}"
-            }
-        }
-        spec = {
-            forProvider = {
-                manifest = {
-                    apiVersion = "v1"
-                    kind = "Secret"
-                    metadata = {
-                        name = auth.name
-                        namespace = auth.namespace
-                        annotations = {
-                            "kubernetes.io/service-account.name" = auth.name
-                            "kubernetes.io/service-account.namespace" = auth.namespace
-                        }
-                    }
-                    type = "kubernetes.io/service-account-token"
-                }
-            }
-            managementPolicies = ["*"]
-            providerConfigRef = _providerConfigRef
-        }
-    }
-    for auth in k8sAuths
-]
-
-# Generate ClusterRoleBinding objects for each auth
-clusterRoleBindings = [
-    k8s.Object {
-        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-        kind = "Object"
-        metadata = {
-            name = "clusterrolebinding-${auth.name}-${safeClusterName}"
-            namespace = _namespace
-            annotations = {
-                "krm.kcl.dev/composition-resource-name" = "vault-clusterrolebinding-${auth.name}-${safeClusterName}"
-            }
-        }
-        spec = {
-            forProvider = {
-                manifest = {
-                    apiVersion = "rbac.authorization.k8s.io/v1"
-                    kind = "ClusterRoleBinding"
-                    metadata = {
-                        name = auth.name
-                    }
-                    roleRef = {
-                        apiGroup = "rbac.authorization.k8s.io"
-                        kind = "ClusterRole"
-                        name = "system:auth-delegator"
-                    }
-                    subjects = [{
-                        kind = "ServiceAccount"
-                        name = auth.name
-                        namespace = auth.namespace
-                    }]
-                }
-            }
-            managementPolicies = ["*"]
-            providerConfigRef = _providerConfigRef
-        }
-    }
-    for auth in k8sAuths
-]
-
-# Generate Token Reader objects for each auth - reads token from service account secrets
-tokenReaders = [
-    k8s.Object {
-        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-        kind = "Object"
-        metadata = {
-            name = "token-reader-${auth.name}-${safeClusterName}"
-            namespace = _namespace
-            annotations = {
-                "krm.kcl.dev/composition-resource-name" = "vault-token-reader-{}-{}".format(auth.name, safeClusterName)
-            }
-        }
-        spec = {
-            managementPolicies = ["Observe"]  # Important: Only observe, don't manage!
-            providerConfigRef = _providerConfigRef
-            forProvider = {
-                manifest = {
-                    apiVersion = "v1"
-                    kind = "Secret"
-                    metadata = {
-                        name = auth.name
-                        namespace = auth.namespace
-                    }
-                }
-            }
-            connectionDetails = [
-                {
-                    apiVersion = "v1"
-                    kind = "Secret"
+    spec = {
+        forProvider = {
+            manifest = {
+                apiVersion = "v1"
+                kind = "ServiceAccount"
+                metadata = {
                     name = auth.name
                     namespace = auth.namespace
-                    fieldPath = "data.token"
-                    toConnectionSecretKey = "token" # pragma: allowlist secret
                 }
-            ]
-            # Namespaced Object: writeConnectionSecretToRef is name-only;
-            # the secret lands in the MR's own namespace (_namespace).
-            writeConnectionSecretToRef = {
-                name = "vault-token-{}-{}".format(auth.name, safeClusterName)
+                automountServiceAccountToken = True
             }
         }
+        managementPolicies = ["*"]
+        providerConfigRef = _providerConfigRef
     }
-    for auth in k8sAuths
-]
+} for auth in k8sAuths]
+
+# Generate Secret objects for each auth
+secrets = [k8s.Object {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = "secret-${auth.name}-${safeClusterName}"
+        namespace = _namespace
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-secret-${auth.name}-${safeClusterName}"
+        }
+    }
+    spec = {
+        forProvider = {
+            manifest = {
+                apiVersion = "v1"
+                kind = "Secret"
+                metadata = {
+                    name = auth.name
+                    namespace = auth.namespace
+                    annotations = {
+                        "kubernetes.io/service-account.name" = auth.name
+                        "kubernetes.io/service-account.namespace" = auth.namespace
+                    }
+                }
+                type = "kubernetes.io/service-account-token"
+            }
+        }
+        managementPolicies = ["*"]
+        providerConfigRef = _providerConfigRef
+    }
+} for auth in k8sAuths]
+
+# Generate ClusterRoleBinding objects for each auth
+clusterRoleBindings = [k8s.Object {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = "clusterrolebinding-${auth.name}-${safeClusterName}"
+        namespace = _namespace
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-clusterrolebinding-${auth.name}-${safeClusterName}"
+        }
+    }
+    spec = {
+        forProvider = {
+            manifest = {
+                apiVersion = "rbac.authorization.k8s.io/v1"
+                kind = "ClusterRoleBinding"
+                metadata = {
+                    name = auth.name
+                }
+                roleRef = {
+                    apiGroup = "rbac.authorization.k8s.io"
+                    kind = "ClusterRole"
+                    name = "system:auth-delegator"
+                }
+                subjects = [{
+                    kind = "ServiceAccount"
+                    name = auth.name
+                    namespace = auth.namespace
+                }]
+            }
+        }
+        managementPolicies = ["*"]
+        providerConfigRef = _providerConfigRef
+    }
+} for auth in k8sAuths]
+
+# Generate Token Reader objects for each auth - reads token from service account secrets
+tokenReaders = [k8s.Object {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = "token-reader-${auth.name}-${safeClusterName}"
+        namespace = _namespace
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-token-reader-{}-{}".format(auth.name, safeClusterName)
+        }
+    }
+    spec = {
+        # Important: Only observe, don't manage!
+        managementPolicies = ["Observe"]
+        providerConfigRef = _providerConfigRef
+        forProvider = {
+            manifest = {
+                apiVersion = "v1"
+                kind = "Secret"
+                metadata = {
+                    name = auth.name
+                    namespace = auth.namespace
+                }
+            }
+        }
+        connectionDetails = [
+            {
+                apiVersion = "v1"
+                kind = "Secret"
+                name = auth.name
+                namespace = auth.namespace
+                fieldPath = "data.token"
+                # pragma: allowlist secret
+                toConnectionSecretKey = "token"
+            }
+        ]
+        # Namespaced Object: writeConnectionSecretToRef is name-only;
+        # the secret lands in the MR's own namespace (_namespace).
+        writeConnectionSecretToRef = {
+            name = "vault-token-{}-{}".format(auth.name, safeClusterName)
+        }
+    }
+} for auth in k8sAuths]
 
 # Collect all unique namespaces that need to be created
 _helmNamespaces = []
@@ -382,38 +367,37 @@ _uniqueMap = {ns: None for ns in _allNamespaces}
 uniqueNamespaces = [ns for ns in _uniqueMap]
 
 # Generate Namespace objects for all unique namespaces - include cluster name
-namespaces = [
-    k8s.Object {
-        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-        kind = "Object"
-        metadata = {
-            name = "namespace-${ns.replace('_', '-').replace('.', '-')}-${safeClusterName}"
-            namespace = _namespace
-            annotations = {
-                "krm.kcl.dev/composition-resource-name" = "vault-namespace-${ns.replace('_', '-').replace('.', '-')}-${safeClusterName}"
-            }
+namespaces = [k8s.Object {
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {
+        name = "namespace-${ns.replace('_', '-').replace('.', '-')}-${safeClusterName}"
+        namespace = _namespace
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "vault-namespace-${ns.replace('_', '-').replace('.', '-')}-${safeClusterName}"
         }
-        spec = {
-            forProvider = {
-                manifest = {
-                    apiVersion = "v1"
-                    kind = "Namespace"
-                    metadata = {
-                        name = ns
-                        labels = {
-                            "app.kubernetes.io/managed-by" = "crossplane"
-                            "vault.crossplane.io/config" = configName
-                            "vault.crossplane.io/cluster" = safeClusterName
-                        }
+    }
+    spec = {
+        forProvider = {
+            manifest = {
+                apiVersion = "v1"
+                kind = "Namespace"
+                metadata = {
+                    name = ns
+                    labels = {
+                        "app.kubernetes.io/managed-by" = "crossplane"
+                        "vault.crossplane.io/config" = configName
+                        "vault.crossplane.io/cluster" = safeClusterName
                     }
                 }
             }
-            managementPolicies = ["*"]
-            providerConfigRef = _providerConfigRef
         }
+        managementPolicies = ["*"]
+        providerConfigRef = _providerConfigRef
     }
-    for ns in uniqueNamespaces if ns != "default"  # Skip creating 'default' namespace
-]
+} for ns in uniqueNamespaces if ns != "default"]
+
+# Skip creating 'default' namespace
 
 # Generate items conditionally - Namespaces first, then Helm releases + Kubernetes resources + Token readers
 items = namespaces + ([csiRelease] if csiEnabled else []) + ([vsoRelease] if vsoEnabled else []) + ([esoRelease] if esoEnabled else []) + serviceAccounts + secrets + clusterRoleBindings + tokenReaders
