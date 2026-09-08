@@ -9,8 +9,8 @@ clusterName = option("params")?.oxr?.spec?.clusterName or "kind"
 
 # Crossplane specific configuration
 args = option("params")?.oxr?.spec?.args or [
-    "--debug",
-    "--enable-usages",
+    "--debug"
+    "--enable-usages"
     "--enable-external-secret-stores"
 ]
 
@@ -19,7 +19,7 @@ helmProviderVersion = option("params")?.oxr?.spec?.helmProviderVersion or "v0.21
 k8sProviderVersion = option("params")?.oxr?.spec?.k8sProviderVersion or "v0.18.0"
 
 providers = option("params")?.oxr?.spec?.providers or [
-    "xpkg.upbound.io/crossplane-contrib/provider-helm:{}".format(helmProviderVersion),
+    "xpkg.upbound.io/crossplane-contrib/provider-helm:{}".format(helmProviderVersion)
     "xpkg.upbound.io/crossplane-contrib/provider-kubernetes:{}".format(k8sProviderVersion)
 ]
 
@@ -35,7 +35,7 @@ terraformS3SecretName = option("params")?.oxr?.spec?.terraformS3SecretName or "s
 terraformConfig = option("params")?.oxr?.spec?.terraformConfig or {
     configName = "terraform-runtime-config"
     s3SecretName = terraformS3SecretName
-terraformProviderVersion = option("params")?.oxr?.spec?.terraformProviderVersion or "v1.0.0"
+    terraformProviderVersion = option("params")?.oxr?.spec?.terraformProviderVersion or "v1.0.0"
     poll = "10m"
     reconcileRate = "10"
     package = "xpkg.upbound.io/crossplane-contrib/provider-terraform"
@@ -148,8 +148,8 @@ terraform_deployment_runtime_config = k8s.Object {
                                             name = "package-runtime"
                                             image = terraformConfig.image
                                             args = [
-                                                "-d",
-                                                "--poll={}".format(terraformConfig.poll),
+                                                "-d"
+                                                "--poll={}".format(terraformConfig.poll)
                                                 "--max-reconcile-rate={}".format(terraformConfig.reconcileRate)
                                             ]
                                             envFrom = [
@@ -208,42 +208,39 @@ terraform_provider_resource = k8s.Object {
 }
 
 # Secret management for Terraform - Generate Secret objects for each secret
-secret_objects = [
-    k8s.Object {
-        apiVersion = "kubernetes.crossplane.io/v1alpha2"
-        kind = "Object"
-        metadata = {
-            name = "secret-${secretName}-${safeClusterName}"
-            annotations = {
-                "krm.kcl.dev/composition-resource-name" = "terraform-secret-${secretName}-${safeClusterName}"
-            }
-        }
-        spec = {
-            providerConfigRef = {
-                name = clusterName
-            }
-            forProvider = {
-                manifest = {
-                    apiVersion = "v1"
-                    kind = "Secret"
-                    metadata = {
-                        name = secretName
-                        namespace = secretConfig.namespace
-                        labels = {
-                            "app.kubernetes.io/managed-by" = "crossplane"
-                            "crossplane.io/config" = configName
-                            "crossplane.io/cluster" = safeClusterName
-                        }
-                    }
-                    type = "Opaque"
-                    stringData = secretConfig.kvs
-                }
-            }
-            managementPolicies = ["*"]
+secret_objects = [k8s.Object {
+    apiVersion = "kubernetes.crossplane.io/v1alpha2"
+    kind = "Object"
+    metadata = {
+        name = "secret-${secretName}-${safeClusterName}"
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = "terraform-secret-${secretName}-${safeClusterName}"
         }
     }
-    for secretName, secretConfig in secrets
-]
+    spec = {
+        providerConfigRef = {
+            name = clusterName
+        }
+        forProvider = {
+            manifest = {
+                apiVersion = "v1"
+                kind = "Secret"
+                metadata = {
+                    name = secretName
+                    namespace = secretConfig.namespace
+                    labels = {
+                        "app.kubernetes.io/managed-by" = "crossplane"
+                        "crossplane.io/config" = configName
+                        "crossplane.io/cluster" = safeClusterName
+                    }
+                }
+                type = "Opaque"
+                stringData = secretConfig.kvs
+            }
+        }
+        managementPolicies = ["*"]
+    }
+} for secretName, secretConfig in secrets]
 
 # Generate items conditionally - single line syntax
 terraform_resources = [terraform_deployment_runtime_config, terraform_provider_resource] + secret_objects if deployTerraformProvider else []
