@@ -10,14 +10,14 @@ schema HelmDefaults:
     recreatePods?: bool
     force?: bool
 
-
 schema HelmfileEntry:
     """HelmfileEntry represents a single helmfile with its configuration"""
     path: str
-    values?: [{str: any}]  # list of arbitrary key-value maps
-
+    # list of arbitrary key-value maps
+    values?: [{str:any}]
 
 schema HelmfileConfig:
     """HelmfileConfig is the root configuration for helmfile"""
     helmDefaults?: HelmDefaults
     helmfiles: [HelmfileEntry]
+

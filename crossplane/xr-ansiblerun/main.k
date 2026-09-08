@@ -36,12 +36,12 @@ _asBool = lambda v, fallback: bool -> bool {
 # Coerce a value into a list[str]. Accepts a real list (params/data file) or a
 # comma-separated string (-D hosts=a,b,c). Returns [] when unset.
 _toList = lambda v -> [str] {
-    [str(x) for x in v] if typeof(v) == "list" else \
-        ([] if (v == None or v == "") else [s for s in str(v).split(",") if s != ""])
+    [str(x) for x in v] if typeof(v) == "list" else ([] if (v == None or v == "") else [s for s in str(v).split(",") if s != ""])
 }
 
 # Template selector
-_templateName = option("templateName") or _params?.templateName or "minimal"  # Options: "minimal", "detailed", "baseos"
+# Options: "minimal", "detailed", "baseos"
+_templateName = option("templateName") or _params?.templateName or "minimal"
 
 # Identity
 _name = _spec?.name or option("name") or _params?.name or "ansible-run"
@@ -104,7 +104,6 @@ if _templateName == "minimal":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = ar.ResourcesStuttgartThingsComV1alpha1AnsibleRunSpec {
             pipelineRunName = _pipelineRunName
             namespace = _namespace
@@ -126,7 +125,6 @@ if _templateName == "baseos":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = ar.ResourcesStuttgartThingsComV1alpha1AnsibleRunSpec {
             pipelineRunName = _pipelineRunName
             namespace = _namespace
@@ -149,7 +147,6 @@ if _templateName == "detailed":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = ar.ResourcesStuttgartThingsComV1alpha1AnsibleRunSpec {
             pipelineRunName = _pipelineRunName
             namespace = _namespace
@@ -184,3 +181,4 @@ if _templateName == "detailed":
             crossplaneTimeout = _crossplaneTimeout
         }
     }
+

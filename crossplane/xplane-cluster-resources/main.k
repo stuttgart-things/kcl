@@ -5,11 +5,16 @@ _flat_params = option("params")?.oxr?.spec or {}
 
 # --- Merge CLI options into params (only if not null) ---
 _cli_options = {
-    if option("clusterName"): clusterName = option("clusterName")
-    if option("credNamespace"): credNamespace = option("credNamespace")
-    if option("credSecretName"): credSecretName = option("credSecretName")
-    if option("credKey"): credKey = option("credKey")
-    if option("useClusterProviderConfig") != None: useClusterProviderConfig = option("useClusterProviderConfig")
+    if option("clusterName"):
+        clusterName = option("clusterName")
+    if option("credNamespace"):
+        credNamespace = option("credNamespace")
+    if option("credSecretName"):
+        credSecretName = option("credSecretName")
+    if option("credKey"):
+        credKey = option("credKey")
+    if option("useClusterProviderConfig") != None:
+        useClusterProviderConfig = option("useClusterProviderConfig")
 }
 _merged_params = _flat_params | _cli_options
 
@@ -33,7 +38,7 @@ _kind = "ClusterProviderConfig" if _config.useClusterProviderConfig else "Provid
 _providerConfigObj = {
     apiVersion = _apiVersion
     kind = _kind
-    metadata = { name = _config.clusterName }
+    metadata = {name = _config.clusterName}
     spec = {
         credentials = {
             source = "Secret"

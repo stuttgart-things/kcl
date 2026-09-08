@@ -11,7 +11,8 @@ _params = option("params") or {}
 _spec = _params?.resource?.spec or {}
 
 # Template selector
-_templateName = option("templateName") or _params?.templateName or "tekton-basic"  # Options: "tekton-basic", "tekton-full", "minimal"
+# Options: "tekton-basic", "tekton-full", "minimal"
+_templateName = option("templateName") or _params?.templateName or "tekton-basic"
 
 # Common parameters
 _name = option("name") or _params?.name or "tekton-pipelines"
@@ -50,7 +51,6 @@ if _templateName == "tekton-basic":
                 "crossplane.io/managed-by": "kcl"
             }
         }
-
         spec = pipelinemod.ResourcesStuttgartThingsComV1alpha1PipelineIntegrationSpec {
             engine = pipelinemod.ResourcesStuttgartThingsComV1alpha1PipelineIntegrationSpecEngine {
                 type = _engineType
@@ -88,7 +88,6 @@ if _templateName == "tekton-full":
                 "engine": "tekton"
             }
         }
-
         spec = pipelinemod.ResourcesStuttgartThingsComV1alpha1PipelineIntegrationSpec {
             engine = pipelinemod.ResourcesStuttgartThingsComV1alpha1PipelineIntegrationSpecEngine {
                 type = "tekton"
@@ -119,7 +118,6 @@ if _templateName == "minimal":
             name = _name
             namespace = _namespace
         }
-
         spec = pipelinemod.ResourcesStuttgartThingsComV1alpha1PipelineIntegrationSpec {
             engine = pipelinemod.ResourcesStuttgartThingsComV1alpha1PipelineIntegrationSpecEngine {
                 type = _engineType
@@ -133,3 +131,4 @@ if _templateName == "minimal":
             }
         }
     }
+

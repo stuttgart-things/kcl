@@ -7,6 +7,7 @@ Usage:
     kcl run . -D cilium_lb_ip_start=10.31.103.12 -D cilium_lb_ip_stop=10.31.103.13
     kcl run oci://ghcr.io/stuttgart-things/flux-infra-cilium-lb --tag 0.1.0
 """
+
 import flux_kustomization.v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
 
 # Read parameters from CLI or fallback to defaults

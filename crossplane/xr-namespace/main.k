@@ -18,7 +18,8 @@ _params = option("params") or {}
 _spec = _params?.ns?.spec or {}
 
 # Template selector
-_templateName = option("templateName") or _params?.templateName or "minimal"  # Options: "minimal", "annotated"
+# Options: "minimal", "annotated"
+_templateName = option("templateName") or _params?.templateName or "minimal"
 
 # Common parameters
 _name = _spec?.name or option("name") or _params?.name or "demo-ns"
@@ -42,7 +43,6 @@ if _templateName == "minimal":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = ns.ResourcesStuttgartThingsComV1alpha1ManagedNamespaceSpec {
             providerConfigRef = _providerConfig
             name = _name
@@ -56,7 +56,6 @@ if _templateName == "annotated":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = ns.ResourcesStuttgartThingsComV1alpha1ManagedNamespaceSpec {
             providerConfigRef = _providerConfig
             name = _name
@@ -64,3 +63,4 @@ if _templateName == "annotated":
                 annotations = _annotations
         }
     }
+

@@ -29,7 +29,8 @@ _asBool = lambda v, fallback: bool -> bool {
 }
 
 # Template selector
-_templateName = option("templateName") or _params?.templateName or "minimal"  # Options: "minimal", "detailed"
+# Options: "minimal", "detailed"
+_templateName = option("templateName") or _params?.templateName or "minimal"
 
 # Identity
 _name = _spec?.name or option("name") or _params?.name or "demo-vm"
@@ -42,7 +43,8 @@ _environment = _spec?.environment or option("environment") or _params?.environme
 
 # Optional fields (defaults mirror the XRD)
 _os = _spec?.os or option("os") or _params?.os or "ubuntu24"
-_count = str(_spec?.count or option("count") or _params?.count or "1")  # str() so `-D count=3` stays a string
+# str() so `-D count=3` stays a string
+_count = str(_spec?.count or option("count") or _params?.count or "1")
 # Resolve `ansible` without `or` so an explicit `false` (a falsy bool) is not swallowed.
 _ansibleOpt = option("ansible")
 _ansibleRaw = _ansibleOpt if _ansibleOpt != Undefined else (_params?.ansible if _params?.ansible != Undefined else _spec?.ansible)
@@ -59,7 +61,6 @@ if _templateName == "minimal":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = vm.ResourcesStuttgartThingsComV1alpha1XVirtualMachineSpec {
             size = _size
             provider = _provider
@@ -76,7 +77,6 @@ if _templateName == "harvester":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = vm.ResourcesStuttgartThingsComV1alpha1XVirtualMachineSpec {
             size = _size
             provider = "harvester"
@@ -93,7 +93,6 @@ if _templateName == "detailed":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = vm.ResourcesStuttgartThingsComV1alpha1XVirtualMachineSpec {
             size = _size
             provider = _provider
@@ -108,3 +107,4 @@ if _templateName == "detailed":
                 }
         }
     }
+

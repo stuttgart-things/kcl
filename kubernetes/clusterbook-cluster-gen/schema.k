@@ -2,13 +2,16 @@
 schema ObjectMeta:
     name: str
     namespace?: str
-    labels?: {str: str}
-    annotations?: {str: str}
+    labels?: {str:str}
+    annotations?: {str:str}
 
 schema SecretRef:
-    name: str  # pragma: allowlist secret
-    namespace: str  # pragma: allowlist secret
-    key?: str  # pragma: allowlist secret
+    # pragma: allowlist secret
+    name: str
+    # pragma: allowlist secret
+    namespace: str
+    # pragma: allowlist secret
+    key?: str
 
 schema ProviderConfigRef:
     name: str
@@ -34,25 +37,22 @@ schema ClusterbookClusterSpec:
     serverPort?: int
     kubeconfigSecretRef?: SecretRef
     existingSecretRef?: SecretRef
-    labels?: {str: str}
-    annotations?: {str: str}
+    labels?: {str:str}
+    annotations?: {str:str}
     releaseOnDelete?: bool
 
     check:
         # exactly one of kubeconfigSecretRef or existingSecretRef must be set
-        (1 if kubeconfigSecretRef else 0) + (1 if existingSecretRef else 0) == 1, \
-            "exactly one of kubeconfigSecretRef or existingSecretRef must be set"
+        (1 if kubeconfigSecretRef else 0) + (1 if existingSecretRef else 0) == 1, "exactly one of kubeconfigSecretRef or existingSecretRef must be set"
         # non-kind (default/classic/unset) clusters must carry both networkKey and providerConfigRef
-        clusterType == "kind" or (networkKey and providerConfigRef), \
-            "default/classic clusterType requires networkKey and providerConfigRef"
+        clusterType == "kind" or (networkKey and providerConfigRef), "default/classic clusterType requires networkKey and providerConfigRef"
         # kind clusters must not carry networkKey or providerConfigRef
-        not (clusterType == "kind" and networkKey), \
-            "clusterType=kind must not set networkKey"
-        not (clusterType == "kind" and providerConfigRef), \
-            "clusterType=kind must not set providerConfigRef"
+        not (clusterType == "kind" and networkKey), "clusterType=kind must not set networkKey"
+        not (clusterType == "kind" and providerConfigRef), "clusterType=kind must not set providerConfigRef"
 
 schema ClusterbookCluster:
     apiVersion: str = "clusterbook.stuttgart-things.com/v1alpha1"
     kind: str = "ClusterbookCluster"
     metadata: ObjectMeta
     spec: ClusterbookClusterSpec
+

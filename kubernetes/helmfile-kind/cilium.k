@@ -13,16 +13,16 @@ _app = schema.HelmfileEntry {
     values = [
         {
             config = _config
-        },
+        }
         {
             configureLB = _configureLB
-        },
+        }
         {
             ipRangeStart = _ipRangeStart
-        },
+        }
         {
             ipRangeEnd = _ipRangeEnd
-        },
+        }
         {
             clusterName = _clusterName
         }

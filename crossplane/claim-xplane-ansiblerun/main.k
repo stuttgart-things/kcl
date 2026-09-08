@@ -71,29 +71,24 @@ if _templateName == "simple-run":
             name = _name
             namespace = _namespace
         }
-
         spec = ansiblerun.ResourcesStuttgartThingsComV1alpha1AnsibleRunSpec {
             # Crossplane configuration
             wrapInCrossplane = True
             crossplaneObjectName = _name
             crossplaneNamespace = _crossplaneNamespace
             crossplaneProviderConfig = _crossplaneProviderConfig
-
             # Pipeline configuration
             pipelineRunName = _name
             namespace = _pipelineNamespace
-
             # Ansible configuration
             ansibleCredentialsSecretName = _ansibleCredentialsSecretName
             ansiblePlaybooks = _playbooks
             ansibleVarsFile = _ansibleVarsFile
             ansibleVarsInventory = [_inventoryEntry]
-
             # Git configuration
             gitRepoUrl = _gitRepoUrl
             gitRevision = _gitRevision
             gitPath = _gitPath
-
             # Extra roles and collections
             installExtraRoles = "true"
             ansibleExtraRoles = _ansibleExtraRoles
@@ -101,3 +96,4 @@ if _templateName == "simple-run":
             ansibleExtraCollections = _ansibleExtraCollections
         }
     }
+

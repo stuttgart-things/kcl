@@ -11,7 +11,8 @@ _params = option("params") or {}
 _spec = _params?.hp?.spec or {}
 
 # Template selector
-_templateName = option("templateName") or _params?.templateName or "demo"  # Options: "demo", "production", "insecure"
+# Options: "demo", "production", "insecure"
+_templateName = option("templateName") or _params?.templateName or "demo"
 
 # Common parameters - only fields from XRD
 _name = option("name") or _params?.name or "demo-project"
@@ -47,7 +48,8 @@ if _templateName == "production":
         spec = hp.ResourcesStuttgartThingsComV1alpha1HarborProjectSpec {
             harborURL = option("harborURL") or "https://harbor.idp.kubermatic.sva.dev"
             projectName = option("projectName") or "production-app"
-            storageQuota = option("storageQuota") or 107374182400  # 100GB in bytes
+            # 100GB in bytes
+            storageQuota = option("storageQuota") or 107374182400
             providerConfigRef = option("providerConfigRef") or "default"
             harborInsecure = False
         }
@@ -62,8 +64,10 @@ if _templateName == "insecure":
         spec = hp.ResourcesStuttgartThingsComV1alpha1HarborProjectSpec {
             harborURL = option("harborURL") or "https://harbor.internal.dev"
             projectName = option("projectName") or "development-team"
-            storageQuota = -1  # Unlimited
+            # Unlimited
+            storageQuota = -1
             providerConfigRef = option("providerConfigRef") or "default"
             harborInsecure = True
         }
     }
+

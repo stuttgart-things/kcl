@@ -2,8 +2,8 @@
 schema ObjectMeta:
     name: str
     namespace: str
-    labels?: {str: str}
-    annotations?: {str: str}
+    labels?: {str:str}
+    annotations?: {str:str}
     finalizers?: [str]
 
 schema Destination:
@@ -72,3 +72,4 @@ schema Application:
     kind: str = "Application"
     metadata: ObjectMeta
     spec: ApplicationSpec
+
