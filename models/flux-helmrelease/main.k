@@ -10,10 +10,8 @@ Conversion Date: 2025-10-23
 """
 
 import v2.helm_toolkit_fluxcd_io_v2_helm_release as helm
-import crossplane_provider_helm.models.v1beta1.helm_crossplane_io_v1beta1_release as xhelm
 
 # --- Simplified Schemas ---
-
 schema SimpleHelmRelease:
     """
     Simplified Flux HelmRelease configuration with sensible defaults.
@@ -52,8 +50,8 @@ schema SimpleHelmRelease:
     timeout?: str = "5m"
     releaseName?: str
     storageNamespace?: str
-    labels?: {str: str}
-    annotations?: {str: str}
+    labels?: {str:str}
+    annotations?: {str:str}
 
 schema ChartRef:
     """
@@ -149,7 +147,6 @@ schema RemediationConfig:
     ignoreTestFailures?: bool = False
 
 # --- Helper Functions ---
-
 generateHelmRelease = lambda config: SimpleHelmRelease -> [helm.HelmRelease] {
     """
     Generate a Flux HelmRelease from simplified configuration.
@@ -213,15 +210,12 @@ generateHelmRelease = lambda config: SimpleHelmRelease -> [helm.HelmRelease] {
                     }
                 }
                 values = config.values or {}
-                dependsOn = [
-                    {
-                        name = dep.name
-                        namespace = dep.namespace
-                    } if dep.namespace else {
-                        name = dep.name
-                    }
-                    for dep in config.dependsOn
-                ] if config.dependsOn else []
+                dependsOn = [{
+                    name = dep.name
+                    namespace = dep.namespace
+                } if dep.namespace else {
+                    name = dep.name
+                } for dep in config.dependsOn] if config.dependsOn else []
                 install = {
                     createNamespace = config.install.createNamespace if config.install.createNamespace != None else True
                     remediation = {
@@ -257,7 +251,6 @@ generateHelmRelease = lambda config: SimpleHelmRelease -> [helm.HelmRelease] {
 }
 
 # --- Convenience Functions ---
-
 helmReleaseFromRepo = lambda name: str, chartName: str, chartVersion: str, repoName: str, values: {str:} = {} -> [helm.HelmRelease] {
     """
     Quick helper to create a HelmRelease from a HelmRepository.
@@ -340,7 +333,6 @@ helmReleaseFromGit = lambda name: str, chartPath: str, gitRepoName: str, values:
 }
 
 # --- Crossplane XR Helper ---
-
 generateCrossplaneHelmRelease = lambda -> [helm.HelmRelease] {
     """
     Generate HelmRelease from Crossplane XR spec using standard variable pattern.
