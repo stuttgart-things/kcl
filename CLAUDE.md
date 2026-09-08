@@ -73,13 +73,27 @@ oras repo tags ghcr.io/stuttgart-things/<module-name>
 
 ### Pinning a module version
 
-`kcl` reads the version from `--tag` or a `?tag=` query parameter. A `:version`
-suffix in the URL path is **not** a pin: it is parsed as part of the repository
-name, the tag stays empty, and the reference resolves to the latest published
-version.
+A `:version` suffix in the URL path is **not** a pin. It is parsed as part of
+the repository name, the tag stays empty, and the reference resolves to the
+latest published version -- `kcl` even says so out loud
+(`the latest version '0.3.0' will be downloaded`) while the command still looks
+pinned.
+
+Which form actually pins depends on the command, so they are not
+interchangeable (measured on kcl 0.12.4 against `harvester-vm`, which has
+`0.2.0` and `0.3.0` published):
+
+| form | `kcl run` | `kcl mod pull` |
+|---|---|---|
+| `<module>:0.2.0` | ❌ floats to 0.3.0 | ❌ floats to 0.3.0 |
+| `<module>?tag=0.2.0` | ✅ pins | ❌ floats to 0.3.0 |
+| `<module> --tag 0.2.0` | ✅ pins | ✅ pins |
+
+`--tag` is the one form that pins everywhere, so prefer it on the command line:
 
 ```bash
 kcl mod pull oci://ghcr.io/stuttgart-things/<module> --tag 0.2.0   # ✅
+kcl mod pull oci://ghcr.io/stuttgart-things/<module>?tag=0.2.0     # ❌ floats
 kcl mod pull oci://ghcr.io/stuttgart-things/<module>:0.2.0         # ❌ floats
 ```
 
