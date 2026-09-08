@@ -38,3 +38,4 @@ schema Names:
     singular: str
     categories?: [str]
     shortNames?: [str]
+
