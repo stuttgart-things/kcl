@@ -14,11 +14,11 @@ spec:
   pipeline:
     - step: vault-auth
       functionRef:
-      name: function-kcl
-    input:
-      apiVersion: krm.kcl.dev/v1alpha1
-      kind: KCLInput
-      metadata:
-        name: vault-auth
-      spec:
-        source: oci://ghcr.io/stuttgart-things/xplane-vault-auth-base?tag=0.4.0
+        name: function-kcl
+      input:
+        apiVersion: krm.kcl.dev/v1alpha1
+        kind: KCLInput
+        metadata:
+          name: vault-auth
+        spec:
+          source: oci://ghcr.io/stuttgart-things/xplane-vault-auth-base?tag=0.4.0
