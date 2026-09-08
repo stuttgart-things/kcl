@@ -4,14 +4,20 @@ File: main.k
 Usage: kcl main.k -D group=resources.example.com -D kind=MyResource -D plural=myresources -D singular=myresource
 """
 
-import .schema  # Relative import for schema.k in the same directory
+# Relative import for schema.k in the same directory
+import .schema
 
 # Configuration variables (underscore prefix prevents them from being exported)
-# Metadata configuration - name is required
-_group = option("group")
-_kind = option("kind")
-_plural = option("plural")
-_singular = option("singular")
+# Metadata configuration - name is required.
+#
+# These four are required by the XRD schema, so they carry the example values
+# from the usage line above as defaults. Without them a bare `kcl run .` --
+# which is how CI smoke-tests every module -- dies on "attribute 'group' of
+# XRDSpec is required and can't be None". Passing -D overrides them as before.
+_group = option("group") or "resources.example.com"
+_kind = option("kind") or "MyResource"
+_plural = option("plural") or "myresources"
+_singular = option("singular") or "myresource"
 
 # Construct name from group and plural if not explicitly provided
 _name = option("name") or "${_plural}.${_group}"

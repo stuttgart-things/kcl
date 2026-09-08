@@ -11,8 +11,10 @@ _params = option("params") or {}
 _spec = _params?.vc?.spec or {}
 
 # Template selector - can use either templateName or useDbTemplate
-_templateName = option("templateName") or _params?.templateName or "demo"  # Options: "demo", "database", or "simple"
-_useDbTemplate = option("useDbTemplate") or _params?.useDbTemplate or False  # Boolean alternative
+# Options: "demo", "database", or "simple"
+_templateName = option("templateName") or _params?.templateName or "demo"
+# Boolean alternative
+_useDbTemplate = option("useDbTemplate") or _params?.useDbTemplate or False
 
 # Common parameters
 _name = _spec?.pvcName or option("pvcName") or "demo-pvc"
@@ -39,7 +41,6 @@ if _selectedTemplate == "demo":
                 "example.com/managed-by": "kcl-test"
             }
         }
-
         spec = vc.ResourcesStuttgartThingsComV1alpha1VolumeClaimSpec {
             pvcName = _name
             namespace = _namespace
@@ -58,16 +59,15 @@ if _selectedTemplate == "database":
             name = "db-pvc"
             namespace = _claimNamespace
             annotations = {
-                "example.com/managed-by": "kcl-test",
+                "example.com/managed-by": "kcl-test"
                 "backup.velero.io/backup-volumes": "db-data"
             }
             labels = {
-                "app": "database",
-                "tier": "backend",
+                "app": "database"
+                "tier": "backend"
                 "environment": "production"
             }
         }
-
         spec = vc.ResourcesStuttgartThingsComV1alpha1VolumeClaimSpec {
             pvcName = "db-pvc"
             namespace = _namespace
@@ -77,14 +77,14 @@ if _selectedTemplate == "database":
             volumeMode = "Filesystem"
             providerConfigRef = _providerConfig
             labels = {
-                "app": "database",
-                "tier": "backend",
+                "app": "database"
+                "tier": "backend"
                 "environment": "production"
             }
             # Example with selector for pre-provisioned PV
             selector = vc.ResourcesStuttgartThingsComV1alpha1VolumeClaimSpecSelector {
                 matchLabels = {
-                    "type": "fast-ssd",
+                    "type": "fast-ssd"
                     "zone": "us-west-2a"
                 }
             }
@@ -98,7 +98,6 @@ if _selectedTemplate == "simple":
             name = option("simpleName") or "simple-storage"
             namespace = _claimNamespace
         }
-
         spec = vc.ResourcesStuttgartThingsComV1alpha1VolumeClaimSpec {
             providerConfigRef = option("providerConfig") or _providerConfig or "in-cluster"
             annotations = {
@@ -110,3 +109,4 @@ if _selectedTemplate == "simple":
             storage = _storage
         }
     }
+

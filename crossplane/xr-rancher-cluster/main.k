@@ -40,7 +40,8 @@ _asInt = lambda v, fallback: int -> int {
 }
 
 # Template selector
-_templateName = option("templateName") or _params?.templateName or "minimal"  # Options: "minimal", "harvester", "detailed"
+# Options: "minimal", "harvester", "detailed"
+_templateName = option("templateName") or _params?.templateName or "minimal"
 
 # Identity
 _name = _spec?.name or option("name") or _params?.name or "rancher-cluster"
@@ -86,7 +87,8 @@ _reservationProviderConfigRef = _spec?.argocd?.reservation?.providerConfigRef or
 # vault-pki ClusterIssuer parameters (stamped as annotations on the cluster Secret).
 _vaultServer = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/vault-server"] or option("vaultServer") or _params?.vaultServer or "https://vault.infra.sthings.lab"
 _vaultPkiPath = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/vault-pki-path"] or option("vaultPkiPath") or _params?.vaultPkiPath or "pki/sign/sthings-lab"
-_vaultTokenSecret = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/vault-token-secret"] or option("vaultTokenSecret") or _params?.vaultTokenSecret or "cert-manager-vault-token"  # pragma: allowlist secret
+# pragma: allowlist secret
+_vaultTokenSecret = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/vault-token-secret"] or option("vaultTokenSecret") or _params?.vaultTokenSecret or "cert-manager-vault-token"
 _wildcardIssuerName = _spec?.argocd?.annotations?["clusterbook.stuttgart-things.com/wildcard-issuer-name"] or option("wildcardIssuerName") or _params?.wildcardIssuerName or "vault-pki"
 
 # Minimal Template - only the XRD-required `name` plus the EnvironmentConfig
@@ -97,7 +99,6 @@ if _templateName == "minimal":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpec {
             name = _name
             environmentConfig = _environmentConfig
@@ -113,7 +114,6 @@ if _templateName == "harvester":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpec {
             name = _name
             environmentConfig = _environmentConfig
@@ -150,7 +150,6 @@ if _templateName == "harvester-bootstrap":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpec {
             name = _name
             environmentConfig = _environmentConfig
@@ -196,7 +195,8 @@ if _templateName == "harvester-bootstrap":
                     "storage-platform" = "true"
                     "storage-platform/openebs" = "true"
                     "security-platform" = "true"
-                    "security-platform/external-secrets" = "true" # pragma: allowlist secret
+                    # pragma: allowlist secret
+                    "security-platform/external-secrets" = "true"
                     "security-platform/kyverno" = "true"
                     "network-platform" = "true"
                     "network-platform/cert-manager-install" = "true"
@@ -227,7 +227,6 @@ if _templateName == "detailed":
             name = _name
             namespace = _claimNamespace
         }
-
         spec = rc.ResourcesStuttgartThingsComV1alpha1RancherClusterSpec {
             name = _name
             environmentConfig = _environmentConfig
@@ -261,3 +260,4 @@ if _templateName == "detailed":
             }
         }
     }
+

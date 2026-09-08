@@ -54,10 +54,8 @@ Usage with config file:
 """
 
 # === IMPORT K8S LIBRARY ===
-import k8s.api.core.v1 as k8sv1
 
 # === CONFIGURATION SCHEMAS ===
-
 schema PvcConfig:
     enabled: bool = False
     name: str = "pvc"
@@ -66,32 +64,32 @@ schema PvcConfig:
     storageClass: str = "standard"
     volumeMode: str = "Filesystem"
     accessModes: [str] = ["ReadWriteOnce"]
-    labels: {str: str} = {}
-    annotations: {str: str} = {}
+    labels: {str:str} = {}
+    annotations: {str:str} = {}
 
 schema SecretConfig:
     enabled: bool = False
     name: str = "secret"
     namespace: str = "default"
     type: str = "Opaque"
-    data: {str: str} = {}
-    labels: {str: str} = {}
-    annotations: {str: str} = {}
+    data: {str:str} = {}
+    labels: {str:str} = {}
+    annotations: {str:str} = {}
 
 schema ConfigMapConfig:
     enabled: bool = False
     name: str = "configmap"
     namespace: str = "default"
-    data: {str: str} = {}
-    binaryData: {str: str} = {}
-    labels: {str: str} = {}
-    annotations: {str: str} = {}
+    data: {str:str} = {}
+    binaryData: {str:str} = {}
+    labels: {str:str} = {}
+    annotations: {str:str} = {}
 
 schema NamespaceConfig:
     enabled: bool = False
     name: str = "default"
-    labels: {str: str} = {}
-    annotations: {str: str} = {}
+    labels: {str:str} = {}
+    annotations: {str:str} = {}
 
 # === HELPER FUNCTIONS ===
 
@@ -108,7 +106,8 @@ _enablePvc = True if _enablePvcValue == True or _enablePvcValue == "true" else F
 
 # Secret Enable  # pragma: allowlist secret
 _enableSecretValue = option("enableSecret")
-_enableSecret = True if _enableSecretValue == True or _enableSecretValue == "true" else False  # pragma: allowlist secret
+# pragma: allowlist secret
+_enableSecret = True if _enableSecretValue == True or _enableSecretValue == "true" else False
 
 # ConfigMap Enable
 _enableConfigMapValue = option("enableConfigMap")
@@ -119,7 +118,6 @@ _enableNamespaceValue = option("enableNamespace")
 _enableNamespace = True if _enableNamespaceValue == True or _enableNamespaceValue == "true" else False
 
 # === PVC CONFIGURATION WITH -D PARAMETER SUPPORT ===
-
 _pvcAccessModesStr = option("pvcAccessModes")
 _pvc = PvcConfig {
     enabled = _enablePvc
@@ -134,7 +132,6 @@ _pvc = PvcConfig {
 }
 
 # === SECRET CONFIGURATION WITH -D PARAMETER SUPPORT ===
-
 _secret = SecretConfig {
     enabled = _enableSecret
     name = option("secretName") or "secret"
@@ -146,7 +143,6 @@ _secret = SecretConfig {
 }
 
 # === CONFIGMAP CONFIGURATION WITH -D PARAMETER SUPPORT ===
-
 _configMap = ConfigMapConfig {
     enabled = _enableConfigMap
     name = option("configMapName") or "configmap"
@@ -158,7 +154,6 @@ _configMap = ConfigMapConfig {
 }
 
 # === NAMESPACE CONFIGURATION WITH -D PARAMETER SUPPORT ===
-
 _namespace = NamespaceConfig {
     enabled = _enableNamespace
     name = option("namespaceName") or "default"
@@ -167,8 +162,7 @@ _namespace = NamespaceConfig {
 }
 
 # === RESOURCE GENERATORS ===
-
-_generatePvc = lambda config: PvcConfig -> {str: any} {
+_generatePvc = lambda config: PvcConfig -> {str:any} {
     _metadata = {
         name = config.name
         namespace = config.namespace
@@ -193,16 +187,18 @@ _generatePvc = lambda config: PvcConfig -> {str: any} {
     }
 }
 
-_addMetadataFields = lambda metadata: {str: any}, labels: {str: str}, annotations: {str: str} -> {str: any} {
+_addMetadataFields = lambda metadata: {str:any}, labels: {str:str}, annotations: {str:str} -> {str:any} {
     _m = metadata
     if labels:
         _m |= {labels = labels}
+
     if annotations:
         _m |= {annotations = annotations}
+
     _m
 }
 
-_generateSecret = lambda config: SecretConfig -> {str: any} {
+_generateSecret = lambda config: SecretConfig -> {str:any} {
     _metadata = {
         name = config.name
         namespace = config.namespace
@@ -219,7 +215,7 @@ _generateSecret = lambda config: SecretConfig -> {str: any} {
     }
 }
 
-_generateConfigMap = lambda config: ConfigMapConfig -> {str: any} {
+_generateConfigMap = lambda config: ConfigMapConfig -> {str:any} {
     _metadata = {
         name = config.name
         namespace = config.namespace
@@ -241,7 +237,7 @@ _generateConfigMap = lambda config: ConfigMapConfig -> {str: any} {
     } | _spec
 }
 
-_generateNamespace = lambda config: NamespaceConfig -> {str: any} {
+_generateNamespace = lambda config: NamespaceConfig -> {str:any} {
     _metadata = {
         name = config.name
     }

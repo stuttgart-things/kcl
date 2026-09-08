@@ -8,6 +8,7 @@ Usage:
     kcl run . -D vault_domain=k3s-infra.sthings-vsphere.labul.sva.de
     kcl run oci://ghcr.io/stuttgart-things/flux-infra-vault --tag 0.1.0
 """
+
 import flux_kustomization.v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
 
 # Read parameters from CLI or fallback to defaults

@@ -39,7 +39,7 @@ schema TektonConfig:
         len(namespace) > 0, "namespace cannot be empty"
         len(version) > 0, "version cannot be empty"
 
-def makeNamespace(cfg: TektonConfig) -> corev1.Namespace:
+makeNamespace = lambda cfg: TektonConfig -> corev1.Namespace {
     """
     Creates a Kubernetes Namespace with Flux tenant labels.
 
@@ -57,8 +57,9 @@ def makeNamespace(cfg: TektonConfig) -> corev1.Namespace:
             }
         }
     }
+}
 
-def makeHelmRepository(cfg: TektonConfig) -> any:
+makeHelmRepository = lambda cfg: TektonConfig -> any {
     """
     Creates a Flux HelmRepository resource for OCI registries.
 
@@ -81,8 +82,9 @@ def makeHelmRepository(cfg: TektonConfig) -> any:
             url = cfg.chartRepo
         }
     }
+}
 
-def makeHelmRelease(cfg: TektonConfig) -> fluxhelm.HelmRelease:
+makeHelmRelease = lambda cfg: TektonConfig -> fluxhelm.HelmRelease {
     """
     Creates a Flux HelmRelease for Tekton deployment.
 
@@ -112,8 +114,9 @@ def makeHelmRelease(cfg: TektonConfig) -> fluxhelm.HelmRelease:
             }
         }
     }
+}
 
-def tektonResources(cfg: TektonConfig) -> [any]:
+tektonResources = lambda cfg: TektonConfig -> [any] {
     """
     Generates all Kubernetes resources for Tekton deployment.
 
@@ -124,7 +127,8 @@ def tektonResources(cfg: TektonConfig) -> [any]:
         List containing Namespace, HelmRepository, and HelmRelease resources
     """
     [
-        makeNamespace(cfg),
-        makeHelmRepository(cfg),
+        makeNamespace(cfg)
+        makeHelmRepository(cfg)
         makeHelmRelease(cfg)
     ]
+}

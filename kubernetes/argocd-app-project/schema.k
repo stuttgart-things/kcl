@@ -11,8 +11,8 @@ schema ResourceKind:
 schema ObjectMeta:
     name: str
     namespace: str
-    labels?: {str: str}
-    annotations?: {str: str}
+    labels?: {str:str}
+    annotations?: {str:str}
 
 schema AppProjectSpec:
     description?: str
@@ -29,3 +29,4 @@ schema AppProject:
     kind: str = "AppProject"
     metadata: ObjectMeta
     spec: AppProjectSpec
+

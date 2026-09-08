@@ -7,6 +7,7 @@ Usage:
     kcl run . -D cert_manager_version=v1.18.2
     kcl run oci://ghcr.io/stuttgart-things/flux-infra-cert-manager --tag 0.1.0
 """
+
 import flux_kustomization.v1.kustomize_toolkit_fluxcd_io_v1_kustomization as flux
 
 # Read parameters from CLI or fallback to defaults

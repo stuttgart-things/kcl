@@ -2,8 +2,8 @@
 schema ObjectMeta:
     name: str
     namespace: str
-    labels?: {str: str}
-    annotations?: {str: str}
+    labels?: {str:str}
+    annotations?: {str:str}
     finalizers?: [str]
 
 # ApplicationSet spec uses flexible nested dicts because generators and
@@ -25,3 +25,4 @@ schema ApplicationSet:
     kind: str = "ApplicationSet"
     metadata: ObjectMeta
     spec: ApplicationSetSpec
+

@@ -11,7 +11,8 @@ _params = option("params") or {}
 _spec = _params?.vm?.spec or {}
 
 # Template selector
-_templateName = option("templateName") or _params?.templateName or "demo"  # Options: "demo", "production", "minimal"
+# Options: "demo", "production", "minimal"
+_templateName = option("templateName") or _params?.templateName or "demo"
 
 # T-shirt size configurations (RAM in MB, Disk in GB, CPU cores)
 _sizeConfigs = {
@@ -72,7 +73,6 @@ if _templateName == "demo":
                 "crossplane.io/managed-by": "kcl"
             }
         }
-
         spec = vspherevm.ResourcesStuttgartThingsComV1alpha1VsphereVMSpec {
             vm = vspherevm.ResourcesStuttgartThingsComV1alpha1VsphereVMSpecVm {
                 name = _name
@@ -120,7 +120,6 @@ if _templateName == "production":
                 "tier": "compute"
             }
         }
-
         spec = vspherevm.ResourcesStuttgartThingsComV1alpha1VsphereVMSpec {
             vm = vspherevm.ResourcesStuttgartThingsComV1alpha1VsphereVMSpecVm {
                 name = _name
@@ -161,7 +160,6 @@ if _templateName == "minimal":
             name = _name
             namespace = _namespace
         }
-
         spec = vspherevm.ResourcesStuttgartThingsComV1alpha1VsphereVMSpec {
             vm = vspherevm.ResourcesStuttgartThingsComV1alpha1VsphereVMSpecVm {
                 name = _name
@@ -186,3 +184,4 @@ if _templateName == "minimal":
             }
         }
     }
+
