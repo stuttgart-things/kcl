@@ -52,7 +52,7 @@ no `platformFeatures` are selected, the `clusterLabels` default
 Recreate the `philly` cluster from the labul lab with a single command:
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
   -D name=philly \
   -D networkKey=10.31.101 \
   -D clusterName=philly \
@@ -95,7 +95,7 @@ items:
 Pipe directly to `kubectl`:
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
   -D name=philly \
   -D networkKey=10.31.101 \
   -D createDNS=true \
@@ -180,7 +180,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
 ### Minimal — defaults (renders a `philly`-like cluster)
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
   -D createDNS=true \
   -D preserveKubeconfigServer=true \
   -D releaseOnDelete=true
@@ -189,7 +189,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
 ### Different cluster, different network pool
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
   -D name=austin \
   -D networkKey=10.31.105 \
   -D clusterName=austin \
@@ -201,7 +201,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
 ### Use clusterbook FQDN as ArgoCD server URL
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
   -D name=denver \
   -D networkKey=10.31.103 \
   -D createDNS=true \
@@ -213,7 +213,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
 ### Enrich an existing ArgoCD cluster Secret
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
   -D name=denver \
   -D networkKey=10.31.103 \
   -D createDNS=true \
@@ -223,7 +223,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
 ### Custom selector labels for ApplicationSets
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
   -D name=edge-1 \
   -D networkKey=10.31.110 \
   -D createDNS=true \
