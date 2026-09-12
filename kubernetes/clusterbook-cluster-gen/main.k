@@ -13,7 +13,32 @@ _annotations = option("annotations") or {}
 _clusterType = option("clusterType") or ""
 _isKind = _clusterType == "kind"
 
-_networkKey = option("networkKey") or ("10.31.101" if not _isKind else "")
+# Registration-only: register the cluster with ArgoCD and reserve NOTHING.
+# kind reaches it implicitly (the operator keys off clusterType); -D
+# skipReservation=true reaches it for any clusterType. Both are the same code
+# path from here on, which is why every reservation field below tests
+# _isRegistrationOnly rather than _isKind.
+_skipReservation = option("skipReservation")
+_isRegistrationOnly = _isKind or _skipReservation == True
+
+# THE DEFAULT IS A LAB SUBNET, so it must not apply where nothing reserves.
+# 10.31.101 is LabUL's; left to fire on a registration-only LabDA cluster it
+# would render another lab's network as this cluster's, and -- via the CRD rule
+# that a networkKey implies a providerConfigRef -- turn a registration into a
+# reservation nobody asked for.
+_networkKey = option("networkKey") or ("10.31.101" if not _isRegistrationOnly else "")
+
+# A CONTRADICTION IS NOT A PREFERENCE. Every reservation field below is
+# suppressed under skipReservation, so passing one anyway used to be dropped
+# without a word -- the caller asked for an address out of 10.100.136, got a CR
+# that reserves nothing, and no output said which of the two won. The schema
+# checks cannot see this: by then the field is already gone. So it is caught
+# here, where both values still exist.
+assert not (_skipReservation == True and option("networkKey")), "skipReservation=true and networkKey are contradictory -- registration-only reserves from no pool. Drop one."
+assert not (_skipReservation == True and option("providerConfigRef")), "skipReservation=true and providerConfigRef are contradictory -- no clusterbook call is made. Drop one."
+assert not (_skipReservation == True and option("providerConfigName")), "skipReservation=true and providerConfigName are contradictory -- no clusterbook call is made. Drop one."
+assert not (_skipReservation == True and option("createDNS") == True), "skipReservation=true and createDNS=true are contradictory -- there is no reserved address to point a record at. Drop one."
+assert not (_skipReservation == True and option("releaseOnDelete") == True), "skipReservation=true and releaseOnDelete=true are contradictory -- nothing was reserved, so nothing is released. Drop one."
 _clusterName = option("clusterName") or _name
 _argocdNamespace = option("argocdNamespace") or "argocd"
 
@@ -95,13 +120,13 @@ _metadata = schema.ObjectMeta {
 _useExisting = True if _existingSecretRef else False
 
 _spec = schema.ClusterbookClusterSpec {
-    networkKey = _networkKey if _networkKey and not _isKind else Undefined
+    networkKey = _networkKey if _networkKey and not _isRegistrationOnly else Undefined
     clusterName = _clusterName
-    providerConfigRef = _providerConfigRef if not _isKind else Undefined
+    providerConfigRef = _providerConfigRef if not _isRegistrationOnly else Undefined
     clusterType = _clusterType if _clusterType else Undefined
     lbRange = _lbRange
     argocdNamespace = _argocdNamespace if _argocdNamespace else Undefined
-    createDNS = _createDNS if _createDNS != None and not _isKind else Undefined
+    createDNS = _createDNS if _createDNS != None and not _isRegistrationOnly else Undefined
     preserveKubeconfigServer = _preserveKubeconfigServer if _preserveKubeconfigServer != None else Undefined
     useFQDNAsServer = _useFQDNAsServer if _useFQDNAsServer != None else Undefined
     serverSubdomain = _serverSubdomain if _serverSubdomain else Undefined
@@ -110,7 +135,15 @@ _spec = schema.ClusterbookClusterSpec {
     existingSecretRef = _existingSecretRef if _useExisting else Undefined
     labels = _clusterLabels if _clusterLabels else Undefined
     annotations = _clusterAnnotations if _clusterAnnotations else Undefined
-    releaseOnDelete = _releaseOnDelete if _releaseOnDelete != None else Undefined
+    # Not emitted under skipReservation: there is no reservation to release,
+    # and the operator does not read it there. Emitting `releaseOnDelete: true`
+    # on a CR that reserved nothing reads like a safeguard that exists.
+    #
+    # Gated on the FLAG and not on _isRegistrationOnly, so the kind path renders
+    # exactly what it rendered before. It is equally inert there, but changing
+    # it would be a second change riding along with this one.
+    releaseOnDelete = _releaseOnDelete if _releaseOnDelete != None and _skipReservation != True else Undefined
+    skipReservation = True if _skipReservation == True else Undefined
 }
 
 _clusterbookCluster = schema.ClusterbookCluster {

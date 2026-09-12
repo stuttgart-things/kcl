@@ -133,9 +133,47 @@ valid JSON (use single quotes around the whole arg to keep the shell out of it).
 | `clusterLabels` | `{str: str}` | `{"env":"lab","role":"mgmt","auto-project":"true"}` (omitted when `platformFeatures` is set) | labels merged onto the ArgoCD cluster Secret (used for `ApplicationSet` selection) |
 | `platformFeatures` | `[str]` | `[]` | platform-gate keys; each is stamped as `"<key>": "true"` and merged onto `clusterLabels` (form-friendly alternative to a raw map) |
 | `releaseOnDelete` | `bool` | omitted | release the clusterbook IP reservation when the CR is deleted |
+| `skipReservation` | `bool` | omitted | registration-only: register the cluster with ArgoCD and reserve nothing. See below |
 
 `kubeconfigSecretRef` and `existingSecretRef` are mutually exclusive — exactly
 one is required, validated by a schema check.
+
+### Registration-only (`skipReservation=true`)
+
+Registers the cluster with ArgoCD and makes **no clusterbook call at all** — no
+IP allocation, no DNS record, no `GetClusterInfo`, no release-on-delete. It
+generalises to any `clusterType` what `kind` already gets implicitly.
+
+Use it when something else already owns this cluster's address:
+
+* a parent CR that reserved and rewrote the kubeconfig's server URL itself
+  (this is what the `Vcluster` reconciler emits);
+* a cluster whose own build pipeline reserved through clusterbook — the Flux
+  path in `stuttgart-things/stuttgart-things` does exactly that, and
+  `/reserve` is **not idempotent**: a second call is not a no-op, it hands out
+  a NEW address and writes a second wildcard record, with every step reporting
+  success.
+
+`networkKey`, `providerConfigRef`, `createDNS` and `releaseOnDelete` are then
+omitted from the rendered spec — and passing one alongside `skipReservation`
+is refused rather than dropped, because the two are a contradiction and which
+one wins is not something the output would have told you. `networkKey`'s
+default (`10.31.101`, LabUL's pool) does not apply either; left to fire it
+would render one lab's network onto another lab's cluster and, via the CRD rule
+that a `networkKey` implies a `providerConfigRef`, turn a registration back
+into a reservation.
+
+`preserveKubeconfigServer=true` is **required** here and checked: with no
+reservation there is no IP or FQDN for `data.server`, so it has to come from
+the kubeconfig. That mirrors the CRD's own fourth `XValidation` rule.
+
+```bash
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+  -D name=labda-dev-a \
+  -D clusterType=default \
+  -D skipReservation=true \
+  -D preserveKubeconfigServer=true
+```
 
 ## Common `-D` recipes
 
