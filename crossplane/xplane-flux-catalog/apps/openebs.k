@@ -36,14 +36,14 @@ import ..schema as s
 # safe rather than a surprise.
 openebs: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/infra/openebs"
-    # v1.24.0 makes openebs-hostpath the DEFAULT StorageClass
+    # v1.69.0 makes openebs-hostpath the DEFAULT StorageClass
     # (stuttgart-things/flux#198). rke2 ships no default at all, so every
     # cluster that installed openebs still had none, and every PVC that did not
     # name a class stayed Pending. Found through Tekton, of all things: its
     # Results component wants a PostgreSQL, the PVC hung, the operator blocked
     # on it, and the Dashboard never appeared. Nothing in that failure named
-    # storage. Do not pin below v1.24.0.
-    defaultVersion = "v1.24.0"
+    # storage. Do not pin below v1.69.0.
+    defaultVersion = "v1.69.0"
     components = [
         s.Component {
             name = "install"
