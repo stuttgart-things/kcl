@@ -12,8 +12,9 @@ converges as the Release becomes Ready.
 
 This is the component every other platform component waits on. A cluster with
 no CNI has NotReady nodes, so nothing schedules — a Helm install aimed at it
-does not fail fast, it times out and retries. Consumers should gate on
-status.ready rather than racing it.
+does not fail fast, it times out and retries. Consumers can gate on either
+status.ready or the XR's Ready condition: the gate Object carries a readiness
+query of its own, so the condition cannot go true ahead of the Release (#439).
 
 All decision logic lives in logic.k so it is unit-testable without Crossplane;
 this file only marshals option("params") in and `items` out.
@@ -62,6 +63,9 @@ if _clusterName:
         }
         spec = {
             managementPolicies = ["Observe"]
+            # Ready only once the RemoteCluster actually resolved — otherwise the
+            # XR reports Ready while the Release is still ungated (#439).
+            readiness = l.gateReadiness()
             forProvider = {
                 manifest = {
                     apiVersion = "kubeconfig.stuttgart-things.com/v1alpha1"
