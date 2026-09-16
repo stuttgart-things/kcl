@@ -1004,9 +1004,13 @@ test_merge_last_wins_on_a_shared_key = lambda {
 # every AppSet refuses its Applications. Registering implies it.
 test_registering_derives_auto_project = lambda {
     assert l.argocdBlock(_rancherStack).labels["auto-project"] == "true"
-    _s = {clusterName = "c6", rancher = {
-        argocd = {register = False}
-    }, profiles = ["network"]}
+    _s = {
+        clusterName = "c6"
+        rancher = {
+            argocd = {register = False}
+        }
+        profiles = ["network"]
+    }
     assert "auto-project" not in l.argocdBlock(_s).labels
 }
 
