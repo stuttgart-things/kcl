@@ -535,11 +535,18 @@ resource "vault_kv_secret_v2" "cluster" {
 """
 
 # What kube-prometheus-stack's ExternalSecrets read out of observability/<cluster>:
-# grafana-admin-user / grafana-admin-password and alertmanager-webhook-token
+# grafana-admin-user / grafana-admin-password
 # (stuttgart-things/argocd infra/kube-prometheus-stack/secrets). Defaulting to
 # exactly that set is what makes `clusterSecrets: {enabled: true}` sufficient —
 # anything else and the AppSet's label gate opens onto a half-filled entry.
-CLUSTER_SECRETS_DEFAULT_GENERATE = [{key = "grafana-admin-password", length = 32}, {key = "alertmanager-webhook-token", length = 32}]
+#
+# NOT alertmanager-webhook-token, which 0.23 generated. That token is the
+# omni-pitcher's AUTH_TOKEN on platform-sthings and has to be identical on every
+# cluster; a random one synced cleanly on rancher-join-test5 and would have sent
+# every alert into a 401. It lives once in observability/_omni-pitcher and the
+# stack reads it from there (crossplane-configurations#438). Generating it here
+# anyway would leave a plausible-looking dead value in every cluster's entry.
+CLUSTER_SECRETS_DEFAULT_GENERATE = [{key = "grafana-admin-password", length = 32}]
 CLUSTER_SECRETS_DEFAULT_DATA = {"grafana-admin-user" = "admin"}
 
 clusterSecretsEnabled = lambda spec: {str:} -> bool {
