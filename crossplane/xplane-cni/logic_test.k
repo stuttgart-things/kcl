@@ -78,3 +78,17 @@ test_validate_accepts_kube_proxy_cluster = lambda {
     # No clusterName and no host, but kube-proxy is present — nothing to resolve.
     assert l.validate({helmProviderConfigRef = "x-helm", cilium = {kubeProxyReplacement = False}}) == True
 }
+
+test_gate_readiness_is_not_successful_create = lambda {
+    # crossplane-configurations#439: with provider-kubernetes' default readiness
+    # the gate Object is ready as soon as it exists. The Release is not composed
+    # while the gate is closed, so function-auto-ready then marked the XR Ready
+    # with no CNI installed.
+    assert l.gateReadiness().policy == "DeriveFromCelQuery"
+}
+
+test_gate_cel_guards_every_hop = lambda {
+    # A missing field is an evaluation error in CEL, not a false, so each hop
+    # needs its own has().
+    assert l.gateReadiness().celQuery == 'has(object.status) && has(object.status.atProvider) && has(object.status.atProvider.clusterType) && object.status.atProvider.clusterType != ""'
+}

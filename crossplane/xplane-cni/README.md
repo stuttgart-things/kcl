@@ -14,8 +14,20 @@ Cni XR
 
 A cluster with no CNI has NotReady nodes, so nothing schedules. A Helm install
 aimed at such a cluster does not fail fast — it times out and retries. So every
-other platform component has to wait for `status.ready` here rather than race
-it; `xplane-platform` gates its FluxInit/FluxApps children on exactly that.
+other platform component has to wait for this one rather than race it;
+`xplane-platform` gates its FluxInit/FluxApps children on exactly that.
+
+### The gate reports its own readiness
+
+The RemoteCluster gate Object carries a `DeriveFromCelQuery` readiness that
+asserts the observed `status.atProvider.clusterType` — the same field the render
+gate reads. Until 0.2.0 it used provider-kubernetes' default
+(`SuccessfulCreate`), so while the gate was closed the only composed resource
+was ready by definition, no Release existed yet, and `function-auto-ready` put
+`Ready=True` on the XR with no CNI installed — next to a correct
+`status.ready: false`. Consumers reading the condition (`xplane-platform` does)
+opened onto NotReady nodes. Either signal is safe now; see
+[crossplane-configurations#439](https://github.com/stuttgart-things/crossplane-configurations/issues/439).
 
 ## Spec
 

@@ -48,6 +48,34 @@ apiServerHost = lambda spec: {str:} -> str {
     _c?.k8sServiceHost or ("{}-control-plane".format(spec.clusterName) if spec?.clusterName else "")
 }
 
+# Readiness of the RemoteCluster gate Object.
+#
+# It used to be provider-kubernetes' default (SuccessfulCreate), i.e. ready the
+# moment the Object exists. While the gate is closed the Release is not composed
+# at all, so "every composed resource is ready" was trivially true and
+# function-auto-ready marked the whole XR Ready before a CNI had been installed
+# — with status.ready correctly False right next to it. Consumers that gate on
+# the condition (xplane-platform does) then opened onto NotReady nodes.
+# See crossplane-configurations#439.
+#
+# A lambda, not a constant: a non-underscore top-level value would be rendered
+# as an output key of the module.
+_GATE_CEL = 'has(object.status) && has(object.status.atProvider) && has(object.status.atProvider.clusterType) && object.status.atProvider.clusterType != ""'
+
+gateReadiness = lambda -> {str:str} {
+    """Readiness for the gate Object: the RemoteCluster has actually resolved.
+
+    The CEL runs against the OBSERVED manifest — `object` is the RemoteCluster
+    provider-kubernetes read back — so it asserts exactly the field main.k's
+    render gate reads out of ocds. has() guards each hop, because a missing
+    field is an evaluation error in CEL rather than a false.
+    """
+    {
+        policy = "DeriveFromCelQuery"
+        celQuery = _GATE_CEL
+    }
+}
+
 kubeProxyReplacement = lambda spec: {str:} -> bool {
     """`or True` would swallow an explicit false, so test for the key."""
     _c = spec?.cilium or {}
