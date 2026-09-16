@@ -7,6 +7,7 @@ is up.
 ```
 Cni XR
  ├─ kubernetes.m.crossplane.io Object   RemoteCluster (Observe) — gate
+ ├─ helm.m.crossplane.io Release        Gateway API CRDs (opt-in, installed FIRST)
  └─ helm.m.crossplane.io Release        the CNI chart (cilium today)
 ```
 
@@ -29,6 +30,35 @@ was ready by definition, no Release existed yet, and `function-auto-ready` put
 opened onto NotReady nodes. Either signal is safe now; see
 [crossplane-configurations#439](https://github.com/stuttgart-things/crossplane-configurations/issues/439).
 
+## Gateway API comes first
+
+Cilium enables its Gateway controller **only if the CRDs exist when it starts**;
+installed afterwards, `gatewayAPI.enabled` is a no-op until the operator and the
+agents restart. With `spec.gatewayAPI.enabled` this module therefore installs the
+CRDs as a Release of their own and **withholds the cilium Release until it is
+Ready** — and sets `gatewayAPI.enabled` in the cilium values, so one switch
+drives both.
+
+That gate is sticky: once the cilium Release exists it keeps being emitted,
+because not emitting a composed resource is how Crossplane deletes it.
+
+The version is **paired with the cilium minor**, from the cilium docs:
+
+| cilium | Gateway API | chart |
+|---|---|---|
+| 1.19.x | 1.4.1 | `oci://ghcr.io/stuttgart-things/charts/gateway-api-crds:1.4.1` |
+| 1.20.x | 1.6.1 | `…:1.6.1` |
+
+An unknown minor is not guessed — `spec.gatewayAPI.version` then has to say it,
+and the render fails with that message if it does not. Upstream publishes no
+Gateway API chart at all, which is why this points at the one in
+`stuttgart-things/stuttgart-things` (`crossplane/platform/baseline/gateway-api-crds`)
+that vendors the release manifest.
+
+On rke2 the CRDs also arrive via `rke2-traefik-crd`, but after the CNI and at
+rke2's pinned version — disable that chart (`ingress-controller: none` plus the
+CRD chart in `disable`) and let this one own them.
+
 ## Spec
 
 | field | default | notes |
@@ -44,6 +74,9 @@ opened onto NotReady nodes. Either signal is safe now; see
 | `cilium.k8sServicePort` | `6443` | |
 | `cilium.ipamMode` | `kubernetes` | |
 | `cilium.operatorReplicas` | `1` | |
+| `gatewayAPI.enabled` | `false` | install the Gateway API CRDs first, and turn on cilium's Gateway controller |
+| `gatewayAPI.version` | paired with the cilium minor | Gateway API version = chart version |
+| `gatewayAPI.chart.repository` / `.name` | `oci://ghcr.io/stuttgart-things/charts` / `gateway-api-crds` | explicit wins |
 | `values` | `{}` | raw Helm values, merged last — wins over everything above |
 
 ### The API server address is not a detail

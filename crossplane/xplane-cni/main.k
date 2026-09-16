@@ -117,14 +117,54 @@ _release = {
     }
 }
 
-_cniResources = [_release] if _observeReady else []
-
-# --- Status: read Ready condition off each composed resource via ocds ---
+# --- Ready condition of a composed resource, read back from ocds ---
+# Defined before the gates below use it.
 _isReady = lambda resourceName: str -> bool {
     _found = resourceName in _ocds
     _conds = _ocds[resourceName]?.Resource?.status?.conditions or [] if _found else []
     len([c for c in _conds if c.type == "Ready" and c.status == "True"]) > 0
 }
+
+# --- Resource 3: Gateway API CRDs, BEFORE cilium ---
+# Cilium enables its Gateway controller only if the CRDs are there when it
+# starts; installed afterwards, gatewayAPI.enabled is a no-op until the operator
+# and agents restart. So they are their own Release and cilium waits for it.
+_gwEnabled = l.gatewayAPIEnabled(_spec)
+_gwReleaseName = "{}-gateway-api".format(_name)
+_gwRelease = {
+    apiVersion = "helm.m.crossplane.io/v1beta1"
+    kind = "Release"
+    metadata = {
+        name = _gwReleaseName
+        namespace = _ns
+        annotations = {
+            "krm.kcl.dev/composition-resource-name" = _gwReleaseName
+            "crossplane.io/external-name" = "gateway-api-crds"
+        }
+    }
+    spec = {
+        providerConfigRef = {
+            name = _helmPcr
+            kind = "ClusterProviderConfig"
+        }
+        forProvider = {
+            chart = l.gatewayAPIChart(_spec)
+            namespace = _ns
+            values = {}
+        }
+        rollbackLimit = 3
+    }
+}
+_gwResources = [_gwRelease] if (_gwEnabled and _observeReady) else []
+_gwReady = _isReady(_gwReleaseName)
+
+# The cilium gate is STICKY: once its Release exists it keeps being emitted,
+# because not emitting a composed resource is how Crossplane deletes it — and
+# removing the CNI from a running cluster because the CRD chart went briefly
+# NotReady is worse than the race it would close.
+_ciliumGateOpen = (not _gwEnabled) or _gwReady or (_releaseName in _ocds)
+
+_cniResources = [_release] if (_observeReady and _ciliumGateOpen) else []
 
 _releaseReady = _isReady(_releaseName)
 
@@ -135,7 +175,10 @@ _xrStatus = _oxr | {
         releaseReady = _releaseReady
         ready = _releaseReady and _observeReady
         clusterType = _clusterType
+        if _gwEnabled:
+            gatewayApiVersion = l.gatewayAPIVersion(_spec)
+            gatewayApiReady = _gwReady
     }
 }
 
-items = _observeResources + _cniResources + [_xrStatus]
+items = _observeResources + _gwResources + _cniResources + [_xrStatus]
