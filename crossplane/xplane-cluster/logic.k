@@ -475,13 +475,11 @@ derivedArgocd = lambda spec: {str:any} -> {str:any} {
     # could no longer remove the Platform, and rancher-join-test6's teardown
     # stopped dead (0.15.2).
     _stores = (spec?.secretStores or []) if _platOn else []
-    _esoAuths = [a for a in (_vi?.additionalAuths or []) if a?.name == ESO_AUTH_NAME]
     _cs = _plat?.clusterSecrets or {}
     _csOn = _platOn and (_cs?.enabled or False)
     _obsStore = "observability" in _stores
 
     assert len(_stores) == 0 or _viOn, "secretStores needs platform.vaultIssuer.enabled — the stores log in through the Vault Kubernetes auth the Platform creates"
-    assert len(_stores) == 0 or len(_esoAuths) > 0, "secretStores needs a vaultIssuer.additionalAuths entry named '" + ESO_AUTH_NAME + "' — the stores ApplicationSet logs in through the <cluster>-" + ESO_AUTH_NAME + " mount"
 
     _register = ((spec?.rancher or {})?.argocd or {})?.register or False
     {
@@ -746,7 +744,74 @@ clusterAccess = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
 # user: cni.enabled follows from the distribution's CNI ownership, and setting it
 # by hand is how a cluster ends up with two CNIs (a k3s role installs cilium
 # itself; a kind cluster is deliberately built without one).
-platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> {str:any} {
+# --- Vault token policies: derived, never passed through, in rancher mode -----
+# A Kubernetes-auth role in Vault has no allowed_policies: whoever may write
+# auth/<mount>/role/* may attach ANY existing policy, including ones they do not
+# hold. Passing `tokenPolicies` from the order to the Platform therefore let
+# whoever orders a ClusterStack bind, say, a kubeconfigs reader to a
+# ServiceAccount on a cluster they control — cluster-admin on every cluster in
+# the fleet (crossplane-configurations#454, addendum to point 5).
+#
+# In rancher mode the order names STORES, never policies:
+#   - the cert-manager auth gets the environment's PKI policies;
+#   - the eso auth is derived as a whole from spec.secretStores — its shape is a
+#     convention the stores ApplicationSet hard-codes (<cluster>-eso, role eso,
+#     external-secrets/eso) — with the policies the environment maps each store
+#     to;
+#   - a hand-written tokenPolicies, or a hand-written eso entry, fails the
+#     render instead of being silently dropped.
+#
+# The mapping is an ENVIRONMENT value, not a catalog fact: policy names differ per
+# Vault (LabUL read-observability-clusters, LabDA read-cicd). It comes from the
+# EnvironmentConfig labelled cluster.stuttgart-things.com/environment=<spec.environmentConfig>,
+# under `vault`. EnvironmentConfigs are cluster-scoped — only an admin changes it.
+#
+# The ansible path is untouched: seed-labda-1 passes tokenPolicies today, and
+# closing it there is a migration of its own.
+ESO_SERVICE_ACCOUNT = "eso"
+ESO_NAMESPACE = "external-secrets"
+
+isRancherProvisioner = lambda spec: {str:any} -> bool {
+    cat.getDistribution(spec?.distribution or "k3s").provisioner == "rancher"
+}
+
+rancherVaultIssuer = lambda spec: {str:any}, env: {str:any} -> {str:any} {
+    """The vaultIssuer a rancher-mode Platform gets: tokenPolicies derived from the
+    environment and spec.secretStores, never taken from the order."""
+    _vi = (spec?.platform or {})?.vaultIssuer or {}
+    _ve = env?.vault or {}
+    _envName = spec?.environmentConfig or "(unset)"
+    _auths = _vi?.additionalAuths or []
+    _handTp = [a?.name or "?" for a in _auths if "tokenPolicies" in a]
+    _handEso = [a for a in _auths if a?.name == ESO_AUTH_NAME]
+    _stores = spec?.secretStores or []
+    _storeMap = _ve?.secretStores or {}
+    _unknown = [st for st in _stores if st not in _storeMap]
+    _cmPolicies = _ve?.certManagerPolicies or []
+
+    assert "tokenPolicies" not in _vi, "platform.vaultIssuer.tokenPolicies is derived in rancher mode — remove it; the cert-manager auth gets vault.certManagerPolicies from the EnvironmentConfig for environment '" + _envName + "'"
+    assert len(_handTp) == 0, "tokenPolicies on platform.vaultIssuer.additionalAuths (" + ", ".join(_handTp) + ") are not accepted in rancher mode — a Vault role may be given any existing policy, so the order must not choose them"
+    assert len(_handEso) == 0, "the '" + ESO_AUTH_NAME + "' auth is derived from spec.secretStores in rancher mode — remove it from platform.vaultIssuer.additionalAuths"
+    assert not (_vi?.enabled or False) or len(_cmPolicies) > 0, "no vault.certManagerPolicies in the EnvironmentConfig for environment '" + _envName + "' (label cluster.stuttgart-things.com/environment) — the cert-manager auth would get a role without policies"
+    assert len(_unknown) == 0, "secretStores " + ", ".join(_unknown) + " have no policy in the EnvironmentConfig for environment '" + _envName + "' (vault.secretStores) — a store whose role cannot read reports Valid while every ExternalSecret fails with a 400"
+
+    _flat = [p for st in _stores for p in _storeMap[st]]
+    _esoPolicies = [p for i, p in _flat if p not in _flat[:i:]]
+    _rest = {k: v for k, v in _vi if k not in ["tokenPolicies", "additionalAuths"]}
+    _rest | {
+        if _vi?.enabled or False:
+            tokenPolicies = _cmPolicies
+        additionalAuths = _auths + ([{
+            name = ESO_AUTH_NAME
+            boundServiceAccountNames = [ESO_SERVICE_ACCOUNT]
+            boundServiceAccountNamespaces = [ESO_NAMESPACE]
+            createServiceAccounts = True
+            tokenPolicies = _esoPolicies
+        }] if _stores else [])
+    } if _vi else {}
+}
+
+platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str, env: {str:any} = {} -> {str:any} {
     _cluster = spec?.clusterName or name
     # `enabled` is no longer filtered here — it lives on spec.platformEnabled.
     _passthrough = {k: v for k, v in (spec?.platform or {}) if k not in ["clusterName", "cni", "vaultIssuer"]}
@@ -772,7 +837,7 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> 
     # NOTE this does not make the endpoint highly available: it is still one
     # node's address. It removes the hand-copied-value failure, not the SPOF.
     # See crossplane-configurations#171.
-    _userVault = (spec?.platform or {})?.vaultIssuer or {}
+    _userVault = rancherVaultIssuer(spec, env) if isRancherProvisioner(spec) else ((spec?.platform or {})?.vaultIssuer or {})
     _wantVault = _userVault?.enabled or False
     _hasHost = (_userVault?.kubernetesHost or "") != ""
     _deriveHost = _wantVault and not _hasHost and apiEndpoint != ""

@@ -1046,3 +1046,87 @@ test_platform_disabled_with_secret_stores_still_renders = lambda {
     # registration itself is unaffected
     assert _b.labels["auto-project"] == "true"
 }
+
+# --- Vault token policies derived in rancher mode ----------------------------
+_labulEnv = {
+    vault = {
+        certManagerPolicies = ["pki-issue"]
+        secretStores = {
+            "homerun2-pr" = ["read-homerun2-pr"]
+            schmetterpause = ["read-schmetterpause"]
+            observability = ["read-observability-clusters"]
+        }
+    }
+}
+
+_rancherOrder = {
+    clusterName = "c7"
+    distribution = "rancher-rke2"
+    environmentConfig = "labul"
+    secretStores = ["homerun2-pr", "schmetterpause", "observability"]
+    platform = {
+        vaultIssuer = {enabled = True, vaultAddr = "https://v", pkiRole = "sthings-vsphere"}
+        clusterSecrets = {enabled = True}
+    }
+}
+
+# The order names stores; the Platform child carries the policies the
+# environment maps them to — for cert-manager AND for the derived eso auth.
+test_rancher_platform_gets_policies_from_the_environment = lambda {
+    _vi = l.platformChild("c7", "default", _rancherOrder, "https://10.0.0.1:6443", _labulEnv).spec.vaultIssuer
+    assert _vi.tokenPolicies == ["pki-issue"]
+    _eso = [a for a in _vi.additionalAuths if a.name == "eso"]
+    assert len(_eso) == 1
+    assert _eso[0].tokenPolicies == ["read-homerun2-pr", "read-schmetterpause", "read-observability-clusters"]
+    assert _eso[0].boundServiceAccountNames == ["eso"]
+    assert _eso[0].boundServiceAccountNamespaces == ["external-secrets"]
+    assert _eso[0].createServiceAccounts == True
+    # the API endpoint derivation still applies on top
+    assert _vi.kubernetesHost == "https://10.0.0.1:6443"
+    # untouched fields pass through
+    assert _vi.pkiRole == "sthings-vsphere"
+}
+
+# Two stores mapping to the same policy attach it once.
+test_rancher_eso_policies_are_deduplicated = lambda {
+    _env = {
+        vault = {certManagerPolicies = ["pki-issue"], secretStores = {a = ["read-x", "read-shared"], b = ["read-shared"]}}
+    }
+    _o = {clusterName = "c7", distribution = "rancher-rke2", secretStores = ["a", "b"], platform = {
+        vaultIssuer = {enabled = True}
+    }}
+    _eso = [x for x in l.platformChild("c7", "default", _o, "", _env).spec.vaultIssuer.additionalAuths if x.name == "eso"][0]
+    assert _eso.tokenPolicies == ["read-x", "read-shared"]
+}
+
+# No stores, no eso auth; other additional auths without tokenPolicies pass.
+test_rancher_without_stores_derives_no_eso = lambda {
+    _o = {clusterName = "c7", distribution = "rancher-rke2", platform = {
+        vaultIssuer = {enabled = True, additionalAuths = [{name = "extra", policies = [{name = "p", kvMount = "apps", read = ["own"]}]}]}
+    }}
+    _vi = l.platformChild("c7", "default", _o, "", _labulEnv).spec.vaultIssuer
+    assert [a.name for a in _vi.additionalAuths] == ["extra"]
+    assert _vi.tokenPolicies == ["pki-issue"]
+}
+
+# vaultIssuer off: nothing to attach policies to.
+test_rancher_vault_issuer_off_sets_no_policies = lambda {
+    _o = {clusterName = "c7", distribution = "rancher-rke2", platform = {
+        vaultIssuer = {enabled = False}
+    }}
+    assert "tokenPolicies" not in l.platformChild("c7", "default", _o, "", _labulEnv).spec.vaultIssuer
+}
+
+# The ansible path keeps passing tokenPolicies through — seed-labda-1's shape.
+test_ansible_path_passes_token_policies_through = lambda {
+    _o = {
+        clusterName = "seed"
+        distribution = "rke2"
+        platform = {
+            vaultIssuer = {enabled = True, tokenPolicies = ["pki-issue", "pki-issue-4sthings"], additionalAuths = [{name = "eso", tokenPolicies = ["read-cicd"]}]}
+        }
+    }
+    _vi = l.platformChild("seed", "crossplane-system", _o, "", {}).spec.vaultIssuer
+    assert _vi.tokenPolicies == ["pki-issue", "pki-issue-4sthings"]
+    assert _vi.additionalAuths[0].tokenPolicies == ["read-cicd"]
+}
