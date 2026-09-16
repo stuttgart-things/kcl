@@ -14,6 +14,7 @@ import .distributions.k3s as k3s
 import .distributions.kind as kind
 import .distributions.rancher_rke2 as rancher_rke2
 import .distributions.rke2 as rke2
+import profiles as pf
 import sizes as sz
 import schema as s
 
@@ -28,11 +29,15 @@ distributions: {str:s.Distribution} = {
 
 sizes: {str:s.Size} = sz.sizeTable
 
+profiles: {str:s.Profile} = pf.profileTable
+
 distributionNames = sorted(distributions)
 sizeNames = sorted(sizes)
+profileNames = sorted(profiles)
 
 _knownDist = ", ".join(distributionNames)
 _knownSize = ", ".join(sizeNames)
+_knownProfile = ", ".join(profileNames)
 
 # Look up by name, failing loudly. KCL does NOT interpolate ${} inside assert
 # messages — it prints the placeholder literally — so concatenate.
@@ -82,4 +87,9 @@ assertSizeSupported = lambda distribution: str, size: str -> bool {
     _s = getSize(size)
     assert _s.masters == 1 or _d.multiNode, "distribution '" + distribution + "' has no verified multi-node path in this catalog — size '" + size + "' asks for " + str(_s.masters) + " masters (see crossplane-configurations#170)"
     True
+}
+
+getProfile = lambda name: str -> s.Profile {
+    assert name in profiles, "unknown profile '" + name + "' — known: " + _knownProfile
+    profiles[name]
 }

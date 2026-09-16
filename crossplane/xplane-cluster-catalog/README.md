@@ -14,6 +14,30 @@ and its mirror image in `platform-kind-test1.yaml`, where `cni.enabled: true` is
 
 Here it is `cniOwnership`, and `platformCniEnabled(name)` derives the Platform setting from it. A unit test asserts the two are opposites.
 
+## Profiles
+
+Named Argo CD label sets selecting app platforms (decision 6.2 in
+[crossplane-configurations#438](https://github.com/stuttgart-things/crossplane-configurations/issues/438)).
+
+| profile | labels | annotation defaults |
+|---|---|---|
+| `network` | `network-platform`; **off:** `cert-manager-vault-pki`, `cilium-gateway-secondary` | — |
+| `security` | `security-platform` | — |
+| `storage-openebs` | `storage-platform`; **off:** `longhorn`, `nfs-csi-install`, `nfs-csi-storageclasses` | `storage-class: openebs-hostpath` for observability and homerun2 |
+| `observability` | `observability-platform` | — |
+| `base` | `base-platform` | — |
+
+The platform ApplicationSets are **opt-out** — an umbrella label turns every
+component on unless it says `"false"`. So a profile is the umbrella plus what
+cannot render on a ClusterStack-built cluster: the Platform owns the Vault
+issuer, and a ClusterStack makes one clusterbook reservation, not two.
+
+**Opt-in gates are rejected by the schema**
+(`…/secrets-config`, `security-platform/external-secrets-stores`). They assert
+that a Vault role can read a mount — only the stack that composes the role can
+know that, so `xplane-cluster` derives them. No environment values either: no
+URLs, no Vault addresses.
+
 ## What it holds — and what it does not
 
 **Structural facts only**: core counts, playbook names, var names, required inventory groups, CNI ownership. Environment-specific *values* — IPs, endpoints, Vault roles, credentials, template UUIDs — stay in the per-environment `EnvironmentConfig` or on the XR. Same line `xplane-flux-catalog` draws for apps.

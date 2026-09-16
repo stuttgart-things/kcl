@@ -210,3 +210,40 @@ test_rancher_rke2_cni_defaults_carry_the_api_address = lambda {
 test_ansible_distributions_have_no_rancher_fields = lambda {
     assert len([1 for _, d in c.distributions if d.provisioner == "ansible" and (len(d.machineGlobalConfig) > 0 or len(d.cniDefaults) > 0)]) == 0
 }
+
+# --- profiles ---------------------------------------------------------------
+test_profiles_registered = lambda {
+    assert c.profileNames == ["base", "network", "observability", "security", "storage-openebs"]
+}
+
+# Every profile turns its platform ON — a profile that only sets "false" labels
+# selects nothing and would read as enabled.
+test_every_profile_sets_its_umbrella = lambda {
+    assert all _n, p in c.profiles {
+        any k, v in p.labels {
+            k.endswith("-platform") and "/" not in k and v == "true"
+        }
+    }
+}
+
+# The two network components that cannot render on a ClusterStack are off.
+test_network_profile_switches_off_what_cannot_render = lambda {
+    _l = c.getProfile("network").labels
+    assert _l["network-platform/cert-manager-vault-pki"] == "false"
+    assert _l["network-platform/cilium-gateway-secondary"] == "false"
+}
+
+# Opt-in gates assert a Vault role can read a mount; only the stack that composes
+# the role can know that. No registered profile carries one. (That the schema
+# check REJECTS one is proven by a probe run in the PR — a KCL test cannot
+# assert an expected failure.)
+test_no_profile_carries_an_opt_in_gate = lambda {
+    assert all _n, p in c.profiles {
+        "security-platform/external-secrets-stores" not in p.labels and len([k for k in p.labels if k.endswith("/secrets-config")]) == 0
+    }
+}
+
+test_storage_openebs_names_its_class = lambda {
+    _a = c.getProfile("storage-openebs").annotations
+    assert _a["observability-platform.stuttgart-things.com/storage-class"] == "openebs-hostpath"
+}
