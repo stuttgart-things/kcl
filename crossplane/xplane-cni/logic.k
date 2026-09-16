@@ -150,7 +150,9 @@ values = lambda spec: {str:} -> {str:} {
 
     # gatewayAPI follows spec.gatewayAPI.enabled — one switch, not two that can
     # disagree. spec.values still wins, as always.
-    _gw = {gatewayAPI = {enabled = True}} if gatewayAPIEnabled(spec) else {}
+    _gw = {
+        gatewayAPI = {enabled = True}
+    } if gatewayAPIEnabled(spec) else {}
 
     {
         kubeProxyReplacement = _kpr
