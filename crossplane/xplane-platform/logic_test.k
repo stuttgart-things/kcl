@@ -721,3 +721,133 @@ test_cert_manager_gate_is_one_way_once_the_issuer_exists = lambda {
     assert l.gateOpen(False, True)
     assert not l.gateOpen(False, False)
 }
+
+# --- bound ServiceAccounts -------------------------------------------------
+
+# Opt-in per auth: the cert-manager auth binds the CHART's ServiceAccount, and
+# an auth that says nothing must not get a second one composed next to it.
+test_no_service_accounts_without_opt_in = lambda {
+    s = {
+        vaultIssuer = {enabled = True, additionalAuths = [{name = "eso", boundServiceAccountNames = ["eso"], boundServiceAccountNamespaces = ["external-secrets"]}]}
+    }
+    assert l.boundServiceAccounts(s) == []
+    assert l.boundServiceAccountNamespaces(s) == []
+}
+
+test_opted_in_auth_yields_its_service_account = lambda {
+    s = {
+        vaultIssuer = {enabled = True, additionalAuths = [{name = "eso", boundServiceAccountNames = ["eso"], boundServiceAccountNamespaces = ["external-secrets"], createServiceAccounts = True}]}
+    }
+    assert l.boundServiceAccounts(s) == [{namespace = "external-secrets", name = "eso"}]
+    assert l.boundServiceAccountNamespaces(s) == ["external-secrets"]
+}
+
+# Every name in every namespace — a role bound to two namespaces logs in from
+# both, so composing only the first would leave one of them failing.
+test_service_accounts_cross_names_and_namespaces = lambda {
+    s = {
+        vaultIssuer = {additionalAuths = [{name = "eso", boundServiceAccountNames = ["eso", "eso-ro"], boundServiceAccountNamespaces = ["a", "b"], createServiceAccounts = True}]}
+    }
+    assert len(l.boundServiceAccounts(s)) == 4
+    assert l.boundServiceAccountNamespaces(s) == ["a", "b"]
+}
+
+# Two auths may legitimately bind the same ServiceAccount. Composing it twice is
+# a duplicate composed-resource name, not a second object.
+test_service_accounts_are_deduplicated = lambda {
+    s = {
+        vaultIssuer = {additionalAuths = [
+            {name = "eso", boundServiceAccountNames = ["eso"], boundServiceAccountNamespaces = ["external-secrets"], createServiceAccounts = True}
+            {name = "eso-push", boundServiceAccountNames = ["eso"], boundServiceAccountNamespaces = ["external-secrets"], createServiceAccounts = True}
+        ]}
+    }
+    assert l.boundServiceAccounts(s) == [{namespace = "external-secrets", name = "eso"}]
+}
+
+# An entry that opts in without naming anything would otherwise compose
+# default/default — a real ServiceAccount, on every cluster, bound to a Vault
+# role. It still does, because that is what the auth itself binds; the test is
+# here so the coupling is visible rather than discovered.
+test_service_account_defaults_follow_the_auth = lambda {
+    s = {
+        vaultIssuer = {additionalAuths = [{name = "x", createServiceAccounts = True}]}
+    }
+    assert l.boundServiceAccounts(s) == [{namespace = "default", name = "default"}]
+}
+
+# --- cluster-owned secrets -------------------------------------------------
+test_cluster_secrets_are_opt_in = lambda {
+    assert not l.clusterSecretsEnabled({})
+    assert not l.clusterSecretsEnabled({
+        clusterSecrets = {}
+    })
+    assert l.clusterSecretsEnabled({
+        clusterSecrets = {enabled = True}
+    })
+}
+
+# The entry name is the cluster name unless overridden — the same default the
+# kube-prometheus-stack AppSet uses for its remoteKey. If these two ever
+# disagree the ExternalSecrets read an entry that exists but is not this
+# cluster's.
+test_cluster_secrets_entry_defaults_to_the_cluster = lambda {
+    assert l.clusterSecretsEntry({
+        clusterSecrets = {enabled = True}
+    }, "c1") == "c1"
+    assert l.clusterSecretsEntry({
+        clusterSecrets = {enabled = True, path = "other"}
+    }, "c1") == "other"
+}
+
+# Enabling it must be sufficient: the default set is exactly what
+# infra/kube-prometheus-stack/secrets reads.
+test_cluster_secrets_default_to_the_observability_set = lambda {
+    w = l.clusterSecretsWorkspace("pf", "default", {
+        clusterSecrets = {enabled = True, vaultAddr = "https://v"}
+    }, "c1")
+    _vars = {v.key: v.value for v in w.spec.forProvider.vars}
+    assert _vars["mount"] == "observability"
+    assert _vars["entry"] == "c1"
+    assert "grafana-admin-password" in _vars["generated_keys_json"]
+    assert "alertmanager-webhook-token" in _vars["generated_keys_json"]
+    assert "grafana-admin-user" in _vars["literal_values_json"]
+}
+
+# vaultAddr falls back to the issuer's: one cluster, one Vault, and a second
+# address to keep in step is a second thing to get wrong.
+test_cluster_secrets_borrow_the_issuer_vault_address = lambda {
+    w = l.clusterSecretsWorkspace("pf", "default", {clusterSecrets = {enabled = True}, vaultIssuer = {vaultAddr = "https://issuer"}}, "c1")
+    _vars = {v.key: v.value for v in w.spec.forProvider.vars}
+    assert _vars["vault_addr"] == "https://issuer"
+}
+
+# Values travel as vars; the module itself stays a constant, so a cluster name
+# can never land inside a quoted HCL literal (the bug that silently swallowed
+# the rest of xplane-cluster's logic.k).
+test_cluster_secrets_module_carries_no_cluster_name = lambda {
+    w = l.clusterSecretsWorkspace("pf", "default", {
+        clusterSecrets = {enabled = True, vaultAddr = "https://v"}
+    }, "c1")
+    assert "c1" not in w.spec.forProvider.module
+    assert w.spec.forProvider.source == "Inline"
+    assert w.spec.forProvider.varFiles[0].secretKeyRef.name == "vault-cluster-secrets-writer"
+}
+
+# A teardown must remove the versions too, or the next cluster of the same name
+# reads the old password.
+test_cluster_secrets_destroy_removes_every_version = lambda {
+    w = l.clusterSecretsWorkspace("pf", "default", {
+        clusterSecrets = {enabled = True, vaultAddr = "https://v"}
+    }, "c1")
+    assert "delete_all_versions = true" in w.spec.forProvider.module
+}
+
+test_cluster_secrets_custom_keys_replace_the_defaults = lambda {
+    w = l.clusterSecretsWorkspace("pf", "default", {
+        clusterSecrets = {enabled = True, vaultAddr = "https://v", generate = [{key = "token", length = 16}], data = {user = "u"}}
+    }, "c1")
+    _vars = {v.key: v.value for v in w.spec.forProvider.vars}
+    assert "grafana-admin-password" not in _vars["generated_keys_json"]
+    assert "16" in _vars["generated_keys_json"]
+    assert _vars["literal_values_json"] == '{"user": "u"}'
+}
