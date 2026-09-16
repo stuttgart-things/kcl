@@ -858,3 +858,144 @@ test_kubeconfig_workspace_follows_an_overridden_vault_path = lambda {
     _vars = {v.key: v.value for v in _w.spec.forProvider.vars}
     assert _vars["metadata_path"] == "kubeconfigs/metadata/clusters/rke2-1"
 }
+
+# --- Argo CD labels: profiles, derived facts, overrides -----------------------
+_rancherStack = {
+    clusterName = "c6"
+    distribution = "rancher-rke2"
+    profiles = ["network", "security", "storage-openebs", "observability"]
+    secretStores = ["homerun2-pr", "schmetterpause", "observability"]
+    rancher = {
+        argocd = {register = True, labels = {env = "LabUL"}, annotations = {"observability-platform.stuttgart-things.com/alert-webhook-url" = "https://omni/pitch/grafana"}}
+    }
+    platform = {
+        vaultIssuer = {
+            enabled = True
+            vaultAddr = "https://vault.example"
+            additionalAuths = [{name = "eso", boundServiceAccountNames = ["eso"], boundServiceAccountNamespaces = ["external-secrets"]}]
+        }
+        clusterSecrets = {enabled = True}
+    }
+}
+
+test_profiles_merge_into_labels = lambda {
+    _l = l.argocdBlock(_rancherStack).labels
+    assert _l["network-platform"] == "true"
+    assert _l["security-platform"] == "true"
+    assert _l["storage-platform/longhorn"] == "false"
+    assert _l["observability-platform"] == "true"
+}
+
+test_profile_annotations_merge = lambda {
+    _a = l.argocdBlock(_rancherStack).annotations
+    assert _a["observability-platform.stuttgart-things.com/storage-class"] == "openebs-hostpath"
+}
+
+# The facts test5 needed by hand, now derived.
+test_vault_issuer_facts_are_derived = lambda {
+    _b = l.argocdBlock(_rancherStack)
+    assert _b.annotations["clusterbook.stuttgart-things.com/vault-server"] == "https://vault.example"
+    assert _b.annotations["clusterbook.stuttgart-things.com/wildcard-issuer-name"] == "vault-pki-k8s"
+    assert _b.labels["network-platform/cert-manager-vault-pki"] == "false"
+}
+
+test_secret_stores_open_the_stores_gate = lambda {
+    _b = l.argocdBlock(_rancherStack)
+    assert _b.annotations["external-secrets.stuttgart-things.com/kv-mounts"] == "homerun2-pr,schmetterpause,observability"
+    assert _b.labels["security-platform/external-secrets-stores"] == "true"
+}
+
+test_cluster_secrets_open_the_observability_gate = lambda {
+    _b = l.argocdBlock(_rancherStack)
+    assert _b.labels["observability-platform.stuttgart-things.com/secrets-config"] == "true"
+    assert _b.annotations["observability-platform.stuttgart-things.com/secret-store"] == "vault-observability"
+    # never the cluster's own entry: the token is the pitcher's
+    assert _b.annotations["observability-platform.stuttgart-things.com/alert-webhook-secret-key"] == "_omni-pitcher"
+    # default entry name = cluster name, so no secret-key annotation
+    assert "observability-platform.stuttgart-things.com/secret-key" not in _b.annotations
+}
+
+# The gate means "the entry exists": without clusterSecrets nobody writes it.
+test_no_observability_gate_without_cluster_secrets = lambda {
+    _s = {
+        clusterName = "c6"
+        secretStores = ["observability"]
+        rancher = {
+            argocd = {register = True}
+        }
+        platform = {
+            vaultIssuer = {enabled = True, vaultAddr = "https://v", additionalAuths = [{name = "eso"}]}
+        }
+    }
+    _b = l.argocdBlock(_s)
+    assert "observability-platform.stuttgart-things.com/secrets-config" not in _b.labels
+    assert _b.labels["security-platform/external-secrets-stores"] == "true"
+}
+
+# platformEnabled: false composes no Vault issuer, so nothing may claim one.
+test_platform_disabled_derives_no_vault_facts = lambda {
+    _s = {
+        clusterName = "c6"
+        platformEnabled = False
+        rancher = {
+            argocd = {register = True}
+        }
+        platform = {
+            vaultIssuer = {enabled = True, vaultAddr = "https://v"}
+        }
+    }
+    _b = l.argocdBlock(_s)
+    assert "clusterbook.stuttgart-things.com/vault-server" not in _b.annotations
+    assert "network-platform/cert-manager-vault-pki" not in _b.labels
+}
+
+# A hand-written value always wins over profile and derivation.
+test_caller_labels_override_profiles_and_derivation = lambda {
+    _s = {
+        clusterName = "c6"
+        profiles = ["security"]
+        rancher = {
+            argocd = {register = True, labels = {"security-platform" = "false", "network-platform/cert-manager-vault-pki" = "true"}}
+        }
+        platform = {
+            vaultIssuer = {enabled = True, vaultAddr = "https://v"}
+        }
+    }
+    _b = l.argocdBlock(_s)
+    assert _b.labels["security-platform"] == "false"
+    assert _b.labels["network-platform/cert-manager-vault-pki"] == "true"
+    # untouched keys of the block pass through
+    assert _b.register == True
+}
+
+# Later profiles win on a shared key, in list order.
+test_later_profile_wins = lambda {
+    _s = {clusterName = "c6", profiles = ["network", "storage-openebs"], rancher = {
+        argocd = {register = True}
+    }}
+    _l = l.argocdBlock(_s).labels
+    assert _l["network-platform"] == "true" and _l["storage-platform"] == "true"
+}
+
+test_rancher_child_carries_the_derived_block = lambda {
+    _c = l.rancherChild("c6", "default", _rancherStack)
+    assert _c.spec.argocd.labels["security-platform/external-secrets-stores"] == "true"
+    assert _c.spec.argocd.labels.env == "LabUL"
+}
+
+# No argocd, no profiles, no stores: no argocd block at all, so existing
+# RancherClusters see no diff.
+test_rancher_child_without_argocd_has_no_block = lambda {
+    _s = {clusterName = "c6", distribution = "rancher-rke2", rancher = {kubernetesVersion = "v1.36.4+rke2r1"}}
+    _c = l.rancherChild("c6", "default", _s)
+    assert "argocd" not in _c.spec
+}
+
+# A dict comprehension with a repeated key is an EvaluationError in KCL, so the
+# merge has to pick the last value itself. No two catalog profiles share a key
+# today — this pins the rule for when they do.
+test_merge_last_wins_on_a_shared_key = lambda {
+    _m = l.mergeLastWins([["a", "1"], ["b", "x"], ["a", "2"]])
+    assert _m == {a = "2", b = "x"}
+    assert l.mergeLastWins([]) == {}
+}
