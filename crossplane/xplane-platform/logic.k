@@ -9,6 +9,7 @@ and a Kustomization entry (on the FluxApps child). Keeping those two in sync by
 hand is the error this module removes.
 """
 
+import json
 import xplane_flux_catalog as cat
 import xplane_flux_catalog.schema as cs
 
@@ -393,4 +394,211 @@ wildcardCertEnabled = lambda spec: {str:}, domain: str -> bool {
     Programmed on its own.
     """
     (((spec?.vaultIssuer or {})?.wildcardCertificate or {})?.enabled or False) and domain != ""
+}
+
+# --- Bound ServiceAccounts for the additional Vault auths -------------------
+# A Kubernetes-auth role binds a ServiceAccount by name; Vault does not create
+# it, and neither did anything else. On homerun2-test1 `external-secrets/eso`
+# came from hand-written Terraform, so a cluster built from an XR got a mount
+# and a role bound to a ServiceAccount that did not exist — the ClusterSecretStore
+# then fails at login with the same shape as the certmanager SA in
+# crossplane-configurations#435.
+#
+# Opt-in per auth, because the cert-manager auth binds the CHART's own
+# ServiceAccount and creating a second one there would be wrong. eso is the case
+# that needs it: nothing else owns that identity.
+boundServiceAccounts = lambda spec: {str:} -> [{str:str}] {
+    """Every (namespace, name) pair an additionalAuth asks this module to create.
+
+    Deduplicated and sorted: two auths may legitimately bind the same
+    ServiceAccount, and composing it twice is a duplicate resource name rather
+    than a second object.
+    """
+    _auths = [a for a in (((spec?.vaultIssuer or {})?.additionalAuths) or []) if a?.createServiceAccounts]
+    _pairs = {"{}/{}".format(_ns, _n): {namespace = _ns, name = _n} for a in _auths for _ns in (a?.boundServiceAccountNamespaces or ["default"]) for _n in (a?.boundServiceAccountNames or ["default"])}
+    [_pairs[k] for k in sorted(_pairs)]
+}
+
+boundServiceAccountNamespaces = lambda spec: {str:} -> [str] {
+    """The namespaces those ServiceAccounts live in, deduplicated and sorted.
+
+    Composed with [Observe, Create]: the namespace usually arrives with the app
+    (external-secrets is installed by Argo CD with CreateNamespace=true), and
+    adopting it is what keeps this from being a race. Creating it when it is
+    missing is what keeps the ServiceAccount from erroring in a retry loop until
+    the app shows up.
+    """
+    sorted({p.namespace: True for p in boundServiceAccounts(spec)})
+}
+
+# --- Cluster-owned secrets in Vault ----------------------------------------
+# The values that belong to the CLUSTER rather than to an app: the Grafana
+# admin, the Alertmanager webhook token. They were seeded by hand, survived no
+# teardown and were reconciled by nothing (crossplane-configurations#438,
+# decision 5.5).
+#
+# One mount, deliberately: `observability` is the only one a cluster build may
+# seed. The app-owned sets (homerun2, schmetterpause) stay Terraform — a
+# credential that can write those is a credential that can rewrite an app's
+# database password.
+#
+# The generated values live in the Workspace's tfstate, which is a Secret on the
+# control plane. That is the same exposure VaultK8sAuth already carries for its
+# AppRole credentials, and it was accepted as such.
+_CLUSTER_SECRETS_HCL = """terraform {
+  required_providers {
+    vault = {
+      source  = "hashicorp/vault"
+      version = "~> 3.25"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+  }
+}
+
+variable "vault_addr" {
+  type = string
+}
+
+variable "mount" {
+  type = string
+}
+
+variable "entry" {
+  type = string
+}
+
+# Maps travel as JSON: a Workspace var is a string, so the alternative would be
+# one variable per key and a module that is no longer a constant.
+variable "generated_keys_json" {
+  type = string
+}
+
+variable "literal_values_json" {
+  type = string
+}
+
+variable "vault_role_id" {
+  type = string
+}
+
+variable "vault_secret_id" {
+  type      = string
+  sensitive = true
+}
+
+locals {
+  generated_keys = jsondecode(var.generated_keys_json)
+  literal_values = jsondecode(var.literal_values_json)
+}
+
+provider "vault" {
+  address          = var.vault_addr
+  skip_tls_verify  = true
+  skip_child_token = true
+
+  auth_login {
+    path = "auth/approle/login"
+    parameters = {
+      role_id   = var.vault_role_id
+      secret_id = var.vault_secret_id
+    }
+  }
+}
+
+# Alphanumeric on purpose. These values travel through Helm values, a URL query
+# and a file an Alertmanager config reads back -- every one of those has its own
+# quoting rules, and 32 alphanumeric characters carry more entropy than 16 with
+# punctuation anyway.
+resource "random_password" "generated" {
+  for_each = local.generated_keys
+
+  length  = each.value
+  special = false
+}
+
+# delete_all_versions is what makes a teardown a real delete: without it the
+# destroy leaves the versions behind and the next cluster of the same name
+# reads the old password.
+resource "vault_kv_secret_v2" "cluster" {
+  mount               = var.mount
+  name                = var.entry
+  delete_all_versions = true
+
+  data_json = jsonencode(merge(
+    local.literal_values,
+    { for k, r in random_password.generated : k => r.result },
+  ))
+}
+"""
+
+# What kube-prometheus-stack's ExternalSecrets read out of observability/<cluster>:
+# grafana-admin-user / grafana-admin-password and alertmanager-webhook-token
+# (stuttgart-things/argocd infra/kube-prometheus-stack/secrets). Defaulting to
+# exactly that set is what makes `clusterSecrets: {enabled: true}` sufficient —
+# anything else and the AppSet's label gate opens onto a half-filled entry.
+CLUSTER_SECRETS_DEFAULT_GENERATE = [{key = "grafana-admin-password", length = 32}, {key = "alertmanager-webhook-token", length = 32}]
+CLUSTER_SECRETS_DEFAULT_DATA = {"grafana-admin-user" = "admin"}
+
+clusterSecretsEnabled = lambda spec: {str:} -> bool {
+    """Opt-IN. Off keeps today's behaviour: the entry is seeded by hand and
+    outlives the cluster."""
+    (spec?.clusterSecrets or {})?.enabled or False
+}
+
+clusterSecretsEntry = lambda spec: {str:}, cluster: str -> str {
+    """Entry name under the mount. The cluster name unless overridden — the same
+    default the AppSet uses for its remoteKey."""
+    (spec?.clusterSecrets or {})?.path or cluster
+}
+
+clusterSecretsWorkspace = lambda name: str, ns: str, spec: {str:}, cluster: str -> {str:any} {
+    """The Workspace that owns this cluster's own secrets in Vault.
+
+    Values travel as Workspace VARS, never baked into the HCL: the module stays
+    a constant, and a cluster name never lands inside a quoted HCL literal.
+    """
+    _cs = spec?.clusterSecrets or {}
+    _addr = _cs?.vaultAddr or ((spec?.vaultIssuer or {})?.vaultAddr or "")
+    assert _addr, "clusterSecrets needs vaultAddr — the Workspace that owns the secrets of " + cluster + " has to know which Vault that is (vaultIssuer.vaultAddr is used when it is set)"
+    _gen = _cs?.generate or CLUSTER_SECRETS_DEFAULT_GENERATE
+    _generated = {g.key: (g?.length or 32) for g in _gen}
+    _literals = _cs?.data or CLUSTER_SECRETS_DEFAULT_DATA
+    assert len(_generated) + len(_literals) > 0, "clusterSecrets is enabled but neither generate nor data has an entry — an empty KV entry is written and every ExternalSecret reading it fails by key"
+    {
+        apiVersion = "opentofu.m.upbound.io/v1beta1"
+        kind = "Workspace"
+        metadata = {
+            name = "{}-cluster-secrets".format(name)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "{}-cluster-secrets".format(name)}
+        }
+        spec = {
+            providerConfigRef = {
+                name = _cs?.providerConfigName or "in-cluster"
+                kind = "ClusterProviderConfig"
+            }
+            forProvider = {
+                source = "Inline"
+                module = _CLUSTER_SECRETS_HCL
+                vars = [
+                    {key = "vault_addr", value = _addr}
+                    {key = "mount", value = _cs?.mount or "observability"}
+                    {key = "entry", value = clusterSecretsEntry(spec, cluster)}
+                    {key = "generated_keys_json", value = json.encode(_generated)}
+                    {key = "literal_values_json", value = json.encode(_literals)}
+                ]
+                varFiles = [{
+                    source = "SecretKey"
+                    format = "HCL"
+                    secretKeyRef = {
+                        name = _cs?.credentialSecret or "vault-cluster-secrets-writer"
+                        key = "terraform.tfvars"
+                    }
+                }]
+            }
+        }
+    }
 }

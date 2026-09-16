@@ -11,6 +11,7 @@ the bootstrap building blocks.
 |---|---|---|
 | `FluxInit` | [flux-init](https://github.com/stuttgart-things/crossplane-configurations/tree/main/bootstrap/flux-init) | `spec.fluxInit.enabled` (default true) |
 | `FluxApps` | [flux-apps](https://github.com/stuttgart-things/crossplane-configurations/tree/main/bootstrap/flux-apps) | any enabled entry in `spec.apps` |
+| `Workspace` (opentofu) | — | `spec.clusterSecrets.enabled` — the cluster's own secrets in Vault |
 
 Plus the XR status: the resolved `shared` contract and per-component readiness.
 
@@ -109,6 +110,81 @@ They are absent from `appCount`, so without that list an app enabled on the XR
 would simply not appear anywhere — indistinguishable from being ignored. The
 list is expected to empty out on its own; one that stays put names both the
 variable and the component that wants it.
+
+## Bound ServiceAccounts for the additional Vault auths
+
+A Kubernetes-auth role binds a ServiceAccount **by name**, and Vault creates
+nothing. On homerun2-test1 `external-secrets/eso` came from hand-written
+Terraform, so a cluster built from an XR ended up with a mount and a role bound
+to an identity that did not exist — the ClusterSecretStore then fails at login,
+with the same shape as the missing `certmanager` SA in
+[crossplane-configurations#435](https://github.com/stuttgart-things/crossplane-configurations/issues/435).
+
+```yaml
+vaultIssuer:
+  additionalAuths:
+    - name: eso
+      boundServiceAccountNames: [eso]
+      boundServiceAccountNamespaces: [external-secrets]
+      createServiceAccounts: true     # ← composes external-secrets/eso
+      tokenPolicies: [read-all-secrets]
+```
+
+Opt-in per auth, deliberately: cert-manager's auth binds the **chart's own**
+ServiceAccount, and composing a second one beside it would be wrong.
+
+The namespace is adopted rather than owned (`managementPolicies: [Observe,
+Create]`): external-secrets normally arrives with its own Argo CD app, and
+creating it only when it is missing is what keeps the ServiceAccount from
+erroring in a retry loop until that app shows up.
+
+## Cluster-owned secrets in Vault
+
+The values that belong to the **cluster** rather than to an app — the Grafana
+admin, the Alertmanager webhook token. They were seeded by hand, survived no
+teardown and were reconciled by nothing
+([#438](https://github.com/stuttgart-things/crossplane-configurations/issues/438),
+decision 5.5).
+
+```yaml
+clusterSecrets:
+  enabled: true                       # opt-in; vaultAddr falls back to vaultIssuer's
+```
+
+That is sufficient: the defaults write exactly what
+`infra/kube-prometheus-stack/secrets` reads out of `observability/<cluster>` —
+`grafana-admin-user`, a generated `grafana-admin-password` and a generated
+`alertmanager-webhook-token`. Everything is overridable:
+
+```yaml
+clusterSecrets:
+  enabled: true
+  vaultAddr: https://vault.infra.sthings-vsphere.labul.sva.de
+  mount: observability                # the ONLY mount a cluster build may seed
+  path: my-cluster                    # default: clusterName
+  credentialSecret: vault-cluster-secrets-writer   # terraform.tfvars on the mgmt cluster
+  generate:
+    - {key: alertmanager-webhook-token, length: 32}
+  data:
+    grafana-admin-user: admin
+```
+
+Three things worth knowing:
+
+- **One mount.** `observability` is the only one the credential reaches
+  (`observability/data/+` — one path segment). The app-owned sets stay
+  Terraform: a credential that can write those is a credential that can rewrite
+  an app's database password.
+- **Generated values live in the Workspace's tfstate**, a Secret on the control
+  plane. The same exposure `VaultK8sAuth` already carries for its AppRole
+  credentials; accepted as such.
+- **Destroy deletes every version** (`delete_all_versions`), so the next cluster
+  of the same name does not read the old password.
+
+Passwords are alphanumeric on purpose: they travel through Helm values, a URL
+query and a file an Alertmanager config reads back, each with its own quoting
+rules — and 32 alphanumeric characters carry more entropy than 16 with
+punctuation.
 
 ## Overrides
 

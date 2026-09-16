@@ -574,11 +574,48 @@ _viCertObj = {
     }
 }
 
+# --- ServiceAccounts an additionalAuth binds (opt-in per auth) ---
+# Vault binds a ServiceAccount by name and creates nothing; on homerun2-test1
+# `external-secrets/eso` came from hand-written Terraform, so an XR-built
+# cluster got a role bound to an identity that did not exist. The namespace is
+# adopted rather than owned ([Observe, Create]): external-secrets usually
+# arrives with its Argo CD app, and creating it only when it is missing is what
+# keeps the ServiceAccount from erroring in a retry loop until the app shows up.
+_viSAPairs = l.boundServiceAccounts(_spec)
+_viSANsObjs = [{
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-auth-ns-{}".format(_name, _ns), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-auth-ns-{}".format(_name, _ns)}}
+    spec = {
+        managementPolicies = ["Observe", "Create"]
+        forProvider.manifest = {
+            apiVersion = "v1"
+            kind = "Namespace"
+            metadata.name = _ns
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+} for _ns in l.boundServiceAccountNamespaces(_spec)]
+
+_viSAObjs = [{
+    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+    kind = "Object"
+    metadata = {name = "{}-auth-sa-{}-{}".format(_name, p.namespace, p.name), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = "{}-auth-sa-{}-{}".format(_name, p.namespace, p.name)}}
+    spec = {
+        forProvider.manifest = {
+            apiVersion = "v1"
+            kind = "ServiceAccount"
+            metadata = {name = p.name, namespace = p.namespace}
+        }
+        providerConfigRef = {name = _viTargetRef, kind = "ClusterProviderConfig"}
+    }
+} for p in _viSAPairs]
+
 # UNGATED: the Vault side and the reviewer chain. VaultK8sAuth drives Vault
 # through OpenTofu and the reviewer SA/token live in kube-system — none of it
 # touches cert-manager, and all of it is the slow half. Holding it back would
 # serialise two independent waits for no reason.
-_viUngated = [_vaultK8sAuthXR, _viCmObserveObj] + _viReviewerObjects
+_viUngated = [_vaultK8sAuthXR, _viCmObserveObj] + _viReviewerObjects + _viSANsObjs + _viSAObjs
 
 # GATED on cert-manager: everything that lands in its namespace or needs its
 # CRDs. VaultPkiSecret writes the CA Secret into _viCmNs, the TokenRequest RBAC
@@ -588,7 +625,17 @@ _viGated = [_vaultPkiSecretXR, _issuerObj, _tokenReqRoleObj, _tokenReqBindingObj
 
 _vaultIssuerChildren = (_viUngated + (_viGated if l.gateOpen(_viCmReady, _issuerKey in _ocds) else [])) if _vaultIssuerEnabled else []
 
-_children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else []) + _vaultIssuerChildren
+# --- Child 6: the cluster's own secrets in Vault ---
+# Not gated on the target at all: this Workspace talks to Vault from the
+# MANAGEMENT cluster, and the entry should exist before the cluster's apps come
+# looking for it. Destroying it deletes every version of the entry, which is the
+# half that never happened while this was seeded by hand.
+_clusterSecretsEnabled = l.clusterSecretsEnabled(_spec)
+_clusterSecretsKey = "{}-cluster-secrets".format(_name)
+_clusterSecretsXR = l.clusterSecretsWorkspace(_name, _namespace, _spec, _shared?.clusterName or _name) if _clusterSecretsEnabled else {}
+_clusterSecretsReady = _isReady(_readStatus(_clusterSecretsKey))
+
+_children = ([_cniXR] if _cniEnabled else []) + ([_ipReservationXR] if _ipResEnabled else []) + ([_fluxInitXR] if (_fluxEnabled and l.gateOpen(_networkReady, _fluxKey in _ocds)) else []) + ([_fluxAppsXR] if (_appsEnabled and l.gateOpen(_networkReady, _appsKey in _ocds)) else []) + ([_ciliumXR] if (_ciliumEnabled and l.gateOpen(_networkReady, _ciliumKey in _ocds)) else []) + _vaultIssuerChildren + ([_clusterSecretsXR] if _clusterSecretsEnabled else [])
 
 _fluxStatus = _readStatus(_fluxKey)
 _fluxReady = _isReady(_fluxStatus)
@@ -607,7 +654,7 @@ _vaultIssuerReady = _vaultAuthReady and _vaultPkiReady and _issuerReady
 # it into shared status keeps later components from re-observing it.
 _clusterType = _fluxStatus?.clusterType or ""
 
-_enabledReady = ([_cniReady] if _cniEnabled else []) + ([_ipResReady] if _ipResEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else []) + ([_ciliumReady] if _ciliumEnabled else []) + ([_vaultIssuerReady] if _vaultIssuerEnabled else [])
+_enabledReady = ([_cniReady] if _cniEnabled else []) + ([_ipResReady] if _ipResEnabled else []) + ([_fluxReady] if _fluxEnabled else []) + ([_appsReady] if _appsEnabled else []) + ([_ciliumReady] if _ciliumEnabled else []) + ([_vaultIssuerReady] if _vaultIssuerEnabled else []) + ([_clusterSecretsReady] if _clusterSecretsEnabled else [])
 _readyComponents = len([r for r in _enabledReady if r])
 
 # Components held back this reconcile, waiting on a value this same Composition
@@ -697,6 +744,20 @@ _xrStatus = _oxr | {
                 # of being told the name by hand — the gap that kept it out of
                 # the catalog with substitutionSources.
                 auths = _discovered.vaultIssuer.auths
+                # Bound ServiceAccounts this Platform creates on the target, as
+                # "<namespace>/<name>". Empty is the normal state — only an auth
+                # that opts in gets one, and an auth that binds a chart's own
+                # ServiceAccount must not.
+                serviceAccounts = ["{}/{}".format(p.namespace, p.name) for p in _viSAPairs]
+            }
+            clusterSecrets = {
+                enabled = _clusterSecretsEnabled
+                ready = _clusterSecretsReady
+                # WHERE, so an ExternalSecret that reads nothing can be checked
+                # against what was actually written rather than against what the
+                # annotation claims.
+                mount = (_spec?.clusterSecrets or {})?.mount or "observability"
+                entry = l.clusterSecretsEntry(_spec, _shared?.clusterName or _name) if _clusterSecretsEnabled else ""
             }
         }
         componentCount = len(_enabledReady)
