@@ -90,6 +90,30 @@ One field mapped onto both would be accurate for one and a lie for the other. If
 
 > **Decided:** this per-stage split is option **A** of crossplane-configurations#168 — normalize both providers onto per-stage runs — chosen 2026-07-27, staggered: the `cluster` Configuration emits per-stage runs for both providers from the start, while `machinery/vspherevm`'s own combined-run path stays as it is for direct users. So `Distribution` needs no `staging` key.
 
+## Profiles
+
+Named Argo CD label sets selecting app platforms (decision 6.2 in
+[crossplane-configurations#438](https://github.com/stuttgart-things/crossplane-configurations/issues/438)).
+
+| profile | labels | annotation defaults |
+|---|---|---|
+| `network` | `network-platform`; **off:** `cert-manager-vault-pki`, `cilium-gateway-secondary` | — |
+| `security` | `security-platform` | — |
+| `storage-openebs` | `storage-platform`; **off:** `longhorn`, `nfs-csi-install`, `nfs-csi-storageclasses` | `storage-class: openebs-hostpath` for observability and homerun2 |
+| `observability` | `observability-platform` | — |
+| `base` | `base-platform` | — |
+
+The platform ApplicationSets are **opt-out** — an umbrella label turns every
+component on unless it says `"false"`. So a profile is the umbrella plus what
+cannot render on a ClusterStack-built cluster: the Platform owns the Vault
+issuer, and a ClusterStack makes one clusterbook reservation, not two.
+
+**Opt-in gates are rejected by the schema**
+(`…/secrets-config`, `security-platform/external-secrets-stores`). They assert
+that a Vault role can read a mount — only the stack that composes the role can
+know that, so `xplane-cluster` derives them. No environment values either: no
+URLs, no Vault addresses.
+
 ## API
 
 ```python

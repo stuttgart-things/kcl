@@ -152,3 +152,32 @@ schema Stage:
     vars: {str:str}
     inventoryGroups: [str]
 
+schema Profile:
+    """
+    A named set of Argo CD cluster labels (and annotation defaults) selecting an
+    app platform — decision 6.2 in crossplane-configurations#438.
+
+    Structural, like the rest of this catalog: WHICH platform a profile turns on
+    and which components cannot work on a cluster built this way. Nothing here is
+    environment-specific — no URLs, no Vault addresses.
+
+    The platform ApplicationSets are OPT-OUT: the umbrella label turns every
+    component on unless it says "false". So a profile is mostly the umbrella plus
+    the components that would fail on a single-reservation, Platform-issued
+    cluster. The OPT-IN gates (`…/secrets-config`,
+    `security-platform/external-secrets-stores`) are deliberately NOT allowed
+    here: they assert that a Vault role can read a mount, which only the stack
+    that composes the role can know — so xplane-cluster derives them.
+    """
+    labels: {str:str}
+    """Cluster Secret labels. Values are "true"/"false" strings, exactly as the
+    ApplicationSet selectors compare them."""
+
+    annotations: {str:str} = {}
+    """Annotation defaults a platform needs and that follow from the profile
+    itself (e.g. the StorageClass openebs provides)."""
+
+    check:
+        len([v for _k, v in labels if v not in ["true", "false"]]) == 0, "profile label values must be the strings \"true\" or \"false\""
+        len([k for k in labels if k.endswith("/secrets-config") or k == "security-platform/external-secrets-stores"]) == 0, "opt-in gates (…/secrets-config, security-platform/external-secrets-stores) are derived by the stack, never set by a profile"
+
