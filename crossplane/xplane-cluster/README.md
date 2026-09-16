@@ -70,6 +70,7 @@ is a word, not a label set.
 
 | derived | from |
 |---|---|
+| `auto-project: true` — without it no AppProject exists and every AppSet refuses its Applications (0.15.1, found on rancher-join-test6) | `rancher.argocd.register` |
 | `clusterbook…/vault-server`, `…/wildcard-issuer-name`, `network-platform/cert-manager-vault-pki: false` | `platform.vaultIssuer` (enabled, and `platformEnabled`) |
 | `external-secrets…/kv-mounts`, `security-platform/external-secrets-stores: true` | `spec.secretStores` |
 | `observability-platform…/secrets-config: true`, `…/secret-store: vault-observability`, `…/alert-webhook-secret-key: _omni-pitcher` | `platform.clusterSecrets.enabled` **and** `observability` in `secretStores` |

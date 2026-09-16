@@ -477,8 +477,18 @@ derivedArgocd = lambda spec: {str:any} -> {str:any} {
     assert len(_stores) == 0 or _viOn, "secretStores needs platform.vaultIssuer.enabled — the stores log in through the Vault Kubernetes auth the Platform creates"
     assert len(_stores) == 0 or len(_esoAuths) > 0, "secretStores needs a vaultIssuer.additionalAuths entry named '" + ESO_AUTH_NAME + "' — the stores ApplicationSet logs in through the <cluster>-" + ESO_AUTH_NAME + " mount"
 
+    _register = ((spec?.rancher or {})?.argocd or {})?.register or False
     {
         labels = {
+            # Every platform ApplicationSet puts its Applications into the
+            # project named after the cluster, and cluster-projects creates that
+            # AppProject only for `auto-project: "true"`. Without it NOTHING
+            # deploys — every AppSet reports "references project … which does
+            # not exist". A fact of registering, not a profile choice: it was in
+            # test5's hand-written list and got lost when rancher-join-test6
+            # switched to profiles.
+            if _register:
+                "auto-project" = "true"
             if _viOn:
                 # The Platform owns the Vault issuer; the AppSet's own would
                 # need annotations nothing sets and collide by name.

@@ -999,3 +999,25 @@ test_merge_last_wins_on_a_shared_key = lambda {
     assert _m == {a = "2", b = "x"}
     assert l.mergeLastWins([]) == {}
 }
+
+# Found on rancher-join-test6: without auto-project no AppProject exists and
+# every AppSet refuses its Applications. Registering implies it.
+test_registering_derives_auto_project = lambda {
+    assert l.argocdBlock(_rancherStack).labels["auto-project"] == "true"
+    _s = {
+        clusterName = "c6"
+        rancher = {
+            argocd = {register = False}
+        }
+        profiles = ["network"]
+    }
+    assert "auto-project" not in l.argocdBlock(_s).labels
+}
+
+# A caller can still opt out explicitly.
+test_auto_project_can_be_overridden = lambda {
+    _s = {clusterName = "c6", rancher = {
+        argocd = {register = True, labels = {"auto-project" = "false"}}
+    }}
+    assert l.argocdBlock(_s).labels["auto-project"] == "false"
+}
