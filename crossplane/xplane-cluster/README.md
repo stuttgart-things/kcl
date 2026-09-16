@@ -56,6 +56,36 @@ The upload writes that Vault entry; nothing removed it. A torn-down cluster left
 - **Values travel as Workspace vars**, so the HCL stays a constant and a cluster name never lands inside a quoted HCL literal.
 - **One more Usage:** `ClusterAccess` reads the entry, so the Workspace outlives it.
 
+## Argo CD labels: profiles, derived facts, overrides (0.15.0)
+
+`rancher-join-test5` carried ~35 hand-written labels and annotations and needed
+five edits after it was ordered. That list mixed two different things, and the
+stack now treats them differently:
+
+**Choices** — which app platforms run. `spec.profiles` names catalog profiles
+(`network`, `security`, `storage-openebs`, `observability`, `base`), so a choice
+is a word, not a label set.
+
+**Facts** — values this stack already knows because it composes them:
+
+| derived | from |
+|---|---|
+| `clusterbook…/vault-server`, `…/wildcard-issuer-name`, `network-platform/cert-manager-vault-pki: false` | `platform.vaultIssuer` (enabled, and `platformEnabled`) |
+| `external-secrets…/kv-mounts`, `security-platform/external-secrets-stores: true` | `spec.secretStores` |
+| `observability-platform…/secrets-config: true`, `…/secret-store: vault-observability`, `…/alert-webhook-secret-key: _omni-pitcher` | `platform.clusterSecrets.enabled` **and** `observability` in `secretStores` |
+
+The opt-in gates are only ever derived: each asserts that a Vault role can read
+a mount, and only the stack composing that role can say so. Environment values
+(`alert-webhook-url`) stay on the XR.
+
+**Precedence:** profile < derived < `spec.rancher.argocd.{labels,annotations}`.
+A hand-written value always wins.
+
+Loud failures: an unknown profile; `secretStores` without `vaultIssuer`; or
+without an `additionalAuths` entry named `eso` (the stores AppSet logs in through
+`<cluster>-eso`). A stack with no `rancher.argocd`, no profiles and no stores gets
+no `argocd` block, so existing RancherClusters see no diff.
+
 ## The two things that make this non-trivial
 
 ### Sticky, success-based gates
@@ -179,6 +209,15 @@ kcl test .
 ```
 
 ## Gotchas found while writing this (KCL, not Crossplane)
+
+- **`kcl fmt` deleted code.** `[_acc := _acc | x for p in ps]` inside a lambda
+  returned an empty dict without error, and `kcl fmt` then rewrote the line to
+  `[_acc for p in ps]` — the expression was gone from the source. Diff after
+  formatting.
+- **A dict comprehension with a repeated key is an `EvaluationError`**, not an
+  overwrite. "Later wins" needs `mergeLastWins`.
+- **Unused lambdas are never evaluated.** A function calling a catalog function
+  that did not exist passed `kcl test` until a test called it.
 
 - **`kcl fmt` from a newer CLI can emit source the runtime cannot parse.** kcl 0.12.8 rewrites a long `lambda a: str, b: str -> T {` parameter list into a multi-line `lambda { a: str, … } -> T {` block. `function-kcl` v0.12.0 — the thing that actually runs this module — rejects that outright (`expected one of ["="] got ,`), so 0.3.1 was published unrenderable and superseded by 0.3.2. CI now pins `KCL_VERSION`; keep the two in step.
 - **Commas are load-bearing in multi-line list literals.** `[a]` followed by a line starting with `[` parses as a *subscript*, silently dropping entries instead of failing. Cost an hour; the assembled `items` list carries a comment.

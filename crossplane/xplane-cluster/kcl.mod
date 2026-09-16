@@ -1,7 +1,7 @@
 [package]
 name = "xplane-cluster"
 edition = "v0.12.3"
-version = "0.14.0"
+version = "0.15.0"
 
 [dependencies]
-xplane-cluster-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-cluster-catalog", tag = "0.5.0" }
+xplane-cluster-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-cluster-catalog", tag = "0.6.0" }

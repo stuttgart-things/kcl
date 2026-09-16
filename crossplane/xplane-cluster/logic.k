@@ -406,7 +406,114 @@ rancherChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
             name = _cluster
             machineGlobalConfig = _mgc
             nodeRegistration = _nodeReg
+            # Only when there is something to register or derive — an empty
+            # argocd block would be a diff on every existing RancherCluster.
+            if (_r?.argocd or spec?.profiles or spec?.secretStores):
+                argocd = argocdBlock(spec)
         }
+    }
+}
+
+# --- Argo CD labels and annotations: profiles, derived facts, overrides -----
+# rancher-join-test5 carried ~35 hand-written labels and annotations and needed
+# five edits after it was ordered. Two different things were mixed in that list:
+#
+#   CHOICES — which app platforms this cluster runs. Named profiles from the
+#   catalog (decision 6.2), so a choice is one word instead of a label set.
+#
+#   FACTS — values this stack already knows because it composes them: the Vault
+#   address, the issuer name, which KV mounts the eso role opens, whether the
+#   cluster seeds its own observability entry. Written by hand they drift, and
+#   the opt-in gates among them (…/secrets-config,
+#   security-platform/external-secrets-stores) assert that a Vault role can read
+#   a mount — only the stack that composes the role can state that honestly.
+#
+# Precedence: profile < derived < spec.rancher.argocd.{labels,annotations}. A
+# hand-written value always wins, so nothing a cluster needs is ever blocked.
+ESO_AUTH_NAME = "eso"
+SHARED_WEBHOOK_ENTRY = "_omni-pitcher"
+
+# Later profile wins on a shared key. Two KCL traps shaped this:
+#   - a dict comprehension with a repeated key is an EvaluationError, not an
+#     overwrite, so `{k: v for p in profiles for k, v in ...}` fails as soon as
+#     two profiles share a key;
+#   - the first draft accumulated with `_acc := _acc | ...` inside a list
+#     comprehension. KCL returned an empty dict without error, and `kcl fmt`
+#     then silently DELETED the `:=` expression from the source. The profile
+#     tests caught the first; reading the diff caught the second.
+# So: flatten to [key, value] pairs in list order, keep each key once, take its
+# last value.
+mergeLastWins = lambda pairs: [[str]] -> {str:str} {
+    _keys = [x[0] for i, x in pairs if x[0] not in [y[0] for y in pairs[:i:]]]
+    {k: [x[1] for x in pairs if x[0] == k][-1] for k in _keys}
+}
+
+profileLabels = lambda spec: {str:any} -> {str:str} {
+    mergeLastWins([[k, v] for p in (spec?.profiles or []) for k, v in cat.getProfile(p).labels])
+}
+
+profileAnnotations = lambda spec: {str:any} -> {str:str} {
+    mergeLastWins([[k, v] for p in (spec?.profiles or []) for k, v in cat.getProfile(p).annotations])
+}
+
+derivedArgocd = lambda spec: {str:any} -> {str:any} {
+    """Labels and annotations that follow from what this stack composes.
+
+    Returns {labels, annotations}. Asserts the combinations that could only be
+    wrong: a store list without the Vault issuer that creates its login, or
+    without the eso auth whose mount the stores AppSet assumes.
+    """
+    _cluster = spec?.clusterName or ""
+    _plat = spec?.platform or {}
+    _platOn = spec.platformEnabled if "platformEnabled" in spec else True
+    _vi = _plat?.vaultIssuer or {}
+    _viOn = _platOn and (_vi?.enabled or False)
+    _stores = spec?.secretStores or []
+    _esoAuths = [a for a in (_vi?.additionalAuths or []) if a?.name == ESO_AUTH_NAME]
+    _cs = _plat?.clusterSecrets or {}
+    _csOn = _platOn and (_cs?.enabled or False)
+    _obsStore = "observability" in _stores
+
+    assert len(_stores) == 0 or _viOn, "secretStores needs platform.vaultIssuer.enabled — the stores log in through the Vault Kubernetes auth the Platform creates"
+    assert len(_stores) == 0 or len(_esoAuths) > 0, "secretStores needs a vaultIssuer.additionalAuths entry named '" + ESO_AUTH_NAME + "' — the stores ApplicationSet logs in through the <cluster>-" + ESO_AUTH_NAME + " mount"
+
+    {
+        labels = {
+            if _viOn:
+                # The Platform owns the Vault issuer; the AppSet's own would
+                # need annotations nothing sets and collide by name.
+                "network-platform/cert-manager-vault-pki" = "false"
+            if _stores:
+                "security-platform/external-secrets-stores" = "true"
+            if _csOn and _obsStore:
+                "observability-platform.stuttgart-things.com/secrets-config" = "true"
+        }
+        annotations = {
+            if _viOn and _vi?.vaultAddr:
+                "clusterbook.stuttgart-things.com/vault-server" = _vi.vaultAddr
+            if _viOn:
+                "clusterbook.stuttgart-things.com/wildcard-issuer-name" = _vi?.issuerName or "vault-pki-k8s"
+            if _stores:
+                "external-secrets.stuttgart-things.com/kv-mounts" = ",".join(_stores)
+            if _csOn and _obsStore:
+                "observability-platform.stuttgart-things.com/secret-store" = "vault-observability"
+                # The webhook token is the omni-pitcher's, shared by every
+                # cluster — never the cluster's own entry.
+                "observability-platform.stuttgart-things.com/alert-webhook-secret-key" = SHARED_WEBHOOK_ENTRY
+            if _csOn and _obsStore and _cs?.path and _cs.path != _cluster:
+                "observability-platform.stuttgart-things.com/secret-key" = _cs.path
+        }
+    }
+}
+
+argocdBlock = lambda spec: {str:any} -> {str:any} {
+    """spec.rancher.argocd with profiles and derived facts merged under the
+    caller's own labels and annotations."""
+    _a = (spec?.rancher or {})?.argocd or {}
+    _d = derivedArgocd(spec)
+    _a | {
+        labels = profileLabels(spec) | _d.labels | (_a?.labels or {})
+        annotations = profileAnnotations(spec) | _d.annotations | (_a?.annotations or {})
     }
 }
 
