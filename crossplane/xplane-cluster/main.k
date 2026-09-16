@@ -86,6 +86,13 @@ _vmReady = len([c for c in _vmConds if c?.type == "Ready" and c?.status == "True
 # PipelineRun's own verdict, not merely the AnsibleRun XR's readiness.
 _baseosOk = (_vmShare?.ansibleSucceeded or "") == "True"
 
+# Who owns kubeconfigs/<cluster> in Vault. Emitted from the start, like the
+# RancherCluster: it claims the entry before anything writes into it, and its
+# destroy is what removes the entry when the stack goes.
+_kcVaultOpen = l.kubeconfigLifecycleEnabled(_spec)
+_kcVaultObs = _byName("{}-kubeconfig-vault".format(_name))
+_kcVaultReady = len([1 for c in ((_kcVaultObs[0] if _kcVaultObs else {})?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
+
 _rancherObs = _byName("{}-rancher".format(_name))
 _rancher = _rancherObs[0] if _rancherObs else {}
 
@@ -258,6 +265,10 @@ _usageGroups = [
     # — the same shape as platform-uses-vm, and the reason #430 took manual
     # patching to clear.
     [l.usage(_vmKind, "{}-vm".format(_name), "RancherCluster", "{}-rancher".format(_name), "rancher-uses-vm", True, _name)] if (_isRancher and _vmOpen) else []
+    # ClusterAccess READS kubeconfigs/<cluster>; the Workspace owns the entry and
+    # deletes it on destroy. Without this the entry can go first, and the
+    # RemoteCluster then fails on a path that existed a second ago.
+    [l.usage("Workspace", "{}-kubeconfig-vault".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-kubeconfig-vault", True, _name)] if (_kcVaultOpen and _accessOpen) else []
     # The ManagementPlane needs the same three guards as the Platform, and for
     # the same reasons: it applies everything it owns THROUGH the VM and the
     # ClusterAccess, so losing either first leaves its Objects hanging against a
@@ -305,6 +316,8 @@ _dxrPatched = _dxr | {
             if _isRancher:
                 rancher = {nodeCommandSecret = _nodeCommandSecret, emitted = True}
                 join = {succeeded = _joinOk, emitted = _joinOpen}
+            if _kcVaultOpen:
+                kubeconfigVault = {ready = _kcVaultReady, emitted = True}
             access = {ready = _accessReady, emitted = _accessOpen}
             platform = {ready = _platReady, emitted = _platOpen}
             managementPlane = {ready = _mgmtReady, emitted = _mgmtOpen}
@@ -316,6 +329,7 @@ _dxrPatched = _dxr | {
 # Single-expression concatenation, not `+=` accumulation — the mutable pattern
 # double-emitted groups in bootstrap/cilium.
 _groups = [
+    [l.kubeconfigWorkspace(_name, _ns, _spec)] if _kcVaultOpen else []
     [l.rancherChild(_name, _ns, _spec)] if _isRancher else []
     [l.vmChild(_name, _ns, _spec, _size)] if _vmOpen else []
     [_distChild] if _distOpen else []

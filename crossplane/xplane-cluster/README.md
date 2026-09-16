@@ -18,6 +18,7 @@ ClusterStack                                                provisioner: ansible
 
 ```
 ClusterStack                                                provisioner: rancher
+├─ Workspace                           {name}-kubeconfig-vault  owns kubeconfigs/<cluster>
 ├─ RancherCluster                      {name}-rancher       Rancher creates the cluster
 ├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm            waits for the node command
 ├─ AnsibleRun                          {name}-join          join + kubeconfig -> Vault
@@ -42,6 +43,18 @@ On the **rancher** path the cluster exists before any node does:
 **One extra Usage:** the VM must outlive the `RancherCluster`, which applies Objects *through* the cluster its own node runs (bootstrap namespace, Argo CD service account, vault reviewer). If the machine goes first those finalizers hang against a dead API server — the shape that took manual patching in #430.
 
 `spec.rancher` is a verbatim passthrough of the `RancherCluster` spec, the same contract `spec.platform` has: `environmentConfig`, `argocd`, `vaultAuth`, `clusterSpec`, and `machineGlobalConfig` merged **over** the catalog's.
+
+## Who owns `kubeconfigs/<cluster>` (0.14.0)
+
+The upload writes that Vault entry; nothing removed it. A torn-down cluster left its kubeconfig behind — `rancher-join-test3` and `-test4` both did.
+
+`spec.kubeconfig.lifecycle` composes a **Workspace** (provider-opentofu, the same machinery `VaultK8sAuth` uses) that claims the entry with `custom_metadata` and, on destroy, `DELETE`s `<mount>/metadata/<cluster>` — which removes every version. It never touches the secret data: the join play writes that, and `disable_read` keeps opentofu from diffing a value it does not own.
+
+- **Default follows the provisioner:** on for `rancher`, off for the ansible path — not because that path does not leak the same entry (it does), but because turning it on changes the teardown of clusters that already exist. `enabled` wins either way.
+- **`vaultAddr` is required when enabled.** The Workspace has to know which Vault it owns the entry in; the render fails saying so, and naming `enabled: false` as the alternative.
+- **The credential** is the writer approle in `terraform.tfvars` form (`vault-kubeconfig-writer` by default). Its policy needs `create`/`update` on `kubeconfigs/metadata/*` — added and verified on the infra Vault on 2026-09-16; before that the same call was a 403.
+- **Values travel as Workspace vars**, so the HCL stays a constant and a cluster name never lands inside a quoted HCL literal.
+- **One more Usage:** `ClusterAccess` reads the entry, so the Workspace outlives it.
 
 ## The two things that make this non-trivial
 

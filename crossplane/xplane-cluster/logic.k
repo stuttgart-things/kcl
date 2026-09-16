@@ -410,6 +410,145 @@ rancherChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
     }
 }
 
+# --- who owns kubeconfigs/<cluster> ----------------------------------------
+# The upload writes that entry; until now nothing removed it, so a torn-down
+# cluster left its kubeconfig in Vault — rancher-join-test3 and -test4 both did.
+#
+# This Workspace claims the entry by writing custom_metadata and, on destroy,
+# DELETEs <mount>/metadata/<cluster>, which removes every version. It never
+# touches the secret data: the join play writes that.
+#
+# The credential is the WRITER approle in terraform.tfvars form. Its policy
+# needs create/update on kubeconfigs/metadata/* — added and verified on the
+# infra Vault 2026-09-16 (stuttgart-things/stuttgart-things#2990); before that
+# the same call was a 403.
+_KUBECONFIG_LIFECYCLE_HCL = """terraform {
+  required_providers {
+    vault = {
+      source  = "hashicorp/vault"
+      version = "~> 3.25"
+    }
+  }
+}
+
+variable "vault_addr" {
+  type = string
+}
+
+variable "metadata_path" {
+  type = string
+}
+
+variable "cluster_name" {
+  type = string
+}
+
+variable "vault_role_id" {
+  type = string
+}
+
+variable "vault_secret_id" {
+  type      = string
+  sensitive = true
+}
+
+provider "vault" {
+  address          = var.vault_addr
+  skip_tls_verify  = true
+  skip_child_token = true
+
+  auth_login {
+    path = "auth/approle/login"
+    parameters = {
+      role_id   = var.vault_role_id
+      secret_id = var.vault_secret_id
+    }
+  }
+}
+
+# Owns the ENTRY, never its content: the join play writes the kubeconfig into
+# <mount>/data/<cluster> and keeps writing new versions. Writing custom_metadata
+# is what marks the entry as Crossplane-owned; destroying this resource DELETEs
+# the metadata path, and with it every version.
+#
+# disable_read: a GET on the metadata path returns a different shape than the
+# POST takes, so reading it back would diff forever.
+resource "vault_generic_endpoint" "kubeconfig_metadata" {
+  path                 = var.metadata_path
+  disable_read         = true
+  ignore_absent_fields = true
+
+  data_json = jsonencode({
+    custom_metadata = {
+      "managed-by" = "crossplane"
+      "cluster"    = var.cluster_name
+    }
+  })
+}
+"""
+
+kubeconfigLifecycle = lambda spec: {str:any} -> {str:any} {
+    (spec?.kubeconfig or {})?.lifecycle or {}
+}
+
+kubeconfigLifecycleEnabled = lambda spec: {str:any} -> bool {
+    """Default follows the provisioner: on for rancher, off for the ansible path.
+
+    Not because the ansible path does not leak the same entry — it does — but
+    because turning it on there changes the teardown of clusters that already
+    exist. An explicit `enabled` wins either way.
+    """
+    _l = kubeconfigLifecycle(spec)
+    _l.enabled if "enabled" in _l else (cat.getDistribution(spec?.distribution or "k3s").provisioner == "rancher")
+}
+
+kubeconfigWorkspace = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
+    """The Workspace that owns the Vault entry for this cluster's kubeconfig.
+
+    Values travel as Workspace VARS, not baked into the HCL: the module stays a
+    constant, and a cluster name never lands inside a quoted HCL literal.
+    """
+    _cluster = spec?.clusterName or name
+    _kc = spec?.kubeconfig or {}
+    _l = kubeconfigLifecycle(spec)
+    _addr = _l?.vaultAddr or ""
+    assert _addr, "kubeconfig.lifecycle needs vaultAddr — the Workspace that owns the kubeconfig entry of " + _cluster + " has to know which Vault that is; set kubeconfig.lifecycle.enabled to false to keep the entry instead"
+    _mount = _l?.mount or "kubeconfigs"
+    _path = _kc?.vaultPath or _cluster
+    {
+        apiVersion = "opentofu.m.upbound.io/v1beta1"
+        kind = "Workspace"
+        metadata = {
+            name = "{}-kubeconfig-vault".format(name)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "kubeconfig-vault"}
+        }
+        spec = {
+            providerConfigRef = {
+                name = _l?.providerConfigName or "in-cluster"
+                kind = "ClusterProviderConfig"
+            }
+            forProvider = {
+                source = "Inline"
+                module = _KUBECONFIG_LIFECYCLE_HCL
+                vars = [
+                    {key = "vault_addr", value = _addr}
+                    {key = "metadata_path", value = "{}/metadata/{}".format(_mount, _path)}
+                    {key = "cluster_name", value = _cluster}
+                ]
+                varFiles = [{
+                    source = "SecretKey"
+                    format = "HCL"
+                    secretKeyRef = {
+                        name = _l?.credentialSecret or "vault-kubeconfig-writer"
+                        key = "terraform.tfvars"
+                    }
+                }]
+            }
+        }
+    }
+}
+
 # vaultSecretName says WHERE THE UPLOAD WRITES, providerConfigRef says WHERE THE
 # READ COMES FROM. They must mean the same Vault, and until 0.9.0 nothing enforced
 # that: the defaults `vault` and `vault-kubeconfigs` agreed by accident, but the
@@ -580,6 +719,7 @@ groupOf = {
     "Platform" = "config.stuttgart-things.com/v1alpha1"
     "ManagementPlane" = "config.stuttgart-things.com/v1alpha1"
     "RancherCluster" = "resources.stuttgart-things.com/v1alpha1"
+    "Workspace" = "opentofu.m.upbound.io/v1beta1"
 }
 
 # Ties the two maps together, so a fourth provider cannot be half-added: the
