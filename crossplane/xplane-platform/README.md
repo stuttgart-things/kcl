@@ -153,8 +153,8 @@ clusterSecrets:
 
 That is sufficient: the defaults write exactly what
 `infra/kube-prometheus-stack/secrets` reads out of `observability/<cluster>` —
-`grafana-admin-user`, a generated `grafana-admin-password` and a generated
-`alertmanager-webhook-token`. Everything is overridable:
+`grafana-admin-user` and a generated `grafana-admin-password`. Everything is
+overridable:
 
 ```yaml
 clusterSecrets:
@@ -164,7 +164,7 @@ clusterSecrets:
   path: my-cluster                    # default: clusterName
   credentialSecret: vault-cluster-secrets-writer   # terraform.tfvars on the mgmt cluster
   generate:
-    - {key: alertmanager-webhook-token, length: 32}
+    - {key: grafana-admin-password, length: 32}
   data:
     grafana-admin-user: admin
 ```
@@ -180,6 +180,12 @@ Three things worth knowing:
   credentials; accepted as such.
 - **Destroy deletes every version** (`delete_all_versions`), so the next cluster
   of the same name does not read the old password.
+
+**The Alertmanager webhook token is not generated** (it was in 0.23). It is the
+omni-pitcher's `AUTH_TOKEN` on platform-sthings, identical on every cluster — a
+generated one synced cleanly on rancher-join-test5 and would have made every
+alert a 401. It lives once in `observability/_omni-pitcher`, and the stack reads
+it from there.
 
 Passwords are alphanumeric on purpose: they travel through Helm values, a URL
 query and a file an Alertmanager config reads back, each with its own quoting

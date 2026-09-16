@@ -809,8 +809,19 @@ test_cluster_secrets_default_to_the_observability_set = lambda {
     assert _vars["mount"] == "observability"
     assert _vars["entry"] == "c1"
     assert "grafana-admin-password" in _vars["generated_keys_json"]
-    assert "alertmanager-webhook-token" in _vars["generated_keys_json"]
     assert "grafana-admin-user" in _vars["literal_values_json"]
+}
+
+# The webhook token is the omni-pitcher's AUTH_TOKEN, shared by every cluster.
+# Generating it per cluster produced a value that synced cleanly and made every
+# alert a 401 — it must never come back as a default.
+test_cluster_secrets_do_not_generate_the_webhook_token = lambda {
+    w = l.clusterSecretsWorkspace("pf", "default", {
+        clusterSecrets = {enabled = True, vaultAddr = "https://v"}
+    }, "c1")
+    _vars = {v.key: v.value for v in w.spec.forProvider.vars}
+    assert "alertmanager-webhook-token" not in _vars["generated_keys_json"]
+    assert "alertmanager-webhook-token" not in _vars["literal_values_json"]
 }
 
 # vaultAddr falls back to the issuer's: one cluster, one Vault, and a second
