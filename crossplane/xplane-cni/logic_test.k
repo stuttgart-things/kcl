@@ -92,3 +92,50 @@ test_gate_cel_guards_every_hop = lambda {
     # needs its own has().
     assert l.gateReadiness().celQuery == 'has(object.status) && has(object.status.atProvider) && has(object.status.atProvider.clusterType) && object.status.atProvider.clusterType != ""'
 }
+
+test_cilium_minor_is_parsed = lambda {
+    # the chart default
+    assert l.ciliumMinor({}) == "1.19"
+    assert l.ciliumMinor({
+        chart = {version = "1.20.1"}
+    }) == "1.20"
+}
+
+test_gateway_api_version_pairs_with_the_cilium_minor = lambda {
+    # From the cilium docs: 1.19 supports Gateway API v1.4.1, 1.20 v1.6.1.
+    assert l.gatewayAPIVersion({
+        gatewayAPI = {enabled = True}
+    }) == "1.4.1"
+    assert l.gatewayAPIVersion({chart = {version = "1.20.1"}, gatewayAPI = {enabled = True}}) == "1.6.1"
+}
+
+test_gateway_api_version_explicit_wins = lambda {
+    assert l.gatewayAPIVersion({
+        gatewayAPI = {enabled = True, version = "1.5.1"}
+    }) == "1.5.1"
+}
+
+test_gateway_api_version_unknown_minor_is_empty = lambda {
+    # Not guessed — validate() turns this into a render error naming the fix.
+    assert l.gatewayAPIVersion({chart = {version = "1.21.0"}, gatewayAPI = {enabled = True}}) == ""
+}
+
+test_gateway_api_chart_defaults_and_overrides = lambda {
+    _c = l.gatewayAPIChart({
+        gatewayAPI = {enabled = True}
+    })
+    assert _c.repository == "oci://ghcr.io/stuttgart-things/charts"
+    assert _c.name == "gateway-api-crds"
+    assert _c.version == "1.4.1"
+    _o = l.gatewayAPIChart({
+        gatewayAPI = {enabled = True, chart = {repository = "oci://example.test/charts", name = "gw"}}
+    })
+    assert _o.repository == "oci://example.test/charts"
+    assert _o.name == "gw"
+}
+
+test_gateway_api_off_by_default = lambda {
+    assert l.gatewayAPIEnabled({}) == False
+    assert "gatewayAPI" not in l.values({clusterName = "kind-1"})
+    assert l.values({clusterName = "kind-1", gatewayAPI = {enabled = True}}).gatewayAPI.enabled == True
+}

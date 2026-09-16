@@ -76,6 +76,55 @@ gateReadiness = lambda -> {str:str} {
     }
 }
 
+# Gateway API CRDs. Cilium enables its Gateway controller only if they exist
+# WHEN IT STARTS; installed afterwards, gatewayAPI.enabled is a no-op until the
+# operator and agents restart (cilium docs). So the CRDs are a Release of their
+# own, and the cilium Release waits for it — see main.k.
+#
+# Upstream publishes no chart, only standard-install.yaml, so this points at the
+# one that vendors it: stuttgart-things/stuttgart-things
+# crossplane/platform/baseline/gateway-api-crds. Its chart version IS the
+# Gateway API version.
+_GATEWAY_API_CHART = {
+    repository = "oci://ghcr.io/stuttgart-things/charts"
+    name = "gateway-api-crds"
+}
+
+# Which Gateway API version a cilium minor supports, from the cilium docs. An
+# unknown minor is not guessed: gatewayAPI then needs an explicit version, and
+# validate() says so.
+_GATEWAY_API_FOR_CILIUM = {
+    "1.19" = "1.4.1"
+    "1.20" = "1.6.1"
+}
+
+ciliumMinor = lambda spec: {str:} -> str {
+    """`1.19.6` -> `1.19`; "" when the version is not shaped like that."""
+    _parts = chart(spec).version.split(".")
+    ".".join([_parts[0], _parts[1]]) if len(_parts) >= 2 else ""
+}
+
+gatewayAPIEnabled = lambda spec: {str:} -> bool {
+    """`or False` is safe here: absent and false mean the same thing."""
+    (spec?.gatewayAPI or {})?.enabled or False
+}
+
+gatewayAPIVersion = lambda spec: {str:} -> str {
+    """Explicit wins; otherwise the version paired with the cilium minor."""
+    _g = spec?.gatewayAPI or {}
+    _g?.version or _GATEWAY_API_FOR_CILIUM[ciliumMinor(spec)] or ""
+}
+
+gatewayAPIChart = lambda spec: {str:} -> {str:str} {
+    """Chart coordinates for the CRDs, with spec overrides."""
+    _g = (spec?.gatewayAPI or {})?.chart or {}
+    {
+        repository = _g?.repository or _GATEWAY_API_CHART.repository
+        name = _g?.name or _GATEWAY_API_CHART.name
+        version = gatewayAPIVersion(spec)
+    }
+}
+
 kubeProxyReplacement = lambda spec: {str:} -> bool {
     """`or True` would swallow an explicit false, so test for the key."""
     _c = spec?.cilium or {}
@@ -99,11 +148,17 @@ values = lambda spec: {str:} -> {str:} {
         k8sServicePort = _c?.k8sServicePort or 6443
     } if (_kpr and _host) else {}
 
+    # gatewayAPI follows spec.gatewayAPI.enabled — one switch, not two that can
+    # disagree. spec.values still wins, as always.
+    _gw = {
+        gatewayAPI = {enabled = True}
+    } if gatewayAPIEnabled(spec) else {}
+
     {
         kubeProxyReplacement = _kpr
         ipam = {mode = _c?.ipamMode or "kubernetes"}
         operator = {replicas = _c?.operatorReplicas or 1}
-    } | _api | (spec?.values or {})
+    } | _api | _gw | (spec?.values or {})
 }
 
 validate = lambda spec: {str:} -> bool {
@@ -120,5 +175,10 @@ validate = lambda spec: {str:} -> bool {
     # cilium can program. Fail at render, naming the fix.
     _resolved = apiServerHost(spec) or (spec?.values or {})?.k8sServiceHost or ""
     assert _empty or not kubeProxyReplacement(spec) or _resolved, "kubeProxyReplacement is on but no API server address could be resolved — set spec.clusterName (derives {clusterName}-control-plane) or spec.cilium.k8sServiceHost; without it cilium waits on a service VIP that only cilium can program"
+
+    # Guessing a Gateway API version for an unknown cilium minor would install
+    # CRDs cilium may not support, and the failure shows up as a Gateway that
+    # never programs rather than as an install error.
+    assert _empty or not gatewayAPIEnabled(spec) or gatewayAPIVersion(spec), "spec.gatewayAPI.enabled is set but no Gateway API version is known for cilium " + chart(spec).version + " — set spec.gatewayAPI.version explicitly (cilium 1.19 pairs with 1.4.1, 1.20 with 1.6.1)"
     True
 }
