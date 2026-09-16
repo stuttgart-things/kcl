@@ -567,13 +567,18 @@ clusterSecretsWorkspace = lambda name: str, ns: str, spec: {str:}, cluster: str 
     _generated = {g.key: (g?.length or 32) for g in _gen}
     _literals = _cs?.data or CLUSTER_SECRETS_DEFAULT_DATA
     assert len(_generated) + len(_literals) > 0, "clusterSecrets is enabled but neither generate nor data has an entry — an empty KV entry is written and every ExternalSecret reading it fails by key"
+
+    # Computed ONCE, outside the config block: a later entry there sees the keys
+    # already set, so a second `.format(name)` inside metadata would read the
+    # name that was just assigned and produce `<x>-cluster-secrets-cluster-secrets`.
+    _key = "{}-cluster-secrets".format(name)
     {
         apiVersion = "opentofu.m.upbound.io/v1beta1"
         kind = "Workspace"
         metadata = {
-            name = "{}-cluster-secrets".format(name)
+            name = _key
             namespace = ns
-            annotations = {"krm.kcl.dev/composition-resource-name" = "{}-cluster-secrets".format(name)}
+            annotations = {"krm.kcl.dev/composition-resource-name" = _key}
         }
         spec = {
             providerConfigRef = {
