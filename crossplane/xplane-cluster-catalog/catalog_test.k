@@ -151,8 +151,62 @@ test_kind_pins_the_kind_binary_not_kubernetes = lambda {
     assert "k3s_k8s_version" not in _v
 }
 
-# Every distribution must pin something; an entry with no version at all is the
-# drift this catalog exists to remove.
-test_every_distribution_pins_a_version = lambda {
-    assert len([1 for _, d in c.distributions if len([k for k, _ in d.vars if "version" in k]) == 0]) == 0
+# Every distribution that ANSIBLE installs must pin something; an entry with no
+# version at all is the drift this catalog exists to remove.
+#
+# The rancher provisioner is exempt, and not as a loophole: there the playbook
+# JOINS a node into a cluster Rancher already created, so the Kubernetes version
+# is Rancher's (RancherCluster.kubernetesVersion / the EnvironmentConfig) and a
+# version var here would be a second place for it to drift.
+test_every_ansible_distribution_pins_a_version = lambda {
+    assert len([1 for _, d in c.distributions if d.provisioner == "ansible" and len([k for k, _ in d.vars if "version" in k]) == 0]) == 0
+}
+
+test_rancher_distributions_pin_no_version = lambda {
+    assert len([k for k, _ in c.getDistribution("rancher-rke2").vars if "version" in k]) == 0
+}
+
+# The rancher entry earns its place with a reference run: rancher-join-test4 on
+# u26-kind3, 2026-09-15 (crossplane-configurations#422).
+test_rancher_rke2_is_registered = lambda {
+    _d = c.getDistribution("rancher-rke2")
+    assert _d.provisioner == "rancher"
+    assert _d.playbooks == ["sthings.rke.rancher_register"]
+    assert _d.multiNode == False
+}
+
+# The cluster is built without a CNI on purpose — Rancher's proxy needs
+# cattle-cluster-agent, which needs a pod network — so the Platform owns it.
+test_rancher_rke2_leaves_the_cni_to_the_platform = lambda {
+    _d = c.getDistribution("rancher-rke2")
+    assert _d.cniOwnership == "platform"
+    assert _d.machineGlobalConfig["cni"] == "none"
+    assert _d.machineGlobalConfig["disable-kube-proxy"] == True
+}
+
+# Cilium replaces both kube-proxy and the bundled ingress, and owns the Gateway
+# API CRDs — rke2's own copy arrives after the CNI and at a version that pairs
+# with neither cilium 1.19 nor 1.20.
+test_rancher_rke2_keeps_rke2_out_of_the_network = lambda {
+    _m = c.getDistribution("rancher-rke2").machineGlobalConfig
+    assert _m["ingress-controller"] == "none"
+    assert "rke2-traefik-crd" in _m["disable"]
+    assert "rke2-gateway-api-crd" in _m["disable"]
+}
+
+# The kind default ({clusterName}-control-plane) is wrong on rke2, and with
+# kubeProxyReplacement an unresolvable API address is a deadlock, not a delay.
+test_rancher_rke2_cni_defaults_carry_the_api_address = lambda {
+    _c = c.getDistribution("rancher-rke2").cniDefaults
+    assert _c["cilium"]["k8sServiceHost"] == "127.0.0.1"
+    assert _c["cilium"]["kubeProxyReplacement"] == True
+    assert _c["gatewayAPI"]["enabled"] == True
+    assert _c["values"]["l2announcements"]["enabled"] == True
+    assert _c["values"]["hubble"]["ui"]["enabled"] == True
+}
+
+# The ansible distributions keep none of this: their CNI comes from their own
+# role, and nothing composes a RancherCluster for them.
+test_ansible_distributions_have_no_rancher_fields = lambda {
+    assert len([1 for _, d in c.distributions if d.provisioner == "ansible" and (len(d.machineGlobalConfig) > 0 or len(d.cniDefaults) > 0)]) == 0
 }
