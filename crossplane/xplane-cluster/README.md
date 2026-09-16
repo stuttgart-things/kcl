@@ -87,6 +87,33 @@ without an `additionalAuths` entry named `eso` (the stores AppSet logs in throug
 `<cluster>-eso`). A stack with no `rancher.argocd`, no profiles and no stores gets
 no `argocd` block, so existing RancherClusters see no diff.
 
+## Vault token policies: derived, never passed through, in rancher mode (0.16.0)
+
+A Kubernetes-auth role in Vault has no `allowed_policies`: whoever may write `auth/<mount>/role/*` may attach **any** existing policy, including ones they do not hold. Passing `tokenPolicies` from the order let whoever orders a ClusterStack bind, say, a `kubeconfigs` reader to a ServiceAccount on a cluster they control — cluster-admin on every cluster (crossplane-configurations#454).
+
+In **rancher mode** the order names *stores*, never policies:
+
+| auth | policies come from |
+|---|---|
+| cert-manager (`vaultIssuer.tokenPolicies`) | `vault.certManagerPolicies` in the EnvironmentConfig |
+| `eso` — derived as a whole: SA `external-secrets/eso`, `createServiceAccounts`, policies | `vault.secretStores[<store>]` for every entry in `spec.secretStores` |
+
+The mapping is an **environment** value — policy names differ per Vault — so it lives in the EnvironmentConfig labelled `cluster.stuttgart-things.com/environment: <spec.environmentConfig>`, cluster-scoped and admin-owned:
+
+```yaml
+data:
+  vault:
+    certManagerPolicies: [pki-issue]
+    secretStores:
+      homerun2-pr: [read-homerun2-pr]
+      schmetterpause: [read-schmetterpause]
+      observability: [read-observability-clusters]
+```
+
+The render **fails** on a hand-written `tokenPolicies` (on `vaultIssuer` or any `additionalAuths` entry), a hand-written `eso` entry, a store the environment does not map, and a missing `certManagerPolicies` while the issuer is enabled. The store map doubles as an allow-list: `secretStores: [kubeconfigs]` is rejected.
+
+The **ansible path is unchanged** — seed-labda-1 passes `tokenPolicies` today; closing it there is a migration of its own.
+
 ## The two things that make this non-trivial
 
 ### Sticky, success-based gates

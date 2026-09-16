@@ -31,6 +31,11 @@ _params = option("params") or {}
 _oxr = _params?.oxr or {}
 _ocds = _params?.ocds or {}
 
+# EnvironmentConfig selected by spec.environmentConfig (label
+# cluster.stuttgart-things.com/environment). Rancher mode reads the Vault policy
+# mapping from `vault` there; an empty context is fine everywhere else.
+_env = (_params?.ctx or {})["apiextensions.crossplane.io/environment"] or {}
+
 _meta = _oxr?.metadata or {}
 _name = _meta?.name or "cluster"
 _ns = _meta?.namespace or "crossplane-system"
@@ -336,7 +341,7 @@ _groups = [
     [_kcChild] if _kcOpen else []
     [_joinChild] if _joinOpen else []
     [l.clusterAccess(_name, _ns, _spec)] if _accessOpen else []
-    [l.platformChild(_name, _ns, _spec, _accessShare?.apiEndpoint or "")] if _platOpen else []
+    [l.platformChild(_name, _ns, _spec, _accessShare?.apiEndpoint or "", _env)] if _platOpen else []
     [l.managementPlaneChild(_name, _ns, _spec)] if _mgmtOpen else []
     _usages
     [_dxrPatched]
