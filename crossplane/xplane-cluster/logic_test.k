@@ -787,3 +787,74 @@ test_self_cni_distributions_get_no_defaults = lambda {
     assert _p.spec.cni.enabled == False
     assert "cilium" not in _p.spec.cni
 }
+
+# --- who owns the Vault entry ----------------------------------------------
+_lifecycleSpec = _rancherSpec | {
+    kubeconfig = {
+        vaultSecretName = "vault-infra-kubeconfig-writer"
+        lifecycle = {vaultAddr = "https://vault.infra.example"}
+    }
+}
+
+# On by default where the entry is new (rancher); off where turning it on would
+# change the teardown of clusters that already exist (ansible).
+test_kubeconfig_lifecycle_default_follows_the_provisioner = lambda {
+    assert l.kubeconfigLifecycleEnabled({distribution = "rancher-rke2"}) == True
+    assert l.kubeconfigLifecycleEnabled({distribution = "k3s"}) == False
+}
+
+test_kubeconfig_lifecycle_explicit_wins_both_ways = lambda {
+    assert l.kubeconfigLifecycleEnabled({distribution = "rancher-rke2", kubeconfig = {
+        lifecycle = {enabled = False}
+    }}) == False
+    assert l.kubeconfigLifecycleEnabled({distribution = "k3s", kubeconfig = {
+        lifecycle = {enabled = True}
+    }}) == True
+}
+
+# Values travel as Workspace vars, so the module stays a constant and a cluster
+# name never lands inside a quoted HCL literal.
+test_kubeconfig_workspace_passes_values_as_vars = lambda {
+    _w = l.kubeconfigWorkspace("rke2-1", "default", _lifecycleSpec)
+    assert _w.kind == "Workspace"
+    assert _w.metadata.name == "rke2-1-kubeconfig-vault"
+    _vars = {v.key: v.value for v in _w.spec.forProvider.vars}
+    assert _vars["vault_addr"] == "https://vault.infra.example"
+    assert _vars["metadata_path"] == "kubeconfigs/metadata/rke2-1"
+    assert _vars["cluster_name"] == "rke2-1"
+}
+
+# The writer approle, in the tfvars shape the vault provider's auth_login reads.
+test_kubeconfig_workspace_uses_the_writer_credential = lambda {
+    _w = l.kubeconfigWorkspace("rke2-1", "default", _lifecycleSpec)
+    _f = _w.spec.forProvider.varFiles[0]
+    assert _f.source == "SecretKey"
+    assert _f.format == "HCL"
+    assert _f.secretKeyRef.name == "vault-kubeconfig-writer"
+    assert _f.secretKeyRef.key == "terraform.tfvars"
+}
+
+# It owns the ENTRY, not its content: the path is the metadata one (deleting it
+# removes every version) and reads are off, because a GET there returns a
+# different shape than the POST takes.
+test_kubeconfig_workspace_owns_the_entry_not_the_secret = lambda {
+    _w = l.kubeconfigWorkspace("rke2-1", "default", _lifecycleSpec)
+    _m = _w.spec.forProvider.module
+    assert "vault_generic_endpoint" in _m
+    assert "disable_read         = true" in _m
+    assert "custom_metadata" in _m
+    # No data write: the join play owns kubeconfigs/data/<cluster>.
+    assert "kubeconfigs/data" not in _m
+}
+
+# The vault path override the ansible path already uses applies here too.
+test_kubeconfig_workspace_follows_an_overridden_vault_path = lambda {
+    _w = l.kubeconfigWorkspace("rke2-1", "default", _lifecycleSpec | {
+        kubeconfig = {
+            vaultPath = "clusters/rke2-1"
+            lifecycle = {vaultAddr = "https://vault.infra.example", mount = "kubeconfigs"}
+        }
+    })
+    _vars = {v.key: v.value for v in _w.spec.forProvider.vars}
+    assert _vars["metadata_path"] == "kubeconfigs/metadata/clusters/rke2-1"
+}
