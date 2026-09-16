@@ -140,6 +140,12 @@ _cniXR = {
             chart = _cniSpec.chart
         if _cniSpec?.cilium:
             cilium = _cniSpec.cilium
+        # Forwarded like cilium and values. Dropping it is silent and bad in a
+        # specific way: cilium starts WITHOUT the Gateway API CRDs, enables no
+        # Gateway controller, and installing them later changes nothing until
+        # the operator and agents restart.
+        if _cniSpec?.gatewayAPI:
+            gatewayAPI = _cniSpec.gatewayAPI
         if _cniSpec?.values:
             values = _cniSpec.values
     }
