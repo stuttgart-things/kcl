@@ -851,3 +851,15 @@ test_cluster_secrets_custom_keys_replace_the_defaults = lambda {
     assert "16" in _vars["generated_keys_json"]
     assert _vars["literal_values_json"] == '{"user": "u"}'
 }
+
+# A later entry in a KCL config block sees the keys already set, so a second
+# `.format(name)` inside metadata reads the name that was just assigned —
+# `<x>-cluster-secrets-cluster-secrets`. The composed-resource name and the
+# object name must be the same string.
+test_cluster_secrets_resource_name_matches_the_object = lambda {
+    w = l.clusterSecretsWorkspace("pf", "default", {
+        clusterSecrets = {enabled = True, vaultAddr = "https://v"}
+    }, "c1")
+    assert w.metadata.name == "pf-cluster-secrets"
+    assert w.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "pf-cluster-secrets"
+}
