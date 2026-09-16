@@ -139,3 +139,24 @@ test_gateway_api_off_by_default = lambda {
     assert "gatewayAPI" not in l.values({clusterName = "kind-1"})
     assert l.values({clusterName = "kind-1", gatewayAPI = {enabled = True}}).gatewayAPI.enabled == True
 }
+
+# The direction is the whole fix: the CRD Release is protected (`of`), cilium's
+# Release is the user (`by`). Swapped, the Usage would hold cilium back until
+# the CRDs are gone — exactly the order that wedged rancher-join-test5.
+test_gateway_api_usage_protects_the_crds_from_cilium = lambda {
+    u = l.gatewayAPIUsage("c5-cni", "c5-cni-gateway-api", "c5-cni-cilium")
+    assert u.kind == "Usage"
+    assert u.spec.of.resourceRef.name == "c5-cni-gateway-api"
+    assert u.spec.by.resourceRef.name == "c5-cni-cilium"
+    assert u.spec.of.kind == "Release" and u.spec.by.kind == "Release"
+
+    # Replay, or a teardown would stop at the rejected CRD delete and wait for
+    # a human to issue it again.
+    assert u.spec.replayDeletion == True
+}
+
+test_gateway_api_usage_composed_name_matches_the_object = lambda {
+    u = l.gatewayAPIUsage("c5-cni", "a", "b")
+    assert u.metadata.name == "c5-cni-cilium-uses-gateway-api"
+    assert u.metadata.annotations["krm.kcl.dev/composition-resource-name"] == u.metadata.name
+}

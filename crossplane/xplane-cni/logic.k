@@ -182,3 +182,46 @@ validate = lambda spec: {str:} -> bool {
     assert _empty or not gatewayAPIEnabled(spec) or gatewayAPIVersion(spec), "spec.gatewayAPI.enabled is set but no Gateway API version is known for cilium " + chart(spec).version + " — set spec.gatewayAPI.version explicitly (cilium 1.19 pairs with 1.4.1, 1.20 with 1.6.1)"
     True
 }
+
+gatewayAPIUsage = lambda name: str, gwReleaseName: str, ciliumReleaseName: str -> {str:any} {
+    """Teardown order: cilium's Release goes BEFORE the Gateway API CRDs.
+
+    The install order was already right — CRDs first, cilium gated on them —
+    but nothing ordered the delete. Crossplane removes composed resources in
+    parallel, and the CRD Release, being small, won: rancher-join-test5 lost its
+    Gateway API CRDs first, and then cilium could never be uninstalled. Its
+    release manifest carries `GatewayClass/cilium`, Helm cannot build a manifest
+    whose kind no longer exists, and `helm uninstall` fails with
+    "failed to delete release: cilium" on every retry — forever, because the
+    only thing that would fix it is the CRD that is gone.
+
+    So the CRD Release is IN USE BY cilium's. replayDeletion re-issues the
+    blocked delete once cilium is gone, so a teardown still completes on its own.
+    """
+
+    # Computed ONCE, outside the config block: inside it a later entry reads
+    # the `name` key just set, and the composed name would come out doubled
+    # (the same trap xplane-platform 0.23.1 fixed).
+    _key = "{}-cilium-uses-gateway-api".format(name)
+    {
+        apiVersion = "protection.crossplane.io/v1beta1"
+        kind = "Usage"
+        metadata = {
+            name = _key
+            annotations = {"krm.kcl.dev/composition-resource-name" = _key}
+        }
+        spec = {
+            replayDeletion = True
+            of = {
+                apiVersion = "helm.m.crossplane.io/v1beta1"
+                kind = "Release"
+                resourceRef.name = gwReleaseName
+            }
+            by = {
+                apiVersion = "helm.m.crossplane.io/v1beta1"
+                kind = "Release"
+                resourceRef.name = ciliumReleaseName
+            }
+        }
+    }
+}
