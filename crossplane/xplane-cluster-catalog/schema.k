@@ -109,10 +109,42 @@ schema Distribution:
     the name in the distribution stage alone would break that agreement and the
     upload would fetch a path that does not exist."""
 
+    provisioner: str = "ansible"
+    """WHO creates the cluster, which decides what `playbooks` above even means:
+
+      "ansible" — the playbooks install the distribution on an
+                  already-provisioned VM. The two stages a consumer runs are
+                  the distribution install and the kubeconfig upload.
+      "rancher" — Rancher creates the cluster; the playbooks JOIN a node into
+                  it and publish that node's kubeconfig. A consumer must
+                  compose a RancherCluster XR, wait for the node-registration
+                  Secret it publishes, and run this one stage instead of the
+                  distribution + kubeconfig pair.
+
+    The distinction is not cosmetic: on the rancher path the cluster exists
+    before any node does, and everything downstream (kubeconfig, CNI, Argo CD)
+    hangs off a cluster whose API server is not reachable through Rancher until
+    a CNI runs — see crossplane-configurations#422."""
+
+    machineGlobalConfig: {str:any} = {}
+    """`rkeConfig.machineGlobalConfig` for the provisioning Cluster — the
+    distribution's own config file. Only meaningful with provisioner
+    "rancher"; a consumer passes it to the RancherCluster XR."""
+
+    cniDefaults: {str:any} = {}
+    """Defaults for the Platform's `Cni` child: the cluster-shape facts a CNI on
+    THIS distribution needs, as `{cilium, gatewayAPI, values}`. A consumer merges
+    them UNDER the XR's own `platform.cni`, so a caller can still override one
+    key. Only meaningful where cniOwnership is "platform" — where the
+    distribution installs its own CNI there is nothing to default."""
+
     check:
         len(playbooks) > 0, "a distribution needs at least one playbook"
         cniOwnership in ["self", "platform"], "cniOwnership must be 'self' or 'platform'"
         len(inventoryGroups) > 0, "inventoryGroups must name at least one group"
+        provisioner in ["ansible", "rancher"], "provisioner must be 'ansible' or 'rancher'"
+        provisioner == "rancher" or len(machineGlobalConfig) == 0, "machineGlobalConfig belongs to the rancher provisioner — the ansible path configures the distribution through vars"
+        cniOwnership == "platform" or len(cniDefaults) == 0, "cniDefaults only apply where the Platform owns the CNI"
 
 schema Stage:
     """A shared ansible stage that is not distribution-specific."""

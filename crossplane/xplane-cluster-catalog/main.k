@@ -12,6 +12,7 @@
 # the run and for why its pins are not the play's defaults.
 import .distributions.k3s as k3s
 import .distributions.kind as kind
+import .distributions.rancher_rke2 as rancher_rke2
 import .distributions.rke2 as rke2
 import sizes as sz
 import schema as s
@@ -19,6 +20,9 @@ import schema as s
 distributions: {str:s.Distribution} = {
     k3s = k3s.k3s
     kind = kind.kind
+    # Rancher creates the cluster and a node joins it; the playbook above is the
+    # JOIN, not an install. Reference run: rancher-join-test4, 2026-09-15.
+    "rancher-rke2" = rancher_rke2.rancher_rke2
     rke2 = rke2.rke2
 }
 
