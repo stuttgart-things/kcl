@@ -238,7 +238,7 @@ runIDFor = lambda spec: {str:any}, stage: str -> str {
     str(_ids[stage]) if stage in _ids else ""
 }
 
-_ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str], vaultSecret: str -> {str:any} {
+_ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks: [str], vars: [str], inventory: [str], vaultSecret: str, extraEnvSecret: str -> {str:any} {
     _ans = stageAnsible(spec, stage)
     _runID = runIDFor(spec, stage)
     _suffix = "-{}".format(_runID) if _runID else ""
@@ -264,6 +264,12 @@ _ansibleRun = lambda name: str, ns: str, stage: str, spec: {str:any}, playbooks:
             # byte-identical to before this field existed.
             if vaultSecret:
                 vaultSecretName = vaultSecret
+            # The Rancher join reads its registration command from the
+            # environment, not from varsFile: the command carries a token, and
+            # varsFile lands in a ConfigMap. Empty for every other stage, so
+            # their params stay byte-identical.
+            if extraEnvSecret:
+                extraEnvSecretName = extraEnvSecret
             if _ans?.extraCollections:
                 ansibleExtraCollections = _ans.extraCollections
             if _ans?.extraCollections:
@@ -278,7 +284,7 @@ distributionRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:an
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
     _vars = renderVars(_dist.vars) + clusterNameVars(spec?.distribution or "k3s", _cluster) + (stageAnsible(spec, "distribution")?.extraVars or [])
-    _ansibleRun(name, ns, "distribution", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip), "")
+    _ansibleRun(name, ns, "distribution", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip), "", "")
 }
 
 kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any} {
@@ -347,7 +353,61 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
     # which stays `vault-kubeconfigs`: that is a ClusterProviderConfig created by
     # the provider-kubeconfig-vault chart, not a Secret.
     _vaultSecret = (spec?.kubeconfig or {})?.vaultSecretName or "vault"
-    _ansibleRun(name, ns, "kubeconfig", spec, _stage.playbooks, _vars, renderInventory(_stage.inventoryGroups, ip), _vaultSecret)
+    _ansibleRun(name, ns, "kubeconfig", spec, _stage.playbooks, _vars, renderInventory(_stage.inventoryGroups, ip), _vaultSecret, "")
+}
+
+# --- the rancher path ------------------------------------------------------
+# One stage instead of two. On the ansible path the distribution run installs
+# Kubernetes and a second run uploads the kubeconfig; here Rancher installs it
+# (the node runs the registration command Rancher published) and the SAME play
+# uploads the kubeconfig, because both need this node at this moment.
+joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret: str -> {str:any} {
+    _cluster = spec?.clusterName or name
+    _dist = cat.getDistribution(spec?.distribution or "k3s")
+    _kc = spec?.kubeconfig or {}
+
+    # The same credential the ansible path uses for its upload stage — the play
+    # writes to kubeconfigs/<cluster> with it.
+    _vaultSecret = _kc?.vaultSecretName or "vault"
+    _vars = renderVars(_dist.vars) + clusterNameVars(spec?.distribution or "k3s", _cluster) + (stageAnsible(spec, "join")?.extraVars or [])
+    _ansibleRun(name, ns, "join", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip), _vaultSecret, nodeCommandSecret)
+}
+
+# The RancherCluster child: Rancher creates the cluster, and its
+# nodeRegistration Secret is what the VM's join stage waits for.
+#
+# publish is forced on and secretNamespace defaults to the ansible pipeline
+# namespace, because ansible-run reads extraEnvSecretName from the PipelineRun's
+# namespace — not from next to this XR. A registration command published only
+# beside the XR is a command the join cannot read.
+rancherChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
+    _cluster = spec?.clusterName or name
+    _dist = cat.getDistribution(spec?.distribution or "k3s")
+    _r = spec?.rancher or {}
+    _ans = stageAnsible(spec, "join")
+    _passthrough = {k: v for k, v in _r if k not in ["name", "machineGlobalConfig", "nodeRegistration"]}
+
+    # Catalog first, XR on top: a caller can override one key without
+    # restating the set that keeps rke2 out of the network.
+    _mgc = _dist.machineGlobalConfig | (_r?.machineGlobalConfig or {})
+    _nodeReg = (_r?.nodeRegistration or {}) | {
+        publish = True
+        secretNamespace = (_r?.nodeRegistration or {})?.secretNamespace or _ans?.pipelineNamespace or "tekton-ci"
+    }
+    {
+        apiVersion = "resources.stuttgart-things.com/v1alpha1"
+        kind = "RancherCluster"
+        metadata = {
+            name = "{}-rancher".format(name)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "rancher"}
+        }
+        spec = _passthrough | {
+            name = _cluster
+            machineGlobalConfig = _mgc
+            nodeRegistration = _nodeReg
+        }
+    }
 }
 
 # vaultSecretName says WHERE THE UPLOAD WRITES, providerConfigRef says WHERE THE
@@ -370,6 +430,11 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
 kubeconfigVaultPairs: {str:str} = {
     "vault" = "vault-kubeconfigs"
     "vault-infra" = "vault-kubeconfigs-infra"
+    # The rancher join uploads with the WRITER approle; reading the entry back
+    # still goes through the infra vault's read config. Without this pair the
+    # fallback below would send the RemoteCluster to the wrong Vault, and the
+    # only symptom is "secret not found" on a path that exists.
+    "vault-infra-kubeconfig-writer" = "vault-kubeconfigs-infra"
     # LabDA, 2026-08-20. Eigener Vault (vault-vsphere.tiab.labda.sva.de), NICHT
     # einer der beiden LabUL-Vaults: LabUL-vSphere wird abgeschaltet, und ein
     # LabDA-Cluster soll seinen kubeconfig nicht dort ablegen. Der Eintrag hier
@@ -426,6 +491,12 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> 
     _userCni = (spec?.platform or {})?.cni or {}
     _cniEnabled = cat.platformCniEnabled(spec?.distribution or "k3s")
 
+    # Cluster-shape facts from the catalog (API server address, gateway API,
+    # l2/externalIPs, hubble) UNDER the caller's own cni block, so one key can
+    # be overridden without restating the set. Empty for distributions that
+    # install their own CNI.
+    _cniDefaults = cat.getDistribution(spec?.distribution or "k3s").cniDefaults
+
     # vaultIssuer.kubernetesHost is the API server address Vault's Kubernetes
     # auth mount is configured with. Every Platform in the fleet states it by
     # hand today (`https://10.31.102.108:6443`), which is a copied node IP: it
@@ -457,7 +528,7 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str -> 
         }
         spec = _passthrough | _vaultBlock | {
             clusterName = _cluster
-            cni = _userCni | {enabled = _cniEnabled}
+            cni = _cniDefaults | _userCni | {enabled = _cniEnabled}
         }
     }
 }
@@ -508,6 +579,7 @@ groupOf = {
     "ClusterAccess" = "config.stuttgart-things.com/v1alpha1"
     "Platform" = "config.stuttgart-things.com/v1alpha1"
     "ManagementPlane" = "config.stuttgart-things.com/v1alpha1"
+    "RancherCluster" = "resources.stuttgart-things.com/v1alpha1"
 }
 
 # Ties the two maps together, so a fourth provider cannot be half-added: the

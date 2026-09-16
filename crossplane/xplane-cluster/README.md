@@ -7,7 +7,7 @@ Depends on [`xplane-cluster-catalog`](../xplane-cluster-catalog/) for sizes and 
 ## What it emits
 
 ```
-ClusterStack
+ClusterStack                                                provisioner: ansible
 ├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm            VM + base-OS ansible
 ├─ AnsibleRun                          {name}-distribution  k3s / kind install
 ├─ AnsibleRun                          {name}-kubeconfig    kubeconfig -> Vault
@@ -15,6 +15,33 @@ ClusterStack
 ├─ Platform                            {name}-platform      flux, apps, cilium, …
 └─ Usage ×3                                                 teardown ordering
 ```
+
+```
+ClusterStack                                                provisioner: rancher
+├─ RancherCluster                      {name}-rancher       Rancher creates the cluster
+├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm            waits for the node command
+├─ AnsibleRun                          {name}-join          join + kubeconfig -> Vault
+├─ ClusterAccess                       {name}-access        -> the ClusterProviderConfigs
+├─ Platform                            {name}-platform      cni (from the catalog), …
+└─ Usage ×4                                                 + the VM outlives the RancherCluster
+```
+
+## Two provisioners (0.13.0)
+
+The catalog entry decides which shape a stack has — `provisioner: ansible` (k3s, kind, rke2) or `provisioner: rancher` (`rancher-rke2`).
+
+On the **rancher** path the cluster exists before any node does:
+
+1. **`RancherCluster` first.** It creates the cluster in Rancher and publishes the node-registration command as a Secret. `nodeRegistration.publish` is forced on and `secretNamespace` defaults to the ansible pipeline namespace — `ansible-run` reads `extraEnvSecretName` from the **PipelineRun's** namespace, so a command published only next to the XR is one the join cannot read.
+2. **The VM waits for that Secret.** A node that boots before Rancher minted a token has nothing to join, and the play would fail on an empty env var rather than retry. So `{name}-vm` is gated on `status.nodeCommandSecret`, read straight off the child.
+3. **One join stage instead of two.** `{name}-join` runs `sthings.rke.rancher_register`, which registers the node **and** uploads its admin kubeconfig to Vault — both need this node at this moment. The command travels as an env Secret, never through `varsFile`: it carries a token, and varsFile lands in a ConfigMap. Re-runs work the same as elsewhere: `spec.runIDs.join`.
+4. **Everything after is unchanged** — `ClusterAccess` reads the kubeconfig from Vault, `Platform` follows. The CNI is the difference: `cniOwnership: platform` on this entry, so the Platform installs cilium through the node kubeconfig, and the catalog's `cniDefaults` (API address, Gateway API, L2, externalIPs, hubble) are merged **under** whatever the caller put in `spec.platform.cni`.
+
+**Why the CNI cannot come from Rancher:** every path Rancher offers runs through its proxy, which needs `cattle-cluster-agent` — an ordinary Deployment on the pod network. With no CNI it stays `Pending` and the Rancher kubeconfig answers 403. Measured on `rancher-join-test4`; see [crossplane-configurations#422](https://github.com/stuttgart-things/crossplane-configurations/issues/422).
+
+**One extra Usage:** the VM must outlive the `RancherCluster`, which applies Objects *through* the cluster its own node runs (bootstrap namespace, Argo CD service account, vault reviewer). If the machine goes first those finalizers hang against a dead API server — the shape that took manual patching in #430.
+
+`spec.rancher` is a verbatim passthrough of the `RancherCluster` spec, the same contract `spec.platform` has: `environmentConfig`, `argocd`, `vaultAuth`, `clusterSpec`, and `machineGlobalConfig` merged **over** the catalog's.
 
 ## The two things that make this non-trivial
 

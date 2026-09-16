@@ -683,3 +683,107 @@ test_proxmox_stays_the_default = lambda {
     _v = l.vmChild("c1", "default", {clusterName = "c1"}, cat.getSize("small"))
     assert _v.kind == "NativeProxmoxVM"
 }
+
+# --- the rancher path ------------------------------------------------------
+_rancherSpec = {
+    provider = "proxmox"
+    distribution = "rancher-rke2"
+    clusterName = "rke2-1"
+    kubeconfig = {vaultSecretName = "vault-infra-kubeconfig-writer"}
+    rancher = {
+        environmentConfig = "rancher-join-test"
+        argocd = {register = True}
+    }
+}
+
+test_rancher_child_is_a_ranchercluster = lambda {
+    _c = l.rancherChild("rke2-1", "default", _rancherSpec)
+    assert _c.kind == "RancherCluster"
+    assert _c.metadata.name == "rke2-1-rancher"
+    assert _c.metadata.namespace == "default"
+    assert _c.spec.name == "rke2-1"
+    # Passthrough: whatever the caller puts under spec.rancher reaches the child.
+    assert _c.spec.environmentConfig == "rancher-join-test"
+    assert _c.spec.argocd.register == True
+}
+
+# The registration command has to land where ansible-run reads it: the
+# PipelineRun's namespace, not next to the XR.
+test_rancher_child_publishes_the_node_command_where_ansible_reads_it = lambda {
+    _c = l.rancherChild("rke2-1", "default", _rancherSpec)
+    assert _c.spec.nodeRegistration.publish == True
+    assert _c.spec.nodeRegistration.secretNamespace == "tekton-ci"
+}
+
+# The catalog keeps rke2 out of the network; the XR can still override one key.
+test_rancher_child_takes_machine_global_config_from_the_catalog = lambda {
+    _c = l.rancherChild("rke2-1", "default", _rancherSpec)
+    assert _c.spec.machineGlobalConfig["cni"] == "none"
+    assert _c.spec.machineGlobalConfig["disable-kube-proxy"] == True
+    assert _c.spec.machineGlobalConfig["ingress-controller"] == "none"
+
+    _o = l.rancherChild("rke2-1", "default", _rancherSpec | {
+        rancher = {
+            machineGlobalConfig = {"ingress-controller" = "traefik"}
+        }
+    })
+    assert _o.spec.machineGlobalConfig["ingress-controller"] == "traefik"
+    assert _o.spec.machineGlobalConfig["cni"] == "none"
+}
+
+# One stage, not two: the play registers the node AND uploads the kubeconfig.
+test_join_run_registers_and_uploads = lambda {
+    _j = l.joinRun("rke2-1", "default", _rancherSpec, "10.31.102.147", "rke2-1-node-command")
+    assert _j.kind == "AnsibleRun"
+    assert _j.metadata.name == "rke2-1-join"
+    assert _j.spec.ansiblePlaybooks == ["sthings.rke.rancher_register"]
+    assert "rancher_upload_kubeconfig+-true" in _j.spec.ansibleVarsFile
+    assert "rancher_kubeconfig_path+-/etc/rancher/rke2/rke2.yaml" in _j.spec.ansibleVarsFile
+    assert "cluster_name+-rke2-1" in _j.spec.ansibleVarsFile
+}
+
+# The command carries a token, so it travels as an env Secret — varsFile lands
+# in a ConfigMap.
+test_join_run_takes_the_command_from_the_environment = lambda {
+    _j = l.joinRun("rke2-1", "default", _rancherSpec, "10.31.102.147", "rke2-1-node-command")
+    assert _j.spec.extraEnvSecretName == "rke2-1-node-command"
+    assert _j.spec.vaultSecretName == "vault-infra-kubeconfig-writer"
+}
+
+# Every other stage keeps its params byte-identical — extraEnvSecretName is
+# emitted only when non-empty.
+test_other_stages_have_no_extra_env_secret = lambda {
+    _d = l.distributionRun("k3s-1", "default", {distribution = "k3s"}, "10.0.0.1")
+    assert "extraEnvSecretName" not in _d.spec
+}
+
+# The writer approle writes to the infra vault; reading the entry back has to
+# go through that vault's read config, not the default one.
+test_writer_secret_reads_back_through_the_infra_vault = lambda {
+    assert l.kubeconfigReadRef({vaultSecretName = "vault-infra-kubeconfig-writer"}) == "vault-kubeconfigs-infra"
+}
+
+# Cluster-shape facts come from the catalog; the caller can still override one.
+test_platform_cni_defaults_come_from_the_catalog = lambda {
+    _p = l.platformChild("rke2-1", "default", _rancherSpec, "https://10.31.102.147:6443")
+    assert _p.spec.cni.enabled == True
+    assert _p.spec.cni.cilium.k8sServiceHost == "127.0.0.1"
+    assert _p.spec.cni.gatewayAPI.enabled == True
+
+    _o = l.platformChild("rke2-1", "default", _rancherSpec | {
+        platform = {
+            cni = {
+                cilium = {k8sServiceHost = "10.31.102.9"}
+            }
+        }
+    }, "https://10.31.102.147:6443")
+    assert _o.spec.cni.cilium.k8sServiceHost == "10.31.102.9"
+}
+
+# A distribution that installs its own CNI gets neither the component nor the
+# defaults — two CNIs is the failure this rule exists to prevent.
+test_self_cni_distributions_get_no_defaults = lambda {
+    _p = l.platformChild("k3s-1", "default", {distribution = "k3s", platform = {}}, "")
+    assert _p.spec.cni.enabled == False
+    assert "cilium" not in _p.spec.cni
+}
