@@ -168,6 +168,11 @@ _cniResources = [_release] if (_observeReady and _ciliumGateOpen) else []
 
 _releaseReady = _isReady(_releaseName)
 
+# --- Teardown order: cilium before its Gateway API CRDs (see l.gatewayAPIUsage) ---
+# Emitted once BOTH Releases exist. Before that there is nothing to order, and a
+# Usage naming a resource that does not exist yet guards nothing.
+_usageResources = [l.gatewayAPIUsage(_name, _gwReleaseName, _releaseName)] if (_gwEnabled and _gwReleaseName in _ocds and _releaseName in _ocds) else []
+
 _xrStatus = _oxr | {
     status = {
         provider = l.provider(_spec)
@@ -181,4 +186,4 @@ _xrStatus = _oxr | {
     }
 }
 
-items = _observeResources + _gwResources + _cniResources + [_xrStatus]
+items = _observeResources + _gwResources + _cniResources + _usageResources + [_xrStatus]
