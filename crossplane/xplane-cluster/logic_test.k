@@ -1021,3 +1021,28 @@ test_auto_project_can_be_overridden = lambda {
     }}
     assert l.argocdBlock(_s).labels["auto-project"] == "false"
 }
+
+# Found tearing down rancher-join-test6: phase 1 sets platformEnabled: false on a
+# stack that still lists secretStores. That must render (and derive nothing
+# store-related), or Crossplane cannot remove the Platform and the teardown
+# stops.
+test_platform_disabled_with_secret_stores_still_renders = lambda {
+    _s = {
+        clusterName = "c6"
+        platformEnabled = False
+        secretStores = ["homerun2-pr", "observability"]
+        rancher = {
+            argocd = {register = True}
+        }
+        platform = {
+            vaultIssuer = {enabled = True, vaultAddr = "https://v", additionalAuths = [{name = "eso"}]}
+            clusterSecrets = {enabled = True}
+        }
+    }
+    _b = l.argocdBlock(_s)
+    assert "security-platform/external-secrets-stores" not in _b.labels
+    assert "external-secrets.stuttgart-things.com/kv-mounts" not in _b.annotations
+    assert "observability-platform.stuttgart-things.com/secrets-config" not in _b.labels
+    # registration itself is unaffected
+    assert _b.labels["auto-project"] == "true"
+}

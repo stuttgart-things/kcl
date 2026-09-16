@@ -468,7 +468,13 @@ derivedArgocd = lambda spec: {str:any} -> {str:any} {
     _platOn = spec.platformEnabled if "platformEnabled" in spec else True
     _vi = _plat?.vaultIssuer or {}
     _viOn = _platOn and (_vi?.enabled or False)
-    _stores = spec?.secretStores or []
+
+    # With the Platform off there is no Vault issuer, so there are no stores to
+    # derive — and nothing to complain about. `platformEnabled: false` is phase 1
+    # of every teardown: asserting here made the whole render fail, Crossplane
+    # could no longer remove the Platform, and rancher-join-test6's teardown
+    # stopped dead (0.15.2).
+    _stores = (spec?.secretStores or []) if _platOn else []
     _esoAuths = [a for a in (_vi?.additionalAuths or []) if a?.name == ESO_AUTH_NAME]
     _cs = _plat?.clusterSecrets or {}
     _csOn = _platOn and (_cs?.enabled or False)
