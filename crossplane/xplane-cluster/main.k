@@ -43,6 +43,12 @@ _size = cat.getSize(_spec?.size or "medium")
 _dist = cat.getDistribution(_spec?.distribution or "k3s")
 _supported = cat.assertSizeSupported(_spec?.distribution or "k3s", _spec?.size or "medium")
 
+# WHO creates the cluster. On the rancher path Rancher does, and the play this
+# module runs is a JOIN — so the distribution and kubeconfig stages are replaced
+# by a single join stage, and the VM waits for Rancher's registration command
+# instead of starting the moment it is provisioned.
+_isRancher = _dist.provisioner == "rancher"
+
 # A SIBLING of spec.platform, not a key inside it: `platform` is a verbatim
 # passthrough of the Platform XRD's spec, and a preserve-unknown-fields block
 # that also declares known properties makes schema converters emit
@@ -80,6 +86,17 @@ _vmReady = len([c for c in _vmConds if c?.type == "Ready" and c?.status == "True
 # PipelineRun's own verdict, not merely the AnsibleRun XR's readiness.
 _baseosOk = (_vmShare?.ansibleSucceeded or "") == "True"
 
+_rancherObs = _byName("{}-rancher".format(_name))
+_rancher = _rancherObs[0] if _rancherObs else {}
+
+# What the VM waits for: the Secret RancherCluster publishes with the node
+# registration command. Empty until Rancher has minted the token.
+_nodeCommandSecret = _rancher?.status?.nodeCommandSecret or ""
+
+_joinObs = _byName("{}-join".format(_name))
+_joinRun = _joinObs[0] if _joinObs else {}
+_joinOk = (_joinRun?.status?.succeeded or "") == "True"
+
 _distObs = _byName("{}-distribution".format(_name))
 _distRun = _distObs[0] if _distObs else {}
 _distOk = (_distRun?.status?.succeeded or "") == "True"
@@ -110,9 +127,19 @@ _platReady = len([c for c in (_plat?.status?.conditions or []) if c?.type == "Re
 _platDomain = l.platformDomain(_plat)
 
 # --- gates -----------------------------------------------------------------
-_distOpen = (_vmReady and _vmIP != "" and _baseosOk) or len(_distObs) > 0
-_kcOpen = (_distOk and _vmIP != "") or len(_kcObs) > 0
-_accessOpen = _kcOk or len(_accessObs) > 0
+# The VM is unconditional on the ansible path. On the rancher path it waits for
+# the registration command: a node that boots before Rancher published one has
+# nothing to join, and the join play would fail on an empty env var rather than
+# retry.
+_vmOpen = (not _isRancher) or _nodeCommandSecret != "" or len(_vmObs) > 0
+
+_distOpen = (not _isRancher) and ((_vmReady and _vmIP != "" and _baseosOk) or len(_distObs) > 0)
+_kcOpen = (not _isRancher) and ((_distOk and _vmIP != "") or len(_kcObs) > 0)
+
+# The join replaces both of the above — it registers the node AND uploads the
+# kubeconfig, so ClusterAccess waits for this one instead.
+_joinOpen = _isRancher and ((_vmReady and _vmIP != "" and _baseosOk) or len(_joinObs) > 0)
+_accessOpen = (_joinOk if _isRancher else _kcOk) or len(_accessObs) > 0
 _platOpen = _platformEnabled and (_accessReady or len(_platObs) > 0)
 
 # Gated on ClusterAccess, the same as the Platform child and for the same
@@ -173,6 +200,7 @@ _sealed = lambda run: {str:any}, stage: str -> bool {
 
 _distChild = _reemit(_distRun, "distribution") if (len(_distObs) > 0 and (_vmIP == "" or _sealed(_distRun, "distribution"))) else l.distributionRun(_name, _ns, _spec, _vmIP)
 _kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and (_vmIP == "" or _sealed(_kcRun, "kubeconfig"))) else l.kubeconfigRun(_name, _ns, _spec, _vmIP)
+_joinChild = _reemit(_joinRun, "join") if (len(_joinObs) > 0 and (_vmIP == "" or _sealed(_joinRun, "join"))) else l.joinRun(_name, _ns, _spec, _vmIP, _nodeCommandSecret)
 
 # --- teardown ordering -----------------------------------------------------
 # Only the pairs that matter. Usage is not transitive, so a full mesh would be
@@ -224,6 +252,12 @@ _usageGroups = [
     [l.usage("ClusterAccess", "{}-access".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-access", True, _name)] if (_platOpen and _accessOpen) else []
     [l.usage(_vmKind, "{}-vm".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-vm", True, _name)] if _accessOpen else []
     [l.usage("ClusterStack", _name, "Platform", "{}-platform".format(_name), "stack-uses-platform", False, _name)] if _platOpen else []
+    # The RancherCluster applies Objects THROUGH the cluster its own node runs:
+    # the bootstrap namespace, the Argo CD service account, the vault reviewer.
+    # If the machine goes first those finalizers hang against a dead API server
+    # — the same shape as platform-uses-vm, and the reason #430 took manual
+    # patching to clear.
+    [l.usage(_vmKind, "{}-vm".format(_name), "RancherCluster", "{}-rancher".format(_name), "rancher-uses-vm", True, _name)] if (_isRancher and _vmOpen) else []
     # The ManagementPlane needs the same three guards as the Platform, and for
     # the same reasons: it applies everything it owns THROUGH the VM and the
     # ClusterAccess, so losing either first leaves its Objects hanging against a
@@ -242,7 +276,7 @@ _usages = sum(_usageGroups, [])
 _platDone = _platReady or (not _platformEnabled and _accessReady)
 _mgmtDone = _mgmtReady or not _mgmtEnabled
 
-_stage = "ready" if (_platDone and _mgmtDone) else ("platform" if (_platOpen and not _platDone) else ("management-plane" if _mgmtOpen else ("access" if _accessOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else "vm"))))))
+_stage = "ready" if (_platDone and _mgmtDone) else ("platform" if (_platOpen and not _platDone) else ("management-plane" if _mgmtOpen else ("access" if _accessOpen else ("join" if _joinOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else ("vm" if _vmOpen else "rancher"))))))))
 
 _dxr = _params?.dxr or {}
 _dxrPatched = _dxr | {
@@ -268,6 +302,9 @@ _dxrPatched = _dxr | {
             baseos = {succeeded = _baseosOk}
             distribution = {succeeded = _distOk, emitted = _distOpen}
             kubeconfig = {succeeded = _kcOk, emitted = _kcOpen}
+            if _isRancher:
+                rancher = {nodeCommandSecret = _nodeCommandSecret, emitted = True}
+                join = {succeeded = _joinOk, emitted = _joinOpen}
             access = {ready = _accessReady, emitted = _accessOpen}
             platform = {ready = _platReady, emitted = _platOpen}
             managementPlane = {ready = _mgmtReady, emitted = _mgmtOpen}
@@ -279,9 +316,11 @@ _dxrPatched = _dxr | {
 # Single-expression concatenation, not `+=` accumulation — the mutable pattern
 # double-emitted groups in bootstrap/cilium.
 _groups = [
-    [l.vmChild(_name, _ns, _spec, _size)]
+    [l.rancherChild(_name, _ns, _spec)] if _isRancher else []
+    [l.vmChild(_name, _ns, _spec, _size)] if _vmOpen else []
     [_distChild] if _distOpen else []
     [_kcChild] if _kcOpen else []
+    [_joinChild] if _joinOpen else []
     [l.clusterAccess(_name, _ns, _spec)] if _accessOpen else []
     [l.platformChild(_name, _ns, _spec, _accessShare?.apiEndpoint or "")] if _platOpen else []
     [l.managementPlaneChild(_name, _ns, _spec)] if _mgmtOpen else []
