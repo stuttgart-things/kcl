@@ -1281,18 +1281,47 @@ test_app_secret_sets_write_generated_and_literal_keys_only = lambda {
 test_app_secret_stores_cover_every_read = lambda {
     _p = _plan(_appOrder)
     assert _p.stores == ["homerun2", "schmetterpause"]
-    assert _p.platforms == {
-        "homerun2-platform" = {stores = ["homerun2"]}
-        "tabletennis-platform" = {stores = ["schmetterpause", "homerun2"]}
-    }
+    assert _p.platforms["homerun2-platform"].stores == ["homerun2"]
+    assert _p.platforms["tabletennis-platform"].stores == ["schmetterpause", "homerun2"]
 }
 
-# One store for the platform: gate and store name. Two: neither, because the
-# ApplicationSet takes a single store name (#464 step 6).
-test_app_secret_gate_only_where_one_store_serves = lambda {
+# Owners, not consumers: tabletennis-platform reads schmetterpause's own entries,
+# the shared backup key pair and homerun2's entry (zaehlwerk, light-catcher).
+test_app_secret_sources_are_the_owners = lambda {
+    _p = _plan(_appOrder)
+    assert _p.platforms["homerun2-platform"].sources == [
+        {kind = "app", name = "homerun2", mount = "homerun2", entry = "c8"}
+        {kind = "shared", name = "git-pat", mount = "homerun2", entry = "_git-pat"}
+    ]
+    assert _p.platforms["tabletennis-platform"].sources == [
+        {kind = "app", name = "schmetterpause", mount = "schmetterpause", entry = "c8"}
+        {kind = "shared", name = "object-store-backup", mount = "schmetterpause", entry = "_backup"}
+        {kind = "app", name = "homerun2", mount = "homerun2", entry = "c8"}
+    ]
+}
+
+# Every platform with app secrets gets the gate and a store + entry per owner;
+# the single `secret-store` only where one store serves everything.
+test_app_secret_facts_per_owner = lambda {
     _a = l.appSecretArgocd(_plan(_appOrder))
-    assert _a.labels == {"homerun2-platform.stuttgart-things.com/secrets-config" = "true"}
-    assert _a.annotations == {"homerun2-platform.stuttgart-things.com/secret-store" = "vault-homerun2"}
+    assert _a.labels == {
+        "homerun2-platform.stuttgart-things.com/secrets-config" = "true"
+        "tabletennis-platform.stuttgart-things.com/secrets-config" = "true"
+    }
+    assert _a.annotations == {
+        "homerun2-platform.stuttgart-things.com/secret-store" = "vault-homerun2"
+        "homerun2-platform.stuttgart-things.com/homerun2-secret-store" = "vault-homerun2"
+        "homerun2-platform.stuttgart-things.com/homerun2-secret-key" = "c8"
+        "homerun2-platform.stuttgart-things.com/shared-git-pat-secret-store" = "vault-homerun2"
+        "homerun2-platform.stuttgart-things.com/shared-git-pat-secret-key" = "_git-pat"
+        "tabletennis-platform.stuttgart-things.com/schmetterpause-secret-store" = "vault-schmetterpause"
+        "tabletennis-platform.stuttgart-things.com/schmetterpause-secret-key" = "c8"
+        "tabletennis-platform.stuttgart-things.com/shared-object-store-backup-secret-store" = "vault-schmetterpause"
+        "tabletennis-platform.stuttgart-things.com/shared-object-store-backup-secret-key" = "_backup"
+        "tabletennis-platform.stuttgart-things.com/homerun2-secret-store" = "vault-homerun2"
+        "tabletennis-platform.stuttgart-things.com/homerun2-secret-key" = "c8"
+    }
+    assert "tabletennis-platform.stuttgart-things.com/secret-store" not in _a.annotations
 }
 
 test_app_secret_facts_reach_the_rancher_cluster = lambda {

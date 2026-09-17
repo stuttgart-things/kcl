@@ -904,7 +904,9 @@ appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [st
     sets      — [{app, mount, secrets}] for the VaultSecretSets, apps with
                 nothing to write left out;
     stores    — real mounts consumers read, in profile order;
-    platforms — umbrella label -> {stores} per catalog profile with appSecrets.
+    platforms — umbrella label -> {stores, sources} per catalog profile with
+                appSecrets; sources are the owners (app or shared name) with
+                mount and entry.
     """
     _ve = env?.vault or {}
     _envName = spec?.environmentConfig or "(unset)"
@@ -997,7 +999,28 @@ appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [st
     _readsOf = lambda n: str -> [str] {
         dedup(([_realMount[n]] if [s for s in _written if s.app == n] else []) + [_shared[k.shared].mount for e in (profiles[n]?.entries or []) for _kn, k in e.keys if "shared" in k] + [_keyMount(r.from.app, r.from?.suffix or "", r.from.key) for _rk, r in (profiles[n]?.reads or {})])
     }
-    _platforms = {[k for k, v in cat.getProfile(p).labels if k.endswith("-platform") and "/" not in k and v == "true"][0]: {stores = dedup([m for a in cat.getProfile(p).appSecrets for m in _readsOf(a)])} for p in (spec?.profiles or []) if cat.getProfile(p).appSecrets}
+
+    # Where each app's values LIVE, per owner: an app whose entry it writes or
+    # reads, or a shared name. The charts address a value by its owner — the
+    # light-catcher reads "homerun2's entry", schmetterpause's backup reads the
+    # shared "object-store-backup" — so the facts are published per owner, not
+    # per consumer (#464 step 6).
+    _sourceKey = lambda app: str, suffix: str, kn: str -> str {
+        _k = _entryOf(app, suffix).keys[kn]
+        "shared:" + _k.shared if "shared" in _k else "app:" + app
+    }
+    _sourcesOf = lambda n: str -> [str] {
+        dedup((["app:" + n] if [s for s in _written if s.app == n] else []) + ["shared:" + k.shared for e in (profiles[n]?.entries or []) for _kn, k in e.keys if "shared" in k] + [_sourceKey(r.from.app, r.from?.suffix or "", r.from.key) for _rk, r in (profiles[n]?.reads or {})])
+    }
+    _source = lambda key: str -> {str:str} {
+        _kind = key.split(":")[0]
+        _nm = key[len(_kind) + 1::]
+        {kind = "app", name = _nm, mount = _realMount[_nm], entry = cluster} if _kind == "app" else {kind = "shared", name = _nm, mount = _shared[_nm].mount, entry = _shared[_nm].entry}
+    }
+    _platforms = {[k for k, v in cat.getProfile(p).labels if k.endswith("-platform") and "/" not in k and v == "true"][0]: {
+        stores = dedup([m for a in cat.getProfile(p).appSecrets for m in _readsOf(a)])
+        sources = [_source(x) for x in dedup([x for a in cat.getProfile(p).appSecrets for x in _sourcesOf(a)])]
+    } for p in (spec?.profiles or []) if cat.getProfile(p).appSecrets}
     {
         sets = [s | {providerConfigName = _writer} for s in _written]
         stores = dedup([m for n in names for m in _readsOf(n)])
@@ -1008,14 +1031,22 @@ appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [st
 EMPTY_APP_SECRET_PLAN = {sets = [], stores = [], platforms = {}}
 
 appSecretArgocd = lambda plan: {str:any} -> {str:any} {
-    """The per-platform secret facts: a store name and the gate. Only where ONE
-    store serves the whole platform — the ApplicationSets take a single store
-    name, so a platform reading two mounts gets neither, and stays visibly
-    unconfigured instead of half-wired (#464 step 6)."""
+    """The per-platform secret facts for the ApplicationSets.
+
+    For every owner a platform reads from:
+      <platform>.stuttgart-things.com/<app>-secret-store          vault-<mount>
+      <platform>.stuttgart-things.com/<app>-secret-key            <cluster>
+      <platform>.stuttgart-things.com/shared-<name>-secret-store  vault-<mount>
+      <platform>.stuttgart-things.com/shared-<name>-secret-key    the `_` entry
+    plus the gate <platform>.stuttgart-things.com/secrets-config, because every
+    one of them is derived from a resolved profile. A platform served by ONE
+    store also keeps the single <platform>.stuttgart-things.com/secret-store the
+    existing homerun2 ApplicationSet reads."""
     _single = {u: p.stores[0] for u, p in plan.platforms if len(p.stores) == 1}
+    _pairs = [[u + ".stuttgart-things.com/" + ("shared-" if src.kind == "shared" else "") + src.name + "-secret-" + part, ("vault-" + src.mount) if part == "store" else src.entry] for u, p in plan.platforms for src in p.sources for part in ["store", "key"]]
     {
-        labels = {u + ".stuttgart-things.com/secrets-config": "true" for u in _single}
-        annotations = {u + ".stuttgart-things.com/secret-store": "vault-" + m for u, m in _single}
+        labels = {u + ".stuttgart-things.com/secrets-config": "true" for u in plan.platforms}
+        annotations = {u + ".stuttgart-things.com/secret-store": "vault-" + m for u, m in _single} | {x[0]: x[1] for x in _pairs}
     }
 }
 
