@@ -66,8 +66,19 @@ profileTable: {str:s.Profile} = {
     # declarations, and zaehlwerk's and tabletennis' reads of homerun2's entry
     # make homerun2 a required profile in the same order — xplane-cluster fails
     # the render otherwise.
+    #
+    # storage-platform/cloudnative-pg: schmetterpause's database is a
+    # CloudNativePG Cluster, and the operator is OPT-IN in platforms/storage.
+    # Without it the database Application fails on a missing
+    # postgresql.cnpg.io/v1 API and the app never starts (rancher-join-test8).
+    # Only the component: the umbrella storage-platform comes from a storage
+    # profile (storage-openebs), and xplane-cluster refuses an order that turns
+    # the component on without one.
     tabletennis = s.Profile {
-        labels = {"tabletennis-platform" = "true"}
+        labels = {
+            "tabletennis-platform" = "true"
+            "storage-platform/cloudnative-pg" = "true"
+        }
         appSecrets = ["schmetterpause", "zaehlwerk", "tabletennis"]
     }
 }

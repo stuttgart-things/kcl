@@ -103,7 +103,7 @@ Named Argo CD label sets selecting app platforms (decision 6.2 in
 | `observability` | `observability-platform` | — |
 | `base` | `base-platform` | — |
 | `homerun2` | `homerun2-platform` | — · **appSecrets:** `homerun2` |
-| `tabletennis` | `tabletennis-platform` | — · **appSecrets:** `schmetterpause`, `zaehlwerk`, `tabletennis` |
+| `tabletennis` | `tabletennis-platform`; **on:** `storage-platform/cloudnative-pg` (schmetterpause's database; needs a storage profile for the umbrella) | — · **appSecrets:** `schmetterpause`, `zaehlwerk`, `tabletennis` |
 
 The platform ApplicationSets are **opt-out** — an umbrella label turns every
 component on unless it says `"false"`. So a profile is the umbrella plus what
@@ -140,7 +140,7 @@ cat.sizeNames, cat.distributionNames        # sorted names, for error messages
 ## Test
 
 ```bash
-kcl test .     # 30 tests, no Crossplane and no cluster required
+kcl test .     # 31 tests, no Crossplane and no cluster required
 ```
 
 The tests are the point: these rules — CNI ownership, the mandatory cilium var, the inventory groups, the separate upload stage — are exactly what should fail in CI rather than on a live cluster.
