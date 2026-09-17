@@ -24,6 +24,7 @@ ClusterStack                                                provisioner: rancher
 ├─ AnsibleRun                          {name}-join          join + kubeconfig -> Vault
 ├─ ClusterAccess                       {name}-access        -> the ClusterProviderConfigs
 ├─ Platform                            {name}-platform      cni (from the catalog), …
+├─ VaultSecretSet ×n                   {name}-secrets-<app> per-cluster app secrets (0.17.0)
 └─ Usage ×4                                                 + the VM outlives the RancherCluster
 ```
 
@@ -113,6 +114,51 @@ data:
 The render **fails** on a hand-written `tokenPolicies` (on `vaultIssuer` or any `additionalAuths` entry), a hand-written `eso` entry, a store the environment does not map, and a missing `certManagerPolicies` while the issuer is enabled. The store map doubles as an allow-list: `secretStores: [kubeconfigs]` is rejected.
 
 The **ansible path is unchanged** — seed-labda-1 passes `tokenPolicies` today; closing it there is a migration of its own.
+
+## App secrets from AppSecretProfiles (0.17.0)
+
+crossplane-configurations#464, step 5. A catalog profile names the `AppSecretProfile`s its workloads read (`appSecrets`, catalog 0.7.0); `profiles: [homerun2, tabletennis]` therefore selects the ApplicationSets **and** the secrets. Rancher mode only.
+
+The stack fetches exactly those profiles (function-kcl `ExtraResources`, by name) and derives:
+
+| derived | from |
+|---|---|
+| one `VaultSecretSet` `{name}-secrets-<app>` per app that owns entries: `<mount>/<cluster><suffix>`, `generate` / `literal` keys, `deleteAllVersions`, `mount.create: false` | the profile's `entries`; `vault.mounts`, `vault.writer.providerConfigName` |
+| `spec.secretStores` + every real mount a consumer reads → eso policies and `kv-mounts` as in 0.16.0 | own mount, `vault.shared.<name>.mount`, the `from` source's mount |
+| `<platform>.stuttgart-things.com/secrets-config: "true"` and `…/secret-store: vault-<mount>` | only where **one** store serves everything the platform reads |
+
+`shared` and `from` keys are **never written**: consumers read the `_` entry or the owning app's entry directly. An order adopts an existing value per key instead of generating it:
+
+```yaml
+spec:
+  profiles: [homerun2, tabletennis]
+  secretOverrides:
+    - {app: schmetterpause, key: password, vaultRef: {mount: schmetterpause, entry: schmetterpause, key: password}}
+    - {app: homerun2, key: authToken, secretKeyRef: {name: homerun2-token, key: token}}   # XR namespace only
+```
+
+A list with `app`/`suffix`/`key` rather than an `app/key` string: app names contain dashes, so a string would be ambiguous (the same reason `reads[].from` is structured).
+
+Environment half, next to the 0.16.0 keys:
+
+```yaml
+data:
+  vault:
+    secretStores: {homerun2: [read-homerun2-clusters], schmetterpause: [read-schmetterpause-clusters], observability: [read-observability-clusters]}
+    mounts: {homerun2: homerun2, schmetterpause: schmetterpause}          # logical -> real
+    shared:
+      git-pat: {mount: homerun2, entry: _git-pat}
+      object-store-backup: {mount: schmetterpause, entry: _backup}
+    reservedEntries:                                                     # live hand-seeded entries
+      schmetterpause: [schmetterpause, schmetterpause-backup, schmetterpause-scoreboard, zaehlwerk]
+    writer: {providerConfigName: vault-cluster-secrets}
+```
+
+**The render fails** on: a listed `AppSecretProfile` that does not exist; a logical mount or shared name the environment does not map; a `from` naming an app no profile of the order brings; a key its source does not declare; an override for an unknown or non-overridable key, with zero or two sources, or twice; written entries without a writer; a cluster name ending in an entry suffix (`a-scoreboard` would own cluster `a`'s scoreboard entry); a written entry in `vault.reservedEntries`. Failing is also what protects the secrets: a failed function changes nothing, while a `VaultSecretSet` that is merely not emitted is **deleted with every version**.
+
+Before Crossplane has answered the requirement (the first call of each reconcile) nothing is derived — that output is discarded. A profile that is not found is answered as empty, and fails loudly.
+
+The `VaultSecretSet`s follow the **stack**, not the Platform: `platformEnabled: false` removes the stores and gates, never the generated values. `status.stages.appSecrets` lists the profiles, the sets and whether all are Ready.
 
 ## The two things that make this non-trivial
 
@@ -226,7 +272,7 @@ They are applied to **both** ansible stages, deliberately. `upload_kubeconfig_va
 |---|---|
 | `logic.k` | pure resource construction — explicit args in, dict out, unit-tested |
 | `main.k` | wiring: reads `option("params")`, decides which gates are open, patches status |
-| `logic_test.k` | 33 tests, no Crossplane and no cluster required |
+| `logic_test.k` | 108 tests, no Crossplane and no cluster required |
 
 `main.k` is deliberately thin and untested-by-unit: it is exercised by the Configuration's `crossplane render` with synthetic `--observed-resources`, which is the only way to test gate transitions honestly.
 

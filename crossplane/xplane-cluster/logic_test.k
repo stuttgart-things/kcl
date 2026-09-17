@@ -1130,3 +1130,250 @@ test_ansible_path_passes_token_policies_through = lambda {
     assert _vi.tokenPolicies == ["pki-issue", "pki-issue-4sthings"]
     assert _vi.additionalAuths[0].tokenPolicies == ["read-cicd"]
 }
+
+# --- app secrets: AppSecretProfiles -> VaultSecretSets (#464 step 5) ----------
+# The four published declarations (crossplane-configurations
+# vault/app-secret-profile/examples), as Crossplane hands them over: with the
+# XRD's defaults applied (generate.charset, reads[].from.suffix).
+_asp = lambda name: str, spec: {str:any} -> [{str:any}] {
+    [{
+        Resource = {apiVersion = "secrets.stuttgart-things.com/v1alpha1", kind = "AppSecretProfile", metadata = {name = name}, spec = spec}
+    }]
+}
+
+_extraAll = {
+    "app-secret-profile-homerun2" = _asp("homerun2", {
+        mount = "homerun2"
+        entries = [{suffix = "", keys = {
+            redisPassword = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+            authToken = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+            githubToken = {shared = "git-pat"}
+        }}]
+    })
+    "app-secret-profile-schmetterpause" = _asp("schmetterpause", {
+        mount = "schmetterpause"
+        entries = [
+            {suffix = "", keys = {
+                username = {literal = "schmetterpause"}
+                password = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+                "session-key" = {generate = {length = 64, charset = "alphanumeric"}, overridable = True}
+            }}
+            {suffix = "-scoreboard", keys = {
+                token = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+            }}
+            {suffix = "-backup", keys = {
+                access_key = {shared = "object-store-backup"}
+                secret_key = {shared = "object-store-backup"}
+            }}
+        ]
+    })
+    "app-secret-profile-zaehlwerk" = _asp("zaehlwerk", {
+        reads = {
+            "omni-pitcher-token" = {
+                from = {app = "homerun2", suffix = "", key = "authToken"}
+            }
+            "redis-password" = {
+                from = {app = "homerun2", suffix = "", key = "redisPassword"}
+            }
+            "schmetterpause-token" = {
+                from = {app = "schmetterpause", suffix = "-scoreboard", key = "token"}
+            }
+        }
+    })
+    "app-secret-profile-tabletennis" = _asp("tabletennis", {
+        reads = {
+            redisPassword = {
+                from = {app = "homerun2", suffix = "", key = "redisPassword"}
+            }
+        }
+    })
+}
+
+_appEnv = {
+    vault = {
+        certManagerPolicies = ["pki-issue"]
+        secretStores = {
+            homerun2 = ["read-homerun2-clusters"]
+            schmetterpause = ["read-schmetterpause-clusters"]
+            observability = ["read-observability-clusters"]
+        }
+        mounts = {homerun2 = "homerun2", schmetterpause = "schmetterpause"}
+        shared = {
+            "git-pat" = {mount = "homerun2", entry = "_git-pat"}
+            "object-store-backup" = {mount = "schmetterpause", entry = "_backup"}
+        }
+        reservedEntries = {schmetterpause = ["schmetterpause", "schmetterpause-backup", "schmetterpause-scoreboard", "zaehlwerk"]}
+        writer = {providerConfigName = "vault-cluster-secrets"}
+    }
+}
+
+_appOrder = {
+    clusterName = "c8"
+    distribution = "rancher-rke2"
+    environmentConfig = "labul"
+    profiles = ["security", "homerun2", "tabletennis"]
+    secretStores = ["observability"]
+    rancher = {
+        argocd = {register = True}
+    }
+    platform = {
+        vaultIssuer = {enabled = True, vaultAddr = "https://v"}
+    }
+}
+
+_appNames = ["homerun2", "schmetterpause", "zaehlwerk", "tabletennis"]
+
+_plan = lambda spec: {str:any} -> {str:any} {
+    l.appSecretPlan(spec.clusterName, spec, _appEnv, l.appSecretNames(spec), l.appSecretProfiles(l.appSecretNames(spec), _extraAll))
+}
+
+test_app_secret_names_follow_the_profiles = lambda {
+    assert l.appSecretNames(_appOrder) == _appNames
+    # a profile without appSecrets adds nothing; no profiles, nothing to fetch
+    assert l.appSecretNames({distribution = "rancher-rke2", profiles = ["security"]}) == []
+}
+
+# The ansible path derives no Vault wiring, secrets included.
+test_ansible_path_fetches_no_app_secrets = lambda {
+    assert l.appSecretNames({distribution = "k3s", profiles = ["homerun2"]}) == []
+}
+
+test_app_secret_requirements_fetch_by_name = lambda {
+    _r = l.appSecretRequirements(["homerun2"])
+    assert _r.apiVersion == "meta.krm.kcl.dev/v1alpha1"
+    assert _r.kind == "ExtraResources"
+    assert _r.requirements["app-secret-profile-homerun2"] == {apiVersion = "secrets.stuttgart-things.com/v1alpha1", kind = "AppSecretProfile", matchName = "homerun2"}
+}
+
+# Resolved means ANSWERED: a requirement Crossplane answered with nothing
+# counts, so a missing profile reaches the loud assert instead of silently
+# rendering the first-call output.
+test_app_secrets_resolved_once_every_requirement_is_answered = lambda {
+    assert l.appSecretsResolved(["homerun2"], {}) == False
+    assert l.appSecretsResolved(["homerun2", "zaehlwerk"], {"app-secret-profile-homerun2" = []}) == False
+    assert l.appSecretsResolved(["homerun2"], {"app-secret-profile-homerun2" = []}) == True
+    assert l.appSecretProfiles(["homerun2"], {"app-secret-profile-homerun2" = []}) == {}
+}
+
+test_app_secret_sets_write_generated_and_literal_keys_only = lambda {
+    _sets = _plan(_appOrder).sets
+    assert [s.app for s in _sets] == ["homerun2", "schmetterpause"]
+    _h = _sets[0]
+    assert _h.mount == "homerun2"
+    assert _h.providerConfigName == "vault-cluster-secrets"
+    assert [x.path for x in _h.secrets] == ["c8"]
+    # githubToken is shared: read from homerun2/_git-pat, never copied
+    assert _h.secrets[0].data == [
+        {key = "authToken", generate = {length = 32, charset = "alphanumeric"}}
+        {key = "redisPassword", generate = {length = 32, charset = "alphanumeric"}}
+    ]
+    assert _h.secrets[0].deleteAllVersions == True
+    _s = _sets[1]
+    # -backup holds only shared keys: no entry is written for it
+    assert [x.path for x in _s.secrets] == ["c8", "c8-scoreboard"]
+    assert _s.secrets[0].data == [
+        {key = "password", generate = {length = 32, charset = "alphanumeric"}}
+        {key = "session-key", generate = {length = 64, charset = "alphanumeric"}}
+        {key = "username", value = "schmetterpause"}
+    ]
+}
+
+test_app_secret_stores_cover_every_read = lambda {
+    _p = _plan(_appOrder)
+    assert _p.stores == ["homerun2", "schmetterpause"]
+    assert _p.platforms == {
+        "homerun2-platform" = {stores = ["homerun2"]}
+        "tabletennis-platform" = {stores = ["schmetterpause", "homerun2"]}
+    }
+}
+
+# One store for the platform: gate and store name. Two: neither, because the
+# ApplicationSet takes a single store name (#464 step 6).
+test_app_secret_gate_only_where_one_store_serves = lambda {
+    _a = l.appSecretArgocd(_plan(_appOrder))
+    assert _a.labels == {"homerun2-platform.stuttgart-things.com/secrets-config" = "true"}
+    assert _a.annotations == {"homerun2-platform.stuttgart-things.com/secret-store" = "vault-homerun2"}
+}
+
+test_app_secret_facts_reach_the_rancher_cluster = lambda {
+    _a = l.appSecretArgocd(_plan(_appOrder))
+    _b = l.rancherChild("c8", "default", _appOrder, _a).spec.argocd
+    assert _b.labels["homerun2-platform"] == "true"
+    assert _b.labels["tabletennis-platform"] == "true"
+    assert _b.labels["homerun2-platform.stuttgart-things.com/secrets-config"] == "true"
+    assert _b.annotations["homerun2-platform.stuttgart-things.com/secret-store"] == "vault-homerun2"
+}
+
+# Phase 1 of a teardown: no Platform, so no gate claims a store exists.
+test_app_secret_facts_leave_with_the_platform = lambda {
+    _o = {
+        clusterName = "c8"
+        distribution = "rancher-rke2"
+        platformEnabled = False
+        profiles = ["homerun2"]
+        rancher = {
+            argocd = {register = True}
+        }
+        platform = {
+            vaultIssuer = {enabled = True}
+        }
+    }
+    _b = l.rancherChild("c8", "default", _o, {labels = {"homerun2-platform.stuttgart-things.com/secrets-config" = "true"}, annotations = {"homerun2-platform.stuttgart-things.com/secret-store" = "vault-homerun2"}}).spec.argocd
+    assert "homerun2-platform.stuttgart-things.com/secrets-config" not in _b.labels
+    assert "homerun2-platform.stuttgart-things.com/secret-store" not in _b.annotations
+}
+
+# The derived stores become eso policies through the environment, exactly like
+# hand-listed ones.
+test_app_secret_stores_become_eso_policies = lambda {
+    _eff = {
+        clusterName = "c8"
+        distribution = "rancher-rke2"
+        profiles = ["homerun2", "tabletennis"]
+        secretStores = l.dedup(["observability"] + _plan(_appOrder).stores)
+        platform = {
+            vaultIssuer = {enabled = True}
+        }
+    }
+    _eso = [a for a in l.platformChild("c8", "default", _eff, "", _appEnv).spec.vaultIssuer.additionalAuths if a.name == "eso"][0]
+    assert _eso.tokenPolicies == ["read-observability-clusters", "read-homerun2-clusters", "read-schmetterpause-clusters"]
+}
+
+# homerun2-test1's migration: adopt the live DB password, copy a token from a
+# Secret next to the XR. Everything else stays generated.
+test_app_secret_overrides_replace_single_keys = lambda {
+    _o = {
+        clusterName = "c8"
+        distribution = "rancher-rke2"
+        profiles = ["homerun2", "tabletennis"]
+        secretOverrides = [
+            {app = "schmetterpause", key = "password", vaultRef = {mount = "schmetterpause", entry = "schmetterpause", key = "password"}}
+            {app = "schmetterpause", suffix = "-scoreboard", key = "token", secretKeyRef = {name = "scoreboard-token", key = "token"}}
+        ]
+    }
+    _s = [x for x in _plan(_o).sets if x.app == "schmetterpause"][0]
+    assert _s.secrets[0].data[0] == {key = "password", vaultRef = {mount = "schmetterpause", entry = "schmetterpause", key = "password"}}
+    assert _s.secrets[0].data[1] == {key = "session-key", generate = {length = 64, charset = "alphanumeric"}}
+    assert _s.secrets[1].data == [{key = "token", secretKeyRef = {name = "scoreboard-token", key = "token"}}]
+}
+
+test_vault_secret_set_child = lambda {
+    _c = l.vaultSecretSetChild("c8", "default", _plan(_appOrder).sets[0])
+    assert _c.apiVersion == "vault.stuttgart-things.com/v1alpha1"
+    assert _c.kind == "VaultSecretSet"
+    assert _c.metadata.name == "c8-secrets-homerun2"
+    assert _c.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "app-secrets-homerun2"
+    assert _c.spec.providerConfigRef == {name = "vault-cluster-secrets", kind = "ClusterProviderConfig"}
+    assert _c.spec.mount == {path = "homerun2", create = False}
+    assert _c.spec.secrets[0].path == "c8"
+}
+
+test_key_overridable_defaults_follow_the_source = lambda {
+    assert l.keyOverridable({
+        generate = {}
+    }) == True
+    assert l.keyOverridable({literal = "x"}) == False
+    assert l.keyOverridable({shared = "x"}) == False
+    assert l.keyOverridable({generate = {}, overridable = False}) == False
+    assert l.keyOverridable({literal = "x", overridable = True}) == True
+}
