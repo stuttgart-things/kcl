@@ -125,7 +125,21 @@ The stack fetches exactly those profiles (function-kcl `ExtraResources`, by name
 |---|---|
 | one `VaultSecretSet` `{name}-secrets-<app>` per app that owns entries: `<mount>/<cluster><suffix>`, `generate` / `literal` keys, `deleteAllVersions`, `mount.create: false` | the profile's `entries`; `vault.mounts`, `vault.writer.providerConfigName` |
 | `spec.secretStores` + every real mount a consumer reads → eso policies and `kv-mounts` as in 0.16.0 | own mount, `vault.shared.<name>.mount`, the `from` source's mount |
-| `<platform>.stuttgart-things.com/secrets-config: "true"` and `…/secret-store: vault-<mount>` | only where **one** store serves everything the platform reads |
+| `<platform>.stuttgart-things.com/secrets-config: "true"` | every platform whose profile has `appSecrets` (0.18.0; before: only single-store platforms) |
+| per **owner** a platform reads from: `<platform>.stuttgart-things.com/<app>-secret-store: vault-<mount>` + `<app>-secret-key: <cluster>`; for shared values `shared-<name>-secret-store` + `shared-<name>-secret-key: <_entry>` (0.18.0) | own entries, `from` sources, `shared` keys |
+| `<platform>.stuttgart-things.com/secret-store: vault-<mount>` | only where **one** store serves everything the platform reads (what the homerun2 ApplicationSet reads today) |
+
+**Per owner, not per consumer (0.18.0).** `tabletennis-platform` ships schmetterpause, zaehlwerk and the light-catcher, which read from two mounts: schmetterpause's own entries, the shared backup pair, and homerun2's entry. A chart addresses a value by where it lives ("homerun2's Redis password"), so that is how the facts are keyed. For `rancher-join-test7` with `homerun2` + `tabletennis`:
+
+```yaml
+tabletennis-platform.stuttgart-things.com/secrets-config: "true"                                     # label
+tabletennis-platform.stuttgart-things.com/schmetterpause-secret-store: vault-schmetterpause
+tabletennis-platform.stuttgart-things.com/schmetterpause-secret-key: rancher-join-test7              # + "-scoreboard" in the chart
+tabletennis-platform.stuttgart-things.com/shared-object-store-backup-secret-store: vault-schmetterpause
+tabletennis-platform.stuttgart-things.com/shared-object-store-backup-secret-key: _backup
+tabletennis-platform.stuttgart-things.com/homerun2-secret-store: vault-homerun2
+tabletennis-platform.stuttgart-things.com/homerun2-secret-key: rancher-join-test7
+```
 
 `shared` and `from` keys are **never written**: consumers read the `_` entry or the owning app's entry directly. An order adopts an existing value per key instead of generating it:
 
@@ -272,7 +286,7 @@ They are applied to **both** ansible stages, deliberately. `upload_kubeconfig_va
 |---|---|
 | `logic.k` | pure resource construction — explicit args in, dict out, unit-tested |
 | `main.k` | wiring: reads `option("params")`, decides which gates are open, patches status |
-| `logic_test.k` | 108 tests, no Crossplane and no cluster required |
+| `logic_test.k` | 109 tests, no Crossplane and no cluster required |
 
 `main.k` is deliberately thin and untested-by-unit: it is exercised by the Configuration's `crossplane render` with synthetic `--observed-resources`, which is the only way to test gate transitions honestly.
 
