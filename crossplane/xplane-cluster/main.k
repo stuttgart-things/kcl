@@ -42,6 +42,20 @@ _ns = _meta?.namespace or "crossplane-system"
 _spec = _oxr?.spec or {}
 _cluster = _spec?.clusterName or _name
 
+# AppSecretProfiles the order's profiles need (#464), fetched as extra
+# resources. Until Crossplane has answered the requirement nothing is derived —
+# that first call's output is discarded. Once answered, the plan validates
+# everything and fails the render on any gap rather than composing less.
+_extra = _params?.extraResources or {}
+_appNames = l.appSecretNames(_spec)
+_appResolved = l.appSecretsResolved(_appNames, _extra)
+_appPlan = l.appSecretPlan(_cluster, _spec, _env, _appNames, l.appSecretProfiles(_appNames, _extra)) if (_appNames and _appResolved) else l.EMPTY_APP_SECRET_PLAN
+_appArgocd = l.appSecretArgocd(_appPlan)
+
+# The order's own stores plus every mount an app reads, so the eso policies and
+# the kv-mounts annotation follow from the profiles.
+_specEff = _spec | ({secretStores = l.dedup((_spec?.secretStores or []) + _appPlan.stores)} if _appPlan.stores else {})
+
 # Fails loudly with the list of known names rather than silently building a
 # default — an unknown size or distribution is a typo, not an intent.
 _size = cat.getSize(_spec?.size or "medium")
@@ -125,6 +139,10 @@ _accessShare = _access?.status?.share or {}
 _mgmtObs = _byKind("ManagementPlane")
 _mgmt = _mgmtObs[0] if _mgmtObs else {}
 _mgmtReady = len([c for c in (_mgmt?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
+
+_vssReady = lambda n: str -> bool {
+    len([c for r in _byName(n) for c in (r?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
+}
 
 _platObs = _byKind("Platform")
 _plat = _platObs[0] if _platObs else {}
@@ -326,6 +344,13 @@ _dxrPatched = _dxr | {
             access = {ready = _accessReady, emitted = _accessOpen}
             platform = {ready = _platReady, emitted = _platOpen}
             managementPlane = {ready = _mgmtReady, emitted = _mgmtOpen}
+            if _appNames:
+                appSecrets = {
+                    profiles = _appNames
+                    resolved = _appResolved
+                    sets = ["{}-secrets-{}".format(_name, s.app) for s in _appPlan.sets]
+                    ready = len([1 for s in _appPlan.sets if _vssReady("{}-secrets-{}".format(_name, s.app))]) == len(_appPlan.sets)
+                }
         }
     }
 }
@@ -335,13 +360,17 @@ _dxrPatched = _dxr | {
 # double-emitted groups in bootstrap/cilium.
 _groups = [
     [l.kubeconfigWorkspace(_name, _ns, _spec)] if _kcVaultOpen else []
-    [l.rancherChild(_name, _ns, _spec)] if _isRancher else []
+    [l.appSecretRequirements(_appNames)] if _appNames else []
+    [l.rancherChild(_name, _ns, _specEff, _appArgocd)] if _isRancher else []
     [l.vmChild(_name, _ns, _spec, _size)] if _vmOpen else []
     [_distChild] if _distOpen else []
     [_kcChild] if _kcOpen else []
     [_joinChild] if _joinOpen else []
     [l.clusterAccess(_name, _ns, _spec)] if _accessOpen else []
-    [l.platformChild(_name, _ns, _spec, _accessShare?.apiEndpoint or "", _env)] if _platOpen else []
+    [l.platformChild(_name, _ns, _specEff, _accessShare?.apiEndpoint or "", _env)] if _platOpen else []
+    # Tied to the stack, not the Platform: `platformEnabled: false` (phase 1 of
+    # a teardown) must not delete the generated values a rebuild would reuse.
+    [l.vaultSecretSetChild(_name, _ns, s) for s in _appPlan.sets]
     [l.managementPlaneChild(_name, _ns, _spec)] if _mgmtOpen else []
     _usages
     [_dxrPatched]

@@ -380,7 +380,7 @@ joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret
 # namespace, because ansible-run reads extraEnvSecretName from the PipelineRun's
 # namespace — not from next to this XR. A registration command published only
 # beside the XR is a command the join cannot read.
-rancherChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
+rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
     _r = spec?.rancher or {}
@@ -409,7 +409,7 @@ rancherChild = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
             # Only when there is something to register or derive — an empty
             # argocd block would be a diff on every existing RancherCluster.
             if (_r?.argocd or spec?.profiles or spec?.secretStores):
-                argocd = argocdBlock(spec)
+                argocd = argocdBlock(spec, appArgocd)
         }
     }
 }
@@ -456,12 +456,16 @@ profileAnnotations = lambda spec: {str:any} -> {str:str} {
     mergeLastWins([[k, v] for p in (spec?.profiles or []) for k, v in cat.getProfile(p).annotations])
 }
 
-derivedArgocd = lambda spec: {str:any} -> {str:any} {
+derivedArgocd = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     """Labels and annotations that follow from what this stack composes.
 
     Returns {labels, annotations}. Asserts the combinations that could only be
     wrong: a store list without the Vault issuer that creates its login, or
     without the eso auth whose mount the stores AppSet assumes.
+
+    appArgocd carries the per-platform secret facts derived from the
+    AppSecretProfiles (appSecretArgocd); like the stores they exist only while
+    the Platform does.
     """
     _cluster = spec?.clusterName or ""
     _plat = spec?.platform or {}
@@ -501,7 +505,7 @@ derivedArgocd = lambda spec: {str:any} -> {str:any} {
                 "security-platform/external-secrets-stores" = "true"
             if _csOn and _obsStore:
                 "observability-platform.stuttgart-things.com/secrets-config" = "true"
-        }
+        } | ((appArgocd?.labels or {}) if _platOn else {})
         annotations = {
             if _viOn and _vi?.vaultAddr:
                 "clusterbook.stuttgart-things.com/vault-server" = _vi.vaultAddr
@@ -516,15 +520,15 @@ derivedArgocd = lambda spec: {str:any} -> {str:any} {
                 "observability-platform.stuttgart-things.com/alert-webhook-secret-key" = SHARED_WEBHOOK_ENTRY
             if _csOn and _obsStore and _cs?.path and _cs.path != _cluster:
                 "observability-platform.stuttgart-things.com/secret-key" = _cs.path
-        }
+        } | ((appArgocd?.annotations or {}) if _platOn else {})
     }
 }
 
-argocdBlock = lambda spec: {str:any} -> {str:any} {
+argocdBlock = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     """spec.rancher.argocd with profiles and derived facts merged under the
     caller's own labels and annotations."""
     _a = (spec?.rancher or {})?.argocd or {}
-    _d = derivedArgocd(spec)
+    _d = derivedArgocd(spec, appArgocd)
     _a | {
         labels = profileLabels(spec) | _d.labels | (_a?.labels or {})
         annotations = profileAnnotations(spec) | _d.annotations | (_a?.annotations or {})
@@ -809,6 +813,230 @@ rancherVaultIssuer = lambda spec: {str:any}, env: {str:any} -> {str:any} {
             tokenPolicies = _esoPolicies
         }] if _stores else [])
     } if _vi else {}
+}
+
+# --- app secrets: AppSecretProfiles -> VaultSecretSets, stores, gates (#464) --
+# A profile in the catalog names the AppSecretProfiles its workloads read
+# (`appSecrets`). The stack fetches exactly those — cluster-scoped, so only an
+# admin or the app's owner writes one — and derives from them:
+#
+#   - one VaultSecretSet per app that OWNS entries: <mount>/<cluster><suffix>
+#     with the generate / literal keys, or an override (secretKeyRef, vaultRef)
+#     where the order adopts an existing value. Deleted with every version when
+#     the stack goes. `shared` and `from` keys are never written: their
+#     consumers read the shared `_` entry or the owning app's entry directly;
+#   - the stores: every real mount a consumer reads, added to spec.secretStores,
+#     so the eso policies and the kv-mounts annotation follow;
+#   - per app platform the `…/secret-store` annotation and `…/secrets-config`
+#     gate — only where ONE store serves everything the platform reads, since
+#     the ApplicationSets take a single store name.
+#
+# Every Vault fact comes from the environment (`vault.mounts`, `vault.shared`,
+# `vault.writer`, `vault.reservedEntries`), never from the order or a profile.
+# And every inconsistency is a render error: a missing profile, an unmapped
+# mount, a `from` naming an app the order does not have. Failing the render is
+# also what keeps a transient gap from deleting live secrets — a failed function
+# changes nothing, whereas a VaultSecretSet that is simply not emitted gets
+# deleted, generated passwords and all.
+APP_SECRET_PROFILE_API_VERSION = "secrets.stuttgart-things.com/v1alpha1"
+APP_SECRET_PROFILE_KIND = "AppSecretProfile"
+VAULT_SECRET_SET_API_VERSION = "vault.stuttgart-things.com/v1alpha1"
+
+dedup = lambda xs: [str] -> [str] {
+    [x for i, x in xs if x not in xs[:i:]]
+}
+
+appSecretRequirementName = lambda app: str -> str {
+    "app-secret-profile-" + app
+}
+
+appSecretNames = lambda spec: {str:any} -> [str] {
+    """The AppSecretProfile names the order's profiles need, in profile order.
+    Rancher mode only, like the rest of the derived Vault wiring."""
+    dedup([n for p in (spec?.profiles or []) for n in cat.getProfile(p).appSecrets]) if isRancherProvisioner(spec) else []
+}
+
+appSecretRequirements = lambda names: [str] -> {str:any} {
+    """function-kcl's ExtraResources item: fetch each profile by name."""
+    {
+        apiVersion = "meta.krm.kcl.dev/v1alpha1"
+        kind = "ExtraResources"
+        requirements = {appSecretRequirementName(n): {
+            apiVersion = APP_SECRET_PROFILE_API_VERSION
+            kind = APP_SECRET_PROFILE_KIND
+            matchName = n
+        } for n in names}
+    }
+}
+
+appSecretsResolved = lambda names: [str], extra: {str:any} -> bool {
+    """True once Crossplane answered every requirement — found or not. Before
+    that (the first function call of a reconcile) nothing may be derived: that
+    response is discarded anyway, and asserting on it would fail every render."""
+    all n in names {
+        appSecretRequirementName(n) in (extra or {})
+    }
+}
+
+appSecretProfiles = lambda names: [str], extra: {str:any} -> {str:any} {
+    """name -> AppSecretProfile spec, for the profiles that exist."""
+    {n: ((extra or {})[appSecretRequirementName(n)][0]?.Resource?.spec or {}) for n in names if (extra or {})[appSecretRequirementName(n)]}
+}
+
+# Unset `overridable` follows the source: a generated value may be replaced by
+# an existing one, a literal is a fact of the app, a shared key is never written.
+keyOverridable = lambda k: {str:any} -> bool {
+    k.overridable if "overridable" in k else ("generate" in k)
+}
+
+keySource = lambda k: {str:any} -> str {
+    "generate" if "generate" in k else ("literal" if "literal" in k else "shared")
+}
+
+overrideId = lambda app: str, suffix: str, key: str -> str {
+    app + "|" + suffix + "|" + key
+}
+
+appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [str], profiles: {str:any} -> {str:any} {
+    """Validate the fetched profiles against the order and the environment and
+    return {sets, stores, platforms}:
+
+    sets      — [{app, mount, secrets}] for the VaultSecretSets, apps with
+                nothing to write left out;
+    stores    — real mounts consumers read, in profile order;
+    platforms — umbrella label -> {stores} per catalog profile with appSecrets.
+    """
+    _ve = env?.vault or {}
+    _envName = spec?.environmentConfig or "(unset)"
+    _where = " in the EnvironmentConfig for environment '" + _envName + "'"
+    _mounts = _ve?.mounts or {}
+    _shared = _ve?.shared or {}
+    _reserved = _ve?.reservedEntries or {}
+    _writer = (_ve?.writer or {})?.providerConfigName or ""
+    _missing = [n for n in names if n not in profiles]
+    assert len(_missing) == 0, "AppSecretProfile " + ", ".join(_missing) + " not found — listed by the catalog profiles " + ", ".join(spec?.profiles or []) + "; apply the declaration (crossplane-configurations vault/app-secret-profile/examples/profiles) before ordering"
+
+    # Logical -> real mount of every app that owns entries.
+    _unmapped = [n for n in names if profiles[n]?.entries and profiles[n]?.mount not in _mounts]
+    assert len(_unmapped) == 0, "no vault.mounts entry for the mount of " + ", ".join(_unmapped) + _where
+    _realMount = {n: _mounts[profiles[n].mount] for n in names if profiles[n]?.entries}
+
+    _sharedNames = dedup([k.shared for n in names for e in (profiles[n]?.entries or []) for _kn, k in e.keys if "shared" in k])
+    _unknownShared = [s for s in _sharedNames if s not in _shared]
+    assert len(_unknownShared) == 0, "shared " + ", ".join(_unknownShared) + " has no vault.shared entry" + _where
+
+    # `from` must name an app of this order, an entry it owns and a key in it.
+    _reads = [[n, rk, r.from] for n in names for rk, r in (profiles[n]?.reads or {})]
+    _badApp = [x[0] + "." + x[1] + " -> " + x[2].app for x in _reads if x[2].app not in names]
+    assert len(_badApp) == 0, "reads from an app this order does not have: " + ", ".join(_badApp) + " — add a profile whose appSecrets contain it"
+    _entryOf = lambda app: str, suffix: str -> {str:any} {
+        _es = [e for e in (profiles[app]?.entries or []) if (e?.suffix or "") == suffix]
+        _es[0] if _es else {}
+    }
+    _badKey = [x[0] + "." + x[1] + " -> " + x[2].app + (x[2]?.suffix or "") + "/" + x[2].key for x in _reads if x[2].key not in (_entryOf(x[2].app, x[2]?.suffix or "")?.keys or {})]
+    assert len(_badKey) == 0, "reads a key its source does not declare: " + ", ".join(_badKey)
+
+    # Overrides: only keys the declaration allows, one source each.
+    _ovs = spec?.secretOverrides or []
+    _badOv = [(o?.app or "?") + (o?.suffix or "") + "/" + (o?.key or "?") for o in _ovs if (o?.app or "") not in names or (o?.key or "") not in (_entryOf(o.app, o?.suffix or "")?.keys or {}) or not keyOverridable(_entryOf(o.app, o?.suffix or "").keys[o.key])]
+    assert len(_badOv) == 0, "secretOverrides for keys that do not exist or are not overridable: " + ", ".join(_badOv)
+    _badSrc = [o.app + (o?.suffix or "") + "/" + o.key for o in _ovs if ("vaultRef" in o) == ("secretKeyRef" in o)]
+    assert len(_badSrc) == 0, "secretOverrides need exactly one of vaultRef or secretKeyRef: " + ", ".join(_badSrc)
+    _ovIds = [overrideId(o.app, o?.suffix or "", o.key) for o in _ovs]
+    _dupOv = [i for j, i in _ovIds if i in _ovIds[:j:]]
+    assert len(_dupOv) == 0, "secretOverrides names a key twice: " + ", ".join(_dupOv)
+    _ovById = {overrideId(o.app, o?.suffix or "", o.key): o for o in _ovs}
+
+    _dataItem = lambda app: str, suffix: str, kn: str, k: {str:any} -> {str:any} {
+        _id = overrideId(app, suffix, kn)
+        _o = _ovById[_id] if _id in _ovById else {}
+        _gen = k?.generate or {}
+        {
+            key = kn
+            if "secretKeyRef" in _o:
+                secretKeyRef = {name = _o.secretKeyRef.name, key = _o.secretKeyRef.key}
+            elif "vaultRef" in _o:
+                vaultRef = _o.vaultRef
+            elif "generate" in k:
+                generate = {length = _gen?.length or 32, charset = _gen?.charset or "alphanumeric"}
+            else:
+                value = k.literal
+        }
+    }
+    _sets = [{
+        app = n
+        mount = _realMount[n]
+        secrets = [{
+            path = cluster + (e?.suffix or "")
+            deleteAllVersions = True
+            data = [_dataItem(n, e?.suffix or "", kn, e.keys[kn]) for kn in sorted(e.keys) if keySource(e.keys[kn]) != "shared"]
+        } for e in profiles[n].entries if any _kn, k in e.keys {
+            keySource(k) != "shared"
+        }]
+    } for n in names if profiles[n]?.entries]
+    _written = [s for s in _sets if s.secrets]
+    assert len(_written) == 0 or _writer, "no vault.writer.providerConfigName" + _where + " — the VaultSecretSets for " + ", ".join([s.app for s in _written]) + " need the provider-vault ClusterProviderConfig of the cluster-secrets writer"
+
+    # A cluster named like another cluster's suffixed entry would share it:
+    # cluster `a-scoreboard` owns schmetterpause/a-scoreboard, which is cluster
+    # `a`'s scoreboard entry. And entries still used by hand-seeded fleets are
+    # reserved per environment until they migrate.
+    _suffixes = dedup([e.suffix for n in names for e in (profiles[n]?.entries or []) if e?.suffix])
+    _clash = [sf for sf in _suffixes if cluster.endswith(sf)]
+    assert len(_clash) == 0, "cluster name '" + cluster + "' ends with the entry suffix " + ", ".join(_clash) + " — its own entry would be another cluster's"
+    _taken = [s.mount + "/" + x.path for s in _written for x in s.secrets if x.path in (_reserved[s.mount] or [])]
+    assert len(_taken) == 0, "entries " + ", ".join(_taken) + " are reserved" + _where + " (vault.reservedEntries) — a cluster by this name would overwrite a live entry; pick another clusterName"
+
+    # What each app's consumers read: its own mount when it writes, the shared
+    # entry's mount per shared key, the source app's mount (or its shared) per
+    # read.
+    _keyMount = lambda app: str, suffix: str, kn: str -> str {
+        _k = _entryOf(app, suffix).keys[kn]
+        _shared[_k.shared].mount if "shared" in _k else _realMount[app]
+    }
+    _readsOf = lambda n: str -> [str] {
+        dedup(([_realMount[n]] if [s for s in _written if s.app == n] else []) + [_shared[k.shared].mount for e in (profiles[n]?.entries or []) for _kn, k in e.keys if "shared" in k] + [_keyMount(r.from.app, r.from?.suffix or "", r.from.key) for _rk, r in (profiles[n]?.reads or {})])
+    }
+    _platforms = {[k for k, v in cat.getProfile(p).labels if k.endswith("-platform") and "/" not in k and v == "true"][0]: {stores = dedup([m for a in cat.getProfile(p).appSecrets for m in _readsOf(a)])} for p in (spec?.profiles or []) if cat.getProfile(p).appSecrets}
+    {
+        sets = [s | {providerConfigName = _writer} for s in _written]
+        stores = dedup([m for n in names for m in _readsOf(n)])
+        platforms = _platforms
+    }
+}
+
+EMPTY_APP_SECRET_PLAN = {sets = [], stores = [], platforms = {}}
+
+appSecretArgocd = lambda plan: {str:any} -> {str:any} {
+    """The per-platform secret facts: a store name and the gate. Only where ONE
+    store serves the whole platform — the ApplicationSets take a single store
+    name, so a platform reading two mounts gets neither, and stays visibly
+    unconfigured instead of half-wired (#464 step 6)."""
+    _single = {u: p.stores[0] for u, p in plan.platforms if len(p.stores) == 1}
+    {
+        labels = {u + ".stuttgart-things.com/secrets-config": "true" for u in _single}
+        annotations = {u + ".stuttgart-things.com/secret-store": "vault-" + m for u, m in _single}
+    }
+}
+
+vaultSecretSetChild = lambda name: str, ns: str, set: {str:any} -> {str:any} {
+    {
+        apiVersion = VAULT_SECRET_SET_API_VERSION
+        kind = "VaultSecretSet"
+        metadata = {
+            name = "{}-secrets-{}".format(name, set.app)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "app-secrets-" + set.app}
+        }
+        spec = {
+            providerConfigRef = {name = set.providerConfigName, kind = "ClusterProviderConfig"}
+            # The mount exists (seeded by Terraform); a VaultSecretSet that
+            # created it would orphan it on delete by design, and creating a
+            # mount on a path in use fails.
+            mount = {path = set.mount, create = False}
+            secrets = set.secrets
+        }
+    }
 }
 
 platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str, env: {str:any} = {} -> {str:any} {
