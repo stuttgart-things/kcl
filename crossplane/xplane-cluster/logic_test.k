@@ -1211,7 +1211,7 @@ _appOrder = {
     clusterName = "c8"
     distribution = "rancher-rke2"
     environmentConfig = "labul"
-    profiles = ["security", "homerun2", "tabletennis"]
+    profiles = ["security", "storage-openebs", "homerun2", "tabletennis"]
     secretStores = ["observability"]
     rancher = {
         argocd = {register = True}
@@ -1405,4 +1405,22 @@ test_key_overridable_defaults_follow_the_source = lambda {
     assert l.keyOverridable({shared = "x"}) == False
     assert l.keyOverridable({generate = {}, overridable = False}) == False
     assert l.keyOverridable({literal = "x", overridable = True}) == True
+}
+
+# tabletennis switches on storage-platform/cloudnative-pg; next to a storage
+# profile the umbrella is on, and the component survives the merge.
+test_component_with_its_umbrella_passes = lambda {
+    _l = l.argocdBlock({clusterName = "c9", distribution = "rancher-rke2", profiles = ["storage-openebs", "tabletennis"], rancher = {
+        argocd = {register = True}
+    }}).labels
+    assert _l["storage-platform"] == "true"
+    assert _l["storage-platform/cloudnative-pg"] == "true"
+}
+
+# A hand-written umbrella counts too: the check reads the merged result.
+test_component_umbrella_may_come_from_the_caller = lambda {
+    _l = l.argocdBlock({clusterName = "c9", distribution = "rancher-rke2", profiles = ["tabletennis"], rancher = {
+        argocd = {register = True, labels = {"storage-platform" = "true"}}
+    }}).labels
+    assert _l["storage-platform/cloudnative-pg"] == "true"
 }

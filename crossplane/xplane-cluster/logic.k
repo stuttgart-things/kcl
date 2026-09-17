@@ -526,11 +526,21 @@ derivedArgocd = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
 
 argocdBlock = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     """spec.rancher.argocd with profiles and derived facts merged under the
-    caller's own labels and annotations."""
+    caller's own labels and annotations.
+
+    Asserts that every COMPONENT a profile switches on (`<platform>/<x>: "true"`)
+    has its platform umbrella on in the result. The ApplicationSets select on
+    both, so a component without its umbrella deploys nothing and says nothing:
+    tabletennis turns on storage-platform/cloudnative-pg, which only works next
+    to a storage profile.
+    """
     _a = (spec?.rancher or {})?.argocd or {}
     _d = derivedArgocd(spec, appArgocd)
+    _labels = profileLabels(spec) | _d.labels | (_a?.labels or {})
+    _orphans = sorted([k for k, v in profileLabels(spec) if "/" in k and v == "true" and (_labels[k.split("/")[0]] or "") != "true"])
+    assert len(_orphans) == 0, "profiles " + ", ".join(spec?.profiles or []) + " switch on " + ", ".join(_orphans) + " without its platform (" + ", ".join(dedup([k.split("/")[0] for k in _orphans])) + ") — add the matching profile, e.g. storage-openebs for storage-platform"
     _a | {
-        labels = profileLabels(spec) | _d.labels | (_a?.labels or {})
+        labels = _labels
         annotations = profileAnnotations(spec) | _d.annotations | (_a?.annotations or {})
     }
 }
