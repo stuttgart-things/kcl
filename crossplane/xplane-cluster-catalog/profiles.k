@@ -52,4 +52,22 @@ profileTable: {str:s.Profile} = {
     base = s.Profile {
         labels = {"base-platform" = "true"}
     }
+    # --- app platforms, with the secrets they read (#464) --------------------
+    # platforms/homerun2: redis-stack, omni-pitcher, catchers, scout. Gated on
+    # homerun2-platform.stuttgart-things.com/secrets-config, which the stack
+    # derives once the AppSecretProfile resolves; the storage class comes from a
+    # storage profile.
+    homerun2 = s.Profile {
+        labels = {"homerun2-platform" = "true"}
+        appSecrets = ["homerun2"]
+    }
+    # platforms/tabletennis: ONE Application that ships schmetterpause, zaehlwerk
+    # and the light-catcher (apps/tabletennis/install). So it needs all three
+    # declarations, and zaehlwerk's and tabletennis' reads of homerun2's entry
+    # make homerun2 a required profile in the same order — xplane-cluster fails
+    # the render otherwise.
+    tabletennis = s.Profile {
+        labels = {"tabletennis-platform" = "true"}
+        appSecrets = ["schmetterpause", "zaehlwerk", "tabletennis"]
+    }
 }

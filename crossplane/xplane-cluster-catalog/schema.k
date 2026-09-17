@@ -13,6 +13,8 @@ a comment in two XR files in stuttgart-things/crossplane; here it is a field a
 consumer can check.
 """
 
+import regex
+
 schema Size:
     """
     A t-shirt size. cpu/memory/disk are STRINGS because both VM XRDs
@@ -177,7 +179,21 @@ schema Profile:
     """Annotation defaults a platform needs and that follow from the profile
     itself (e.g. the StorageClass openebs provides)."""
 
+    appSecrets: [str] = []
+    """AppSecretProfile names (secrets.stuttgart-things.com, cluster-scoped) the
+    workloads this profile deploys need — crossplane-configurations#464.
+
+    A LIST, not the profile's own name: one ApplicationSet can ship several apps
+    (tabletennis-platform deploys schmetterpause, zaehlwerk and the
+    light-catcher), and each app declares its own secrets. Listing a name here
+    makes a missing AppSecretProfile a render error in xplane-cluster instead of
+    a cluster whose ExternalSecrets silently find nothing."""
+
     check:
         len([v for _k, v in labels if v not in ["true", "false"]]) == 0, "profile label values must be the strings \"true\" or \"false\""
         len([k for k in labels if k.endswith("/secrets-config") or k == "security-platform/external-secrets-stores"]) == 0, "opt-in gates (…/secrets-config, security-platform/external-secrets-stores) are derived by the stack, never set by a profile"
+        len([n for i, n in appSecrets if n in appSecrets[:i:]]) == 0, "appSecrets lists a name twice"
+        all n in appSecrets {
+            regex.match(n, "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+        }, "appSecrets entries are AppSecretProfile names: lowercase letters, digits and dashes"
 
