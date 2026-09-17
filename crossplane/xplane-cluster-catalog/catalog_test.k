@@ -257,3 +257,9 @@ test_app_profiles_name_their_secret_declarations = lambda {
         c.getProfile(n).appSecrets == []
     }
 }
+
+# schmetterpause's database needs the CloudNativePG operator, which
+# platforms/storage installs only on request.
+test_tabletennis_turns_on_cloudnative_pg = lambda {
+    assert c.getProfile("tabletennis").labels["storage-platform/cloudnative-pg"] == "true"
+}
