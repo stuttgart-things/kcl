@@ -88,6 +88,14 @@ without an `additionalAuths` entry named `eso` (the stores AppSet logs in throug
 `<cluster>-eso`). A stack with no `rancher.argocd`, no profiles and no stores gets
 no `argocd` block, so existing RancherClusters see no diff.
 
+### A component needs its platform (0.19.0)
+
+A profile may switch on a single component of another platform — `tabletennis` turns on `storage-platform/cloudnative-pg` for schmetterpause's database. The ApplicationSets select on the component label **and** the umbrella, so the component alone deploys nothing and reports nothing. The render therefore fails when a profile sets `<platform>/<x>: "true"` and the merged labels do not have `<platform>: "true"` (from another profile, or hand-written):
+
+```
+profiles security, tabletennis switch on storage-platform/cloudnative-pg without its platform (storage-platform) — add the matching profile, e.g. storage-openebs for storage-platform
+```
+
 ## Vault token policies: derived, never passed through, in rancher mode (0.16.0)
 
 A Kubernetes-auth role in Vault has no `allowed_policies`: whoever may write `auth/<mount>/role/*` may attach **any** existing policy, including ones they do not hold. Passing `tokenPolicies` from the order let whoever orders a ClusterStack bind, say, a `kubeconfigs` reader to a ServiceAccount on a cluster they control — cluster-admin on every cluster (crossplane-configurations#454).
@@ -286,7 +294,7 @@ They are applied to **both** ansible stages, deliberately. `upload_kubeconfig_va
 |---|---|
 | `logic.k` | pure resource construction — explicit args in, dict out, unit-tested |
 | `main.k` | wiring: reads `option("params")`, decides which gates are open, patches status |
-| `logic_test.k` | 109 tests, no Crossplane and no cluster required |
+| `logic_test.k` | 111 tests, no Crossplane and no cluster required |
 
 `main.k` is deliberately thin and untested-by-unit: it is exercised by the Configuration's `crossplane render` with synthetic `--observed-resources`, which is the only way to test gate transitions honestly.
 
