@@ -102,11 +102,21 @@ Named Argo CD label sets selecting app platforms (decision 6.2 in
 | `storage-openebs` | `storage-platform`; **off:** `longhorn`, `nfs-csi-install`, `nfs-csi-storageclasses` | `storage-class: openebs-hostpath` for observability and homerun2 |
 | `observability` | `observability-platform` | — |
 | `base` | `base-platform` | — |
+| `homerun2` | `homerun2-platform` | — · **appSecrets:** `homerun2` |
+| `tabletennis` | `tabletennis-platform` | — · **appSecrets:** `schmetterpause`, `zaehlwerk`, `tabletennis` |
 
 The platform ApplicationSets are **opt-out** — an umbrella label turns every
 component on unless it says `"false"`. So a profile is the umbrella plus what
 cannot render on a ClusterStack-built cluster: the Platform owns the Vault
 issuer, and a ClusterStack makes one clusterbook reservation, not two.
+
+**`appSecrets`** names the `AppSecretProfile`s
+([crossplane-configurations#464](https://github.com/stuttgart-things/crossplane-configurations/issues/464))
+the workloads of a profile read. A list, not the profile's name: `tabletennis-platform`
+is one Application shipping schmetterpause, zaehlwerk and the light-catcher, and each
+of those declares its own secrets. `xplane-cluster` fetches exactly these, fails the
+render when one is missing, and derives the stores, the eso policies, the
+`…/secrets-config` gate and the `VaultSecretSet`s from them.
 
 **Opt-in gates are rejected by the schema**
 (`…/secrets-config`, `security-platform/external-secrets-stores`). They assert
@@ -130,7 +140,7 @@ cat.sizeNames, cat.distributionNames        # sorted names, for error messages
 ## Test
 
 ```bash
-kcl test .     # 16 tests, no Crossplane and no cluster required
+kcl test .     # 30 tests, no Crossplane and no cluster required
 ```
 
 The tests are the point: these rules — CNI ownership, the mandatory cilium var, the inventory groups, the separate upload stage — are exactly what should fail in CI rather than on a live cluster.

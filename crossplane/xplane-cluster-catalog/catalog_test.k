@@ -213,7 +213,7 @@ test_ansible_distributions_have_no_rancher_fields = lambda {
 
 # --- profiles ---------------------------------------------------------------
 test_profiles_registered = lambda {
-    assert c.profileNames == ["base", "network", "observability", "security", "storage-openebs"]
+    assert c.profileNames == ["base", "homerun2", "network", "observability", "security", "storage-openebs", "tabletennis"]
 }
 
 # Every profile turns its platform ON — a profile that only sets "false" labels
@@ -246,4 +246,14 @@ test_no_profile_carries_an_opt_in_gate = lambda {
 test_storage_openebs_names_its_class = lambda {
     _a = c.getProfile("storage-openebs").annotations
     assert _a["observability-platform.stuttgart-things.com/storage-class"] == "openebs-hostpath"
+}
+
+# Only the app platforms declare secrets; the infrastructure profiles read
+# nothing an AppSecretProfile describes.
+test_app_profiles_name_their_secret_declarations = lambda {
+    assert c.getProfile("homerun2").appSecrets == ["homerun2"]
+    assert c.getProfile("tabletennis").appSecrets == ["schmetterpause", "zaehlwerk", "tabletennis"]
+    assert all n in ["base", "network", "observability", "security", "storage-openebs"] {
+        c.getProfile(n).appSecrets == []
+    }
 }
