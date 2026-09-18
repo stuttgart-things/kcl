@@ -65,10 +65,10 @@ ansibleRun: s.Capability = {
             "awx.awx:24.6.1"
             "community.hashi_vault:7.1.0"
             "ansible.netcommon:8.5.2"
-            "https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-26.730.1176/sthings-baseos-26.730.1176.tar.gz"
+            "https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-26.917.1297/sthings-baseos-26.917.1297.tar.gz"
             "https://github.com/stuttgart-things/ansible/releases/download/sthings-awx-26.729.1166/sthings-awx-26.729.1166.tar.gz"
-            "https://github.com/stuttgart-things/ansible/releases/download/sthings-rke-26.730.1176/sthings-rke-26.730.1176.tar.gz"
-            "https://github.com/stuttgart-things/ansible/releases/download/sthings-container-26.730.1176/sthings-container-26.730.1176.tar.gz"
+            "https://github.com/stuttgart-things/ansible/releases/download/sthings-rke-26.917.1297/sthings-rke-26.917.1297.tar.gz"
+            "https://github.com/stuttgart-things/ansible/releases/download/sthings-container-26.917.1297/sthings-container-26.917.1297.tar.gz"
         ]
     }
     optional = []
