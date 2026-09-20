@@ -4,4 +4,4 @@ edition = "v0.12.3"
 version = "0.19.1"
 
 [dependencies]
-xplane-cluster-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-cluster-catalog", tag = "0.8.1" }
+xplane-cluster-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-cluster-catalog", tag = "0.8.2" }
