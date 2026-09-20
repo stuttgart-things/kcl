@@ -731,6 +731,31 @@ test_rancher_child_takes_machine_global_config_from_the_catalog = lambda {
     assert _o.spec.machineGlobalConfig["cni"] == "none"
 }
 
+# The k3s twin, end to end through the logic rather than only in the catalog:
+# whichever rancher entry is named, its OWN keys reach the RancherCluster. The
+# rke2 keys on a k3s server are ignored in silence, which left flannel running
+# and cilium unable to create its vxlan device (kcl#282).
+test_rancher_child_uses_the_k3s_keys_for_rancher_k3s = lambda {
+    _s = _rancherSpec | {distribution = "rancher-k3s"}
+    _c = l.rancherChild("k3s-1", "default", _s)
+    _m = _c.spec.machineGlobalConfig
+    assert _m["flannel-backend"] == "none"
+    assert _m["disable-network-policy"] == True
+    assert _m["disable-kube-proxy"] == True
+    assert "traefik" in _m["disable"]
+    assert "cni" not in _m
+}
+
+# Both rancher entries take the rancher path, which is decided by the
+# provisioner and not by the name.
+test_rancher_k3s_is_a_rancher_provisioner = lambda {
+    assert l.kubeconfigLifecycleEnabled({distribution = "rancher-k3s"}) == True
+    _s = _rancherSpec | {distribution = "rancher-k3s"}
+    _j = l.joinRun("k3s-1", "default", _s, "10.31.102.147", "k3s-1-node-command")
+    assert _j.spec.ansiblePlaybooks == ["sthings.rke.rancher_register"]
+    assert "rancher_kubeconfig_path+-" in _j.spec.ansibleVarsFile
+}
+
 # One stage, not two: the play registers the node AND uploads the kubeconfig.
 test_join_run_registers_and_uploads = lambda {
     _j = l.joinRun("rke2-1", "default", _rancherSpec, "10.31.102.147", "rke2-1-node-command")
