@@ -11,7 +11,12 @@ import ..schema as s
 #   - stuttgart-things/flux cicd/crossplane                (an older generation
 #     of the same list, pointing at ghcr.io/stuttgart-things/crossplane/*)
 #
-# Versions are as of 2026-08-15 and were read from those files, not remembered.
+# Versions are as of 2026-09-20 and were read from those files, not remembered:
+# reconciled against `kind_machinery.yaml`, which is itself kept level with the
+# reference clusters (u26-kind3, seed-labda-1). Every pin below is the one the
+# play installs; where the two disagreed, the play was right and this file was
+# behind — the drift this catalog exists to end runs in that direction, because
+# a play is run and a catalog is only read.
 
 machinery: s.Profile = {
     crossplaneVersion = "2.3.3"
@@ -137,7 +142,15 @@ machinery: s.Profile = {
             # Referenz-Cluster u26-kind3 vier Configurations weit
             # zurueckgefallen (2026-08-20 abgeglichen). Ein Profil, das
             # beschreibt, was eine Machinery IST, darf das nicht.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.6.2"
+            #
+            # v0.7.2 (2026-09-20 abgeglichen gegen kind_machinery.yaml, das
+            # seinerseits u26-kind3 nachgezogen hat): gebundene ServiceAccounts
+            # fuer zusaetzliche Vault-Auths, clusterSecrets (der Cluster-eigene
+            # Observability-Eintrag), cni.gatewayAPI-Durchreichung, kein
+            # generiertes Webhook-Token. FLOORS UNVERAENDERT — vault-pki-secrets
+            # bleibt >=v0.1.5, das ist also NICHT der "raised floor"-Fall, der
+            # einen bestehenden Cluster von Hand nachziehen laesst.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.7.2"
             pulls = ["cni", "flux-init", "flux-apps", "ip-reservation", "vault-auth", "vault-pki-secrets"]
         }
         s.Package {
@@ -153,8 +166,43 @@ machinery: s.Profile = {
             # v0.4.0 kann also genau die LabDA-Cluster NICHT bauen, fuer die er
             # aufgestellt wird — aufgefallen beim ersten LabDA-Seed
             # (crossplane-configurations#258, 2026-08-20).
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.6.1"
-            pulls = ["platform", "remote-cluster", "vspherevm", "proxmoxvm", "ansible-run", "management-plane"]
+            #
+            # v0.11.5, und der Sprung ueber fuenf Minors ist genau das Problem,
+            # das der Katalog abstellen soll: u26-kind3 lief schon auf v0.10.0,
+            # waehrend dieser Pin noch v0.6.1 sagte — ein Re-Apply haette das
+            # Paket HERUNTERGESTUFT und die XRD zurueckgeschrumpft (kein
+            # rancher-Provisioner, keine profiles, keine secretStores),
+            # stuttgart-things#3013. `kubectl apply` laeuft eine Configuration
+            # rueckwaerts ohne zu klagen; DIESEN PIN NIE SENKEN.
+            #
+            #   v0.10.0  rancher-rke2-Provisioner (RancherCluster-Kind, join
+            #            stage), Vault-Kubeconfig-Workspace, profiles + abgeleitete
+            #            Argo-CD-Labels. ANGEHOBENER FLOOR: dependsOn
+            #            rancher-cluster >=v0.8.1 und function-environment-configs.
+            #            Frische Cluster loesen das auf; ein bereits installiertes
+            #            aelteres rancher-cluster muss von Hand nachgezogen werden.
+            #   v0.11.0  App-Secrets aus AppSecretProfiles
+            #            (crossplane-configurations#464/#470), neue dependsOn
+            #            vault-secrets >=v0.4.0 und app-secret-profile >=v0.1.0.
+            #   v0.11.4  v0.11.0/v0.11.1 trugen eine CEL-Regel, deren geschaetzte
+            #            Kosten das API-Server-Budget sprengen: die ClusterStack-CRD
+            #            liess sich nicht mehr aktualisieren und nach einem
+            #            Crossplane-Neustart reconcilete KEIN ClusterStack mehr
+            #            (crossplane-configurations#473). v0.11.2 und v0.11.3 sind
+            #            v0.11.1-Inhalt — diese drei nie pinnen.
+            #   v0.11.5  xplane-cluster 0.19.0 (crossplane-configurations#474).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.11.5"
+            pulls = [
+                "platform"
+                "remote-cluster"
+                "rancher-cluster"
+                "vspherevm"
+                "proxmoxvm"
+                "ansible-run"
+                "management-plane"
+                "vault-secrets"
+                "app-secret-profile"
+            ]
         }
         s.Package {
             kind = "Configuration"
@@ -165,7 +213,15 @@ machinery: s.Profile = {
             # gibt — jeder ansible-run-Default faellt still weg,
             # ansibleExtraCollections eingeschlossen, und der Base-OS-Lauf
             # scheitert an einer Collection-Version. crossplane-configurations#347.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.9.2"
+            #
+            # v0.10.0 bringt spec.vm.cloneDatastore, v0.11.0 dessen `none`-
+            # Opt-out. Fuer LabUL nicht optional: beide Base-OS-Templates halten
+            # ihre Disk auf dem NFS-Store DD-sthings, dessen ACL Anfang 2026-08
+            # Datastore.AllocateSpace verloren hat — ein Clone, der kein
+            # Ziel-Datastore benennen kann, laeuft in ein 403. Unterhalb v0.10.0
+            # kennt die XRD das Feld gar nicht, und jedes Paket meldet trotzdem
+            # Healthy.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.11.0"
             providerCrd = "clusterproviderconfigs.vspherevm.m.stuttgart-things.com"
             pulls = ["ansible-run"]
         }
@@ -177,7 +233,13 @@ machinery: s.Profile = {
             # (crossplane-configurations#347), v0.13.0 macht den
             # cloud-init-Datastore ueber die EnvironmentConfig setzbar
             # (crossplane-configurations#350).
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.13.0"
+            #
+            # v0.15.0 ist der Stand, den kind_machinery.yaml auf jede Machinery
+            # legt (2026-09-20 abgeglichen). Was v0.14.0 und v0.15.0 im
+            # Einzelnen aendern, steht in crossplane-configurations, nicht hier;
+            # kind_machinery.yaml notiert zu keinem der beiden einen neuen
+            # dependsOn-Floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.15.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
@@ -191,7 +253,7 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-harvester-vm"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/harvester-vm:v0.1.9"
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/harvester-vm:v0.1.12"
             pulls = ["volume-claim", "cloud-config", "ansible-run"]
         }
         s.Package {
@@ -207,7 +269,12 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-cluster-backup"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster-backup:v0.1.0"
+            # Das Paket allein macht die Faehigkeit verfuegbar; ein laufendes
+            # Backup braucht zusaetzlich das Push-Secret der Backup-Registry und
+            # — bei eingeschraenkter Provider-SA — die provider-kubernetes-RBAC
+            # aus dem README der Configuration. Beides ist Cluster-Fakt und
+            # steht deshalb nicht hier.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster-backup:v0.2.0"
         }
         s.Package {
             kind = "Configuration"
@@ -228,6 +295,26 @@ machinery: s.Profile = {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-volume-claim"
             package = "ghcr.io/stuttgart-things/crossplane-configurations/volume-claim:v0.1.0"
+        }
+        # capability und argocd-cluster: NICHTS zieht die beiden ueber dependsOn,
+        # sie existieren also nur dort, wo jemand sie installiert. Auf u26-kind3
+        # war das von Hand (2026-08-17/18), jeweils mit einem lebenden XR
+        # (seed-labda-1-capability, homerun2-test1) — und genau deshalb fielen
+        # sie hier nicht auf. Ein aus Git neu gebauter Machinery-Cluster hatte
+        # beide XRDs nicht (u26-kindtest-Rebuild, 2026-09-19).
+        #
+        # Das ist der Fall, fuer den dieser Katalog existiert: was eine Machinery
+        # IST, darf nicht davon abhaengen, was jemand einmal per kubectl
+        # nachgelegt hat.
+        s.Package {
+            kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-capability"
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/capability:v0.7.2"
+        }
+        s.Package {
+            kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-argocd-cluster"
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/argocd-cluster:v0.2.1"
         }
     ]
     # Point each provider at the cluster it runs on. No credentials: the
