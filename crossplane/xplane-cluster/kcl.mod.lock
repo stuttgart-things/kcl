@@ -1,9 +1,9 @@
 [dependencies]
   [dependencies.xplane-cluster-catalog]
     name = "xplane-cluster-catalog"
-    full_name = "xplane-cluster-catalog_0.8.0"
-    version = "0.8.0"
-    sum = "Ht6N9QeR0mOGSO8iIcLgl/rE1ynL6SiJEwMn3UWxDlc="
+    full_name = "xplane-cluster-catalog_0.8.1"
+    version = "0.8.1"
+    sum = "HqCKHmfhN9Aw1BdL3O1FOjm83/757CBOq/0lvCXjftw="
     reg = "ghcr.io"
     repo = "stuttgart-things/xplane-cluster-catalog"
-    oci_tag = "0.8.0"
+    oci_tag = "0.8.1"

@@ -45,6 +45,12 @@ On the **rancher** path the cluster exists before any node does:
 
 `spec.rancher` is a verbatim passthrough of the `RancherCluster` spec, the same contract `spec.platform` has: `environmentConfig`, `argocd`, `vaultAuth`, `clusterSpec`, and `machineGlobalConfig` merged **over** the catalog's.
 
+### The admin kubeconfig path is detected (0.19.1)
+
+The join stage no longer tells the play where the admin kubeconfig sits. `rancher-rke2` names the *provisioner*, not the distribution on the node: Rancher decides that, the same registration command installs k3s or rke2, and the catalog cannot read the `RancherCluster`'s EnvironmentConfig. The entry pinned `/etc/rancher/rke2/rke2.yaml`, so every k3s join failed on the last task after the full 900 s wait ([kcl#277](https://github.com/stuttgart-things/kcl/issues/277)).
+
+`rancher_kubeconfig_path` is now emitted **empty**, and `sthings.rke.rancher_register` polls both candidates and takes whichever appears. Emitted empty rather than omitted: an absent var leaves the play on its own default, which is the guess this removed. Needs catalog 0.8.1 and collection `sthings-rke-26.920.1327` or newer.
+
 ## Who owns `kubeconfigs/<cluster>` (0.14.0)
 
 The upload writes that Vault entry; nothing removed it. A torn-down cluster left its kubeconfig behind — `rancher-join-test3` and `-test4` both did.

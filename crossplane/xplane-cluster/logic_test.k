@@ -738,7 +738,15 @@ test_join_run_registers_and_uploads = lambda {
     assert _j.metadata.name == "rke2-1-join"
     assert _j.spec.ansiblePlaybooks == ["sthings.rke.rancher_register"]
     assert "rancher_upload_kubeconfig+-true" in _j.spec.ansibleVarsFile
-    assert "rancher_kubeconfig_path+-/etc/rancher/rke2/rke2.yaml" in _j.spec.ansibleVarsFile
+    # EMPTY ON PURPOSE, and asserted rather than dropped: the catalog stopped
+    # pinning /etc/rancher/rke2/rke2.yaml (catalog 0.8.1, kcl#277) because a
+    # custom node runs the distribution of the cluster it joins - the same
+    # registration command installs k3s or rke2 - and the play detects the
+    # path instead. The var still has to REACH the play: without it the play
+    # falls back to whatever its own default is, which is the guess this was
+    # meant to remove. So check that it arrives, and that it arrives empty.
+    assert "rancher_kubeconfig_path+-" in _j.spec.ansibleVarsFile
+    assert "rancher_kubeconfig_path+-/etc/rancher/rke2/rke2.yaml" not in _j.spec.ansibleVarsFile
     assert "cluster_name+-rke2-1" in _j.spec.ansibleVarsFile
 }
 
