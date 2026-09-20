@@ -1451,6 +1451,20 @@ test_component_with_its_umbrella_passes = lambda {
     assert _l["storage-platform/cloudnative-pg"] == "true"
 }
 
+# The Barman Cloud plugin rides along with the operator, through the logic and
+# not only in the catalog: apps/schmetterpause/database renders an ObjectStore
+# (barmancloud.cnpg.io/v1) as soon as backup or recovery is set, and without
+# this label the database Application never syncs (catalog 0.8.3, kcl#286).
+test_tabletennis_brings_barman_through_argocd = lambda {
+    _l = l.argocdBlock({clusterName = "c9", distribution = "rancher-k3s", profiles = ["storage-openebs", "tabletennis"], rancher = {
+        argocd = {register = True}
+    }}).labels
+    assert _l["storage-platform/cloudnative-pg"] == "true"
+    assert _l["storage-platform/cloudnative-pg-barman"] == "true"
+    # Same umbrella as the operator — one storage-platform covers both.
+    assert _l["storage-platform"] == "true"
+}
+
 # A hand-written umbrella counts too: the check reads the merged result.
 test_component_umbrella_may_come_from_the_caller = lambda {
     _l = l.argocdBlock({clusterName = "c9", distribution = "rancher-rke2", profiles = ["tabletennis"], rancher = {
