@@ -874,3 +874,29 @@ test_cluster_secrets_resource_name_matches_the_object = lambda {
     assert w.metadata.name == "pf-cluster-secrets"
     assert w.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "pf-cluster-secrets"
 }
+
+# The VaultK8sAuth child exists in two packages that share the kind and differ
+# in the group: bootstrap/vault-auth (OpenTofu Workspaces, tfstate on the
+# management cluster) and vault/vault-k8s-auth (native provider-vault managed
+# resources, no state, with adoption). Picking the wrong group renders an XR
+# whose CRD may not even be installed, so the choice is asserted here rather
+# than left to the composition.
+test_vault_auth_defaults_to_opentofu = lambda {
+    assert l.nativeVaultAuth({}) == False
+    assert l.nativeVaultAuth({vaultIssuer = {enabled = True}}) == False
+    assert l.vaultAuthApiVersion({}) == "config.stuttgart-things.com/v1alpha1"
+}
+
+test_vault_auth_switches_to_provider_vault = lambda {
+    _spec = {vaultIssuer = {enabled = True, authProvider = "provider-vault"}}
+    assert l.nativeVaultAuth(_spec) == True
+    assert l.vaultAuthApiVersion(_spec) == "vault.stuttgart-things.com/v1alpha1"
+}
+
+# Anything but the exact string stays on the old path: a typo must not silently
+# render an XR against a CRD the cluster may not have.
+test_vault_auth_unknown_provider_stays_opentofu = lambda {
+    assert l.nativeVaultAuth({vaultIssuer = {authProvider = "vault"}}) == False
+    assert l.nativeVaultAuth({vaultIssuer = {authProvider = "Provider-Vault"}}) == False
+    assert l.vaultAuthApiVersion({vaultIssuer = {authProvider = "tofu"}}) == "config.stuttgart-things.com/v1alpha1"
+}
