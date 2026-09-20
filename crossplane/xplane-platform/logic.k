@@ -109,6 +109,26 @@ vaultIssuerEnabled = lambda spec: {str:} -> bool {
     (spec?.vaultIssuer or {})?.enabled or False
 }
 
+nativeVaultAuth = lambda spec: {str:} -> bool {
+    """Does the vaultIssuer drive Vault through provider-vault instead of OpenTofu?
+
+    `opentofu` (the default) composes bootstrap/vault-auth: one Workspace per
+    auth, whose tfstate is a Secret on the management cluster - state a rebuilt
+    cluster cannot bring back, which is why a fresh apply then fails with
+    "path is already in use". `provider-vault` composes vault/vault-k8s-auth:
+    native managed resources, no state, and `adoption` to take over what the
+    Workspace created (crossplane-configurations#482).
+
+    A switch rather than a swap: during the migration the same Vault objects
+    have two owners, and neither side may delete while the other holds them."""
+    ((spec?.vaultIssuer or {})?.authProvider or "opentofu") == "provider-vault"
+}
+
+vaultAuthApiVersion = lambda spec: {str:} -> str {
+    """API group of the VaultK8sAuth child - the two packages share the kind."""
+    "vault.stuttgart-things.com/v1alpha1" if nativeVaultAuth(spec) else "config.stuttgart-things.com/v1alpha1"
+}
+
 certManagerReady = lambda ocds: {str:}, key: str -> bool {
     """Is cert-manager's webhook SERVING on the target?
 

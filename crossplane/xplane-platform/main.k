@@ -309,20 +309,48 @@ _viRevCa = _viRevData["ca.crt"] if "ca.crt" in _viRevData else ""
 _viEffReviewerSecret = _viReviewerMgmtSecret if _viAutoReviewer else (_viSpec?.reviewerSecret or "")
 _viReviewerAvailable = (_viRevToken != "") if _viAutoReviewer else (_viSpec?.reviewerSecret != None)
 
+# Which VaultK8sAuth drives Vault. `opentofu` (default) is bootstrap/vault-auth:
+# one OpenTofu Workspace per auth, whose tfstate is a Secret on the management
+# cluster. `provider-vault` is vault/vault-k8s-auth: native managed resources,
+# NO state at all, and `adoption` to take over what the Workspace created.
+#
+# Why it is a switch and not a swap: during a migration the same Vault objects
+# have two owners, and the old side may not run `tofu destroy` while the new
+# one holds them. Per cluster, one at a time (crossplane-configurations#482).
+_viNativeAuth = l.nativeVaultAuth(_spec)
+
+# provider-vault carries address, credentials and skip_tls_verify on the
+# ClusterProviderConfig, so the three OpenTofu-only fields below fall away.
+_viVaultPcRef = _viSpec?.vaultProviderConfigRef or "vault"
+
+# The reviewer Secret must sit in the XR's OWN namespace for the native path -
+# provider-vault takes the JWT as a local secret reference, and reading one from
+# another namespace would let any namespace that may create this XR aim Vault at
+# a token it cannot read. That is already the case here: the reviewer Secret is
+# created in _namespace, which is where this child lands.
+_viBackendConfig = lambda -> {str:} {
+    {secretName = _viEffReviewerSecret} if _viNativeAuth else {secretName = _viEffReviewerSecret, secretNamespace = _namespace}
+}
+
 _vaultK8sAuthXR = {
-    apiVersion = "config.stuttgart-things.com/v1alpha1"
+    apiVersion = l.vaultAuthApiVersion(_spec)
     kind = "VaultK8sAuth"
     metadata = {name = _vaultAuthKey, namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = _vaultAuthKey}}
     spec = {
         if _shared?.clusterName:
             clusterName = _shared.clusterName
         vaultAddr = _viSpec?.vaultAddr or ""
-        skipTlsVerify = _viSpec.skipTlsVerify if "skipTlsVerify" in _viSpec else True
         if _viSpec?.kubernetesHost:
             kubernetesHost = _viSpec.kubernetesHost
-        vaultTokenSecret = _viSpec?.approleSecret or "vault-approle"
-        providerConfigName = _viSpec?.opentofuProviderConfigRef or "in-cluster"
-        providerConfigKind = "ClusterProviderConfig"
+        if _viNativeAuth:
+            providerConfigRef = {name = _viVaultPcRef, kind = "ClusterProviderConfig"}
+            if _viSpec?.adoption:
+                adoption = _viSpec.adoption
+        else:
+            skipTlsVerify = _viSpec.skipTlsVerify if "skipTlsVerify" in _viSpec else True
+            vaultTokenSecret = _viSpec?.approleSecret or "vault-approle"
+            providerConfigName = _viSpec?.opentofuProviderConfigRef or "in-cluster"
+            providerConfigKind = "ClusterProviderConfig"
         k8sAuths = [{
             name = _viAuthName
             tokenPolicies = _viSpec?.tokenPolicies or ["pki-issue"]
@@ -332,7 +360,7 @@ _vaultK8sAuthXR = {
             # explicit); until then the Workspace just creates the mount+role and
             # adds the backend_config on a later reconcile.
             if _viReviewerAvailable:
-                backendConfig = {secretName = _viEffReviewerSecret, secretNamespace = _namespace}
+                backendConfig = _viBackendConfig()
         }] + [{
             # Further auths on the SAME Vault mount machinery — external-secrets
             # is the reason this exists: it needs its own mount and role, bound
@@ -347,7 +375,7 @@ _vaultK8sAuthXR = {
             if a?.policies:
                 policies = a.policies
             if _viReviewerAvailable:
-                backendConfig = {secretName = _viEffReviewerSecret, secretNamespace = _namespace}
+                backendConfig = _viBackendConfig()
         } for a in (_viSpec?.additionalAuths or [])]
     }
 }
