@@ -193,6 +193,7 @@ test_rancher_rke2_leaves_the_kubeconfig_path_to_the_play = lambda {
 test_rancher_entries_name_their_server = lambda {
     assert c.getDistribution("rancher-k3s").serverDistro == "k3s"
     assert c.getDistribution("rancher-rke2").serverDistro == "rke2"
+
     # The ansible path installs the server itself, so there is nothing that
     # could disagree — and the schema refuses a value there.
     assert c.getDistribution("k3s").serverDistro == ""
