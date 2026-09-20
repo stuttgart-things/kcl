@@ -35,7 +35,7 @@ All values are **strings** — both VM XRDs take strings, and emitting ints fail
 
 ## Distributions
 
-| | `k3s` | `kind` | `rke2` | `rancher-rke2` |
+| | `k3s` | `kind` | `rke2` | `rancher-k3s` / `rancher-rke2` |
 |---|---|---|---|---|
 | provisioner | `ansible` | `ansible` | `ansible` | **`rancher`** |
 | playbook | `sthings.rke.k3s_cluster` | `sthings.container.kind` | `sthings.rke.rke2_cluster` | `sthings.rke.rancher_register` (a **join**, not an install) |
@@ -51,9 +51,29 @@ Every var in the tables is load-bearing, with the incident history in the commen
 - **rke2 pins the pair the fleet runs, not the play's defaults.** `sthings.rke.rke2_cluster` defaults to `1.36.1` / `rke2r2`; every rke2 cluster in this fleet is on `1.35.1` / `rke2r1`. Shipping the default would pin a combination nobody here has ever booted. The entry was added only after a reference run on 2026-08-11 — an `AnsibleRun` on the u26-kind3 machinery cluster driving the play against a Proxmox VM, which produced `Ready control-plane,etcd v1.35.1+rke2r1` with cilium up. That rule ("no entry without a reference run") is enforced by `catalog_test.k`, not just stated here.
 - **k3s's three inventory groups are not cosmetic.** `sthings.rke.deploy_configure_rke` branches on `groups['initial_master_node']` and `groups['additional_master_nodes']`; a flat `all+[...]` inventory fails with an undefined-group error. Empty groups render as header-only INI sections, which ansible registers as existing-but-empty — exactly what the role's `in groups[...]` tests need.
 
+### Two rancher entries, one per server
+
+`rancher-k3s` and `rancher-rke2` are the same entry except for
+`machineGlobalConfig`, whose keys belong to the **server** Rancher provisions,
+and k3s and rke2 do not share them:
+
+| | `rancher-k3s` | `rancher-rke2` |
+|---|---|---|
+| no bundled CNI | `flannel-backend: none` + `disable-network-policy: true` | `cni: none` |
+| no bundled ingress | `disable: [traefik, servicelb]` | `ingress-controller: none`, `disable: [rke2-traefik-crd, rke2-gateway-api-crd]` |
+| no kube-proxy | `disable-kube-proxy: true` | `disable-kube-proxy: true` |
+
+**An unknown key is ignored, not refused.** Building a k3s cluster with the rke2
+entry therefore leaves flannel and traefik running: cilium cannot create
+`cilium_vxlan` ("address already in use"), no pod reaches a ClusterIP, CoreDNS
+cannot reach the API, `cattle-cluster-agent` cannot resolve Rancher, and the
+cluster never registers — after looking healthy for ten minutes
+([#282](https://github.com/stuttgart-things/kcl/issues/282)). The distribution
+has to match the environment's `distro`; nothing checks it for you.
+
 ### `provisioner: rancher` — the cluster exists before any node does
 
-`k3s`, `kind` and `rke2` are installed **onto** a VM the consumer already built. `rancher-rke2` inverts that: **Rancher creates the cluster**, publishes a node-registration command, and the playbook here *joins* a node into it and uploads that node's admin kubeconfig to Vault. So a consumer of this entry composes a `RancherCluster` XR first, waits for the Secret it publishes, and runs **one** stage instead of the distribution + kubeconfig pair.
+`k3s`, `kind` and `rke2` are installed **onto** a VM the consumer already built. The rancher entries invert that: **Rancher creates the cluster**, publishes a node-registration command, and the playbook here *joins* a node into it and uploads that node's admin kubeconfig to Vault. So a consumer of this entry composes a `RancherCluster` XR first, waits for the Secret it publishes, and runs **one** stage instead of the distribution + kubeconfig pair.
 
 Three facts drive everything else in the entry:
 

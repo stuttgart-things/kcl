@@ -185,6 +185,36 @@ test_rancher_rke2_leaves_the_kubeconfig_path_to_the_play = lambda {
     assert _v["rancher_kubeconfig_path"] == ""
 }
 
+# The k3s twin. Same provisioner, same play, same CNI ownership — the entry
+# exists for machineGlobalConfig alone, and a k3s cluster carrying rke2 keys
+# keeps flannel, so cilium cannot create its vxlan device and nothing that
+# needs a pod network ever works (#282).
+test_rancher_k3s_disables_what_k3s_actually_bundles = lambda {
+    _d = c.getDistribution("rancher-k3s")
+    assert _d.provisioner == "rancher"
+    assert _d.playbooks == ["sthings.rke.rancher_register"]
+    assert _d.cniOwnership == "platform"
+
+    _m = _d.machineGlobalConfig
+    assert _m["flannel-backend"] == "none"
+    assert _m["disable-network-policy"] == True
+    assert _m["disable-kube-proxy"] == True
+    assert "traefik" in _m["disable"]
+    assert "servicelb" in _m["disable"]
+
+    # rke2 keys have no meaning on a k3s server and would be ignored in
+    # silence, which is exactly how this shipped wrong.
+    assert "cni" not in _m
+    assert "ingress-controller" not in _m
+}
+
+# And the other way round: rke2's entry must not pick up k3s keys.
+test_rancher_rke2_keeps_its_own_keys = lambda {
+    _m = c.getDistribution("rancher-rke2").machineGlobalConfig
+    assert _m["cni"] == "none"
+    assert "flannel-backend" not in _m
+}
+
 # The cluster is built without a CNI on purpose — Rancher's proxy needs
 # cattle-cluster-agent, which needs a pod network — so the Platform owns it.
 test_rancher_rke2_leaves_the_cni_to_the_platform = lambda {

@@ -12,6 +12,7 @@
 # the run and for why its pins are not the play's defaults.
 import .distributions.k3s as k3s
 import .distributions.kind as kind
+import .distributions.rancher_k3s as rancher_k3s
 import .distributions.rancher_rke2 as rancher_rke2
 import .distributions.rke2 as rke2
 import profiles as pf
@@ -23,6 +24,11 @@ distributions: {str:s.Distribution} = {
     kind = kind.kind
     # Rancher creates the cluster and a node joins it; the playbook above is the
     # JOIN, not an install. Reference run: rancher-join-test4, 2026-09-15.
+    #
+    # TWO entries, because machineGlobalConfig keys are the server's and k3s
+    # and rke2 do not share them. Picking the wrong one builds a cluster that
+    # looks healthy for ten minutes and never registers (#282).
+    "rancher-k3s" = rancher_k3s.rancher_k3s
     "rancher-rke2" = rancher_rke2.rancher_rke2
     rke2 = rke2.rke2
 }
