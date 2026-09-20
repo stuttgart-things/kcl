@@ -15,6 +15,7 @@ _vaultTokenSecretKey = _spec?.vaultTokenSecretKey or "terraform.tfvars"
 _providerConfigName = _spec?.providerConfigName or _clusterName
 _providerConfigKind = _spec?.providerConfigKind or "ClusterProviderConfig"
 _skipTlsVerify = _spec.skipTlsVerify if "skipTlsVerify" in _spec else True
+
 # Hand the Vault objects over instead of destroying them. Set while another
 # owner (vault/vault-k8s-auth, via provider-vault) has adopted the same mount,
 # so removing this XR does not take the mount, the role and the policies with
