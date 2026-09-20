@@ -6,7 +6,12 @@ that node's admin kubeconfig to Vault.
 REFERENCE RUN (the rule this catalog keeps: no entry without one):
 `rancher-join-test4` on u26-kind3, 2026-09-15 — RancherCluster v0.8.1 +
 NativeProxmoxVM v0.15.0 with sthings.rke.rancher_register from
-sthings-rke-26.915.1292, rke2 v1.36.4+rke2r1, one node. Verified end to end:
+sthings-rke-26.915.1292, rke2 v1.36.4+rke2r1, one node.
+
+THE NAME SAYS rke2, THE ENTRY DOES NOT REQUIRE IT. The distribution comes from
+the RancherCluster's EnvironmentConfig — `rancher-join-test` provisions k3s —
+and everything here is the same either way EXCEPT the admin kubeconfig path,
+which is why that one is detected rather than pinned (see below, #277). Verified end to end:
 the play finished with failed=0, the node registered, its kubeconfig landed in
 `kubeconfigs/rancher-join-test4`, a Cni XR installed cilium 1.19.6 through the
 node kubeconfig, and only THEN did `cattle-cluster-agent` start and Rancher
@@ -30,9 +35,26 @@ rancher_rke2: s.Distribution = s.Distribution {
     playbooks = ["sthings.rke.rancher_register"]
     vars = {
         rancher_upload_kubeconfig = "true"
-        # rke2 writes its admin kubeconfig here; the play's default is the k3s
-        # path, and a wrong path fails only at the very end of the run.
-        rancher_kubeconfig_path = "/etc/rancher/rke2/rke2.yaml"
+        # EMPTY = LET THE PLAY DETECT IT, and that is not a convenience.
+        #
+        # This entry used to pin /etc/rancher/rke2/rke2.yaml, from its own
+        # reference run. But on a CUSTOM NODE the distribution belongs to the
+        # Rancher cluster the node joins, not to this catalog: the same
+        # registration command installs k3s or rke2, and which one is decided
+        # by the RancherCluster's EnvironmentConfig — which this entry cannot
+        # read. Pinning it here is a guess about somebody else's cluster.
+        #
+        # The wrong guess is expensive: the play waits the full
+        # rancher_kubeconfig_wait_timeout (900 s) and fails on the LAST task of
+        # a run that did everything else right. Measured 2026-09-19 with
+        # environment rancher-join-test (distro k3s), which is the
+        # configuration the fleet uses today: stuttgart-things/kcl#277.
+        #
+        # NEEDS sthings.rke with stuttgart-things/ansible#1227, where an empty
+        # path polls both candidates. Against an older collection an empty path
+        # fails immediately rather than after 15 minutes — loudly, and on the
+        # first run, which is the failure mode to prefer.
+        rancher_kubeconfig_path = ""
     }
     # The registration command carries the node roles, so a flat inventory is
     # enough — unlike deploy_configure_rke, which branches on master groups.

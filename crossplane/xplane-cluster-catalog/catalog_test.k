@@ -175,6 +175,16 @@ test_rancher_rke2_is_registered = lambda {
     assert _d.multiNode == False
 }
 
+# The admin kubeconfig path is DETECTED, not pinned. A custom node runs the
+# distribution of the cluster it joins — `rancher-join-test` provisions k3s —
+# and this entry cannot read that EnvironmentConfig. A pinned rke2 path made
+# every k3s join fail after the full 900 s wait, on the last task (#277).
+test_rancher_rke2_leaves_the_kubeconfig_path_to_the_play = lambda {
+    _v = c.getDistribution("rancher-rke2").vars
+    assert _v["rancher_upload_kubeconfig"] == "true"
+    assert _v["rancher_kubeconfig_path"] == ""
+}
+
 # The cluster is built without a CNI on purpose — Rancher's proxy needs
 # cattle-cluster-agent, which needs a pod network — so the Platform owns it.
 test_rancher_rke2_leaves_the_cni_to_the_platform = lambda {
