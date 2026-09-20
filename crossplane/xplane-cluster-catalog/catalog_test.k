@@ -201,6 +201,7 @@ test_rancher_k3s_disables_what_k3s_actually_bundles = lambda {
     assert _m["disable-kube-proxy"] == True
     assert "traefik" in _m["disable"]
     assert "servicelb" in _m["disable"]
+
     # rke2 keys have no meaning on a k3s server and would be ignored in
     # silence, which is exactly how this shipped wrong.
     assert "cni" not in _m
