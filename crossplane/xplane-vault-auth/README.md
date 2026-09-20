@@ -58,6 +58,7 @@ kcl run --quiet oci://ghcr.io/stuttgart-things/xplane-vault-auth --tag 0.2.0 \
 | `vaultTokenSecretKey` | `terraform.tfvars` | |
 | `providerConfigName` | `<clusterName>` | |
 | `providerConfigKind` | `ClusterProviderConfig` | Or `ProviderConfig` for a namespaced config. |
+| `releaseOnDelete` | `false` | Drop `Delete` from the Workspace's `managementPolicies`: deleting the XR removes the Workspace but leaves the Vault mount, role and policies standing. Set it while another owner has adopted the same objects — see below. |
 | `k8sAuths[]` | `frontend`, `backend` demo | See below. |
 
 ### `k8sAuths[]` entry
@@ -71,3 +72,27 @@ kcl run --quiet oci://ghcr.io/stuttgart-things/xplane-vault-auth --tag 0.2.0 \
 | `skipTlsVerify` | inherits from top-level |
 
 Each entry renders one `Workspace` named `<clusterName>-<name>-vault-auth` with an inline HCL module that creates `vault_auth_backend` + `vault_kubernetes_auth_backend_role`.
+
+## releaseOnDelete
+
+`vault/vault-k8s-auth` drives the same Vault objects through provider-vault and
+keeps no state, which is why the fleet is migrating onto it
+([crossplane-configurations#482](https://github.com/stuttgart-things/crossplane-configurations/issues/482)).
+Its `adoption` takes over what this Configuration created, and for a while both
+own the mount. The OpenTofu side then has to be removed **without** a
+`tofu destroy` — otherwise it takes the mount, the role and the policies with
+it while cert-manager is still using them.
+
+```yaml
+spec:
+  releaseOnDelete: true    # managementPolicies: ["Observe", "Create", "Update"]
+```
+
+Order: adopt first (`AdoptionComplete=True` on the new XR), then set this, then
+delete this XR, then `adoption.deleteOnRemoval: true` on the new owner. The
+tfstate Secret is left behind deliberately — remove it once the hand-over is
+confirmed.
+
+A `kubectl patch` on the live Workspace does not work: `managementPolicies` is
+owned by Crossplane's composed-resource field manager, which takes it back on
+the next reconcile.
