@@ -195,3 +195,21 @@ test_harvester_is_part_of_a_machinery = lambda {
     # Bootstrap.
     assert not _hv[0]?.providerCrd
 }
+
+# capability und argocd-cluster gehoeren ins Profil, und zwar aus dem
+# Umkehrschluss der roots-only-Regel: NICHTS zieht sie ueber dependsOn, also
+# existieren sie nur, wo jemand sie installiert. Auf u26-kind3 war das von
+# Hand — ein aus Git neu gebauter Machinery-Cluster hatte beide XRDs nicht
+# (u26-kindtest-Rebuild, 2026-09-19). Ein Paket, das nur per kubectl auf dem
+# Referenz-Cluster liegt, ist keine Fleet-Tatsache; hier wird es eine.
+test_machinery_carries_the_unpulled_configurations = lambda {
+    _p = c.get("machinery")
+    _names = [x.name for x in c.byKind(_p, "Configuration")]
+    assert "stuttgart-things-crossplane-configurations-capability" in _names, "capability fehlt — nichts zieht es transitiv nach"
+    assert "stuttgart-things-crossplane-configurations-argocd-cluster" in _names, "argocd-cluster fehlt — nichts zieht es transitiv nach"
+
+    # Und sie sind wirklich unpulled: tauchte einer der beiden in irgendeinem
+    # `pulls` auf, waere dieser Test ab morgen aus dem falschen Grund gruen.
+    _t = c.transitive(_p)
+    assert "capability" not in _t and "argocd-cluster" not in _t
+}
