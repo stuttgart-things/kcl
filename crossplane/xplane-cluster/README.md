@@ -30,7 +30,7 @@ ClusterStack                                                provisioner: rancher
 
 ## Two provisioners (0.13.0)
 
-The catalog entry decides which shape a stack has — `provisioner: ansible` (k3s, kind, rke2) or `provisioner: rancher` (`rancher-rke2`).
+The catalog entry decides which shape a stack has — `provisioner: ansible` (k3s, kind, rke2) or `provisioner: rancher` (`rancher-k3s`, `rancher-rke2`).
 
 On the **rancher** path the cluster exists before any node does:
 
@@ -47,9 +47,18 @@ On the **rancher** path the cluster exists before any node does:
 
 ### The admin kubeconfig path is detected (0.19.1)
 
-The join stage no longer tells the play where the admin kubeconfig sits. `rancher-rke2` names the *provisioner*, not the distribution on the node: Rancher decides that, the same registration command installs k3s or rke2, and the catalog cannot read the `RancherCluster`'s EnvironmentConfig. The entry pinned `/etc/rancher/rke2/rke2.yaml`, so every k3s join failed on the last task after the full 900 s wait ([kcl#277](https://github.com/stuttgart-things/kcl/issues/277)).
+The join stage no longer tells the play where the admin kubeconfig sits. The rancher entries name a *provisioner*, and the same registration command installs k3s or rke2 depending on the environment, which the catalog cannot read off the `RancherCluster`'s EnvironmentConfig. `rancher-rke2` pinned `/etc/rancher/rke2/rke2.yaml`, so every k3s join failed on the last task after the full 900 s wait ([kcl#277](https://github.com/stuttgart-things/kcl/issues/277)).
 
 `rancher_kubeconfig_path` is now emitted **empty**, and `sthings.rke.rancher_register` polls both candidates and takes whichever appears. Emitted empty rather than omitted: an absent var leaves the play on its own default, which is the guess this removed. Needs catalog 0.8.1 and collection `sthings-rke-26.920.1327` or newer.
+
+**The entry still has to match the environment's distro (catalog 0.8.2).** Only
+the kubeconfig *path* is detected. `machineGlobalConfig` is not: those keys
+belong to the server Rancher provisions, k3s and rke2 do not share them, and an
+unknown key is ignored rather than refused. So `rancher-k3s` and `rancher-rke2`
+are both provisioner `rancher` but are not interchangeable — picking the wrong
+one leaves the bundled CNI and ingress running and the cluster never registers
+([kcl#282](https://github.com/stuttgart-things/kcl/issues/282)). The catalog
+README tabulates the two key sets.
 
 ## Who owns `kubeconfigs/<cluster>` (0.14.0)
 
