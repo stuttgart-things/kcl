@@ -62,6 +62,21 @@ _size = cat.getSize(_spec?.size or "medium")
 _dist = cat.getDistribution(_spec?.distribution or "k3s")
 _supported = cat.assertSizeSupported(_spec?.distribution or "k3s", _spec?.size or "medium")
 
+# ... and that the entry matches the server the RANCHER environment provisions.
+# The entry is picked here, the server is picked by the RancherCluster's own
+# EnvironmentConfig, and machineGlobalConfig keys belong to the server — where
+# an unknown key is IGNORED rather than refused. rancher-rke2 against a k3s
+# environment therefore leaves flannel and traefik running: cilium cannot create
+# cilium_vxlan, no pod reaches a ClusterIP, and the cluster never registers,
+# after ten minutes that look healthy (stuttgart-things/kcl#282, measured twice
+# on schmetterpause-rehearsal1).
+#
+# `distro` reaches this context because bootstrap/cluster loads the rancher
+# EnvironmentConfig as a second selector (crossplane-configurations#491). Empty
+# — an older Configuration, an offline render, the ansible path — is "not known
+# here" and passes, so this cannot fail a render that used to work.
+_distroOk = cat.assertServerDistro(_spec?.distribution or "k3s", str(_env?.distro or ""))
+
 # WHO creates the cluster. On the rancher path Rancher does, and the play this
 # module runs is a JOIN — so the distribution and kubeconfig stages are replaced
 # by a single join stage, and the VM waits for Rancher's registration command
