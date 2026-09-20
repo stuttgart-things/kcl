@@ -883,12 +883,16 @@ test_cluster_secrets_resource_name_matches_the_object = lambda {
 # than left to the composition.
 test_vault_auth_defaults_to_opentofu = lambda {
     assert l.nativeVaultAuth({}) == False
-    assert l.nativeVaultAuth({vaultIssuer = {enabled = True}}) == False
+    assert l.nativeVaultAuth({
+        vaultIssuer = {enabled = True}
+    }) == False
     assert l.vaultAuthApiVersion({}) == "config.stuttgart-things.com/v1alpha1"
 }
 
 test_vault_auth_switches_to_provider_vault = lambda {
-    _spec = {vaultIssuer = {enabled = True, authProvider = "provider-vault"}}
+    _spec = {
+        vaultIssuer = {enabled = True, authProvider = "provider-vault"}
+    }
     assert l.nativeVaultAuth(_spec) == True
     assert l.vaultAuthApiVersion(_spec) == "vault.stuttgart-things.com/v1alpha1"
 }
@@ -896,7 +900,13 @@ test_vault_auth_switches_to_provider_vault = lambda {
 # Anything but the exact string stays on the old path: a typo must not silently
 # render an XR against a CRD the cluster may not have.
 test_vault_auth_unknown_provider_stays_opentofu = lambda {
-    assert l.nativeVaultAuth({vaultIssuer = {authProvider = "vault"}}) == False
-    assert l.nativeVaultAuth({vaultIssuer = {authProvider = "Provider-Vault"}}) == False
-    assert l.vaultAuthApiVersion({vaultIssuer = {authProvider = "tofu"}}) == "config.stuttgart-things.com/v1alpha1"
+    assert l.nativeVaultAuth({
+        vaultIssuer = {authProvider = "vault"}
+    }) == False
+    assert l.nativeVaultAuth({
+        vaultIssuer = {authProvider = "Provider-Vault"}
+    }) == False
+    assert l.vaultAuthApiVersion({
+        vaultIssuer = {authProvider = "tofu"}
+    }) == "config.stuttgart-things.com/v1alpha1"
 }
