@@ -78,6 +78,18 @@ profileTable: {str:s.Profile} = {
         labels = {
             "tabletennis-platform" = "true"
             "storage-platform/cloudnative-pg" = "true"
+            # ... and the Barman Cloud plugin, which is the second half of that
+            # sentence. apps/schmetterpause/database renders an ObjectStore
+            # (barmancloud.cnpg.io/v1) as soon as backup OR recovery is set, so
+            # without the plugin the database Application fails to sync with
+            # "failed to discover server resources for group version
+            # barmancloud.cnpg.io/v1" and the app waits forever on a database
+            # that is never created. Measured on schmetterpause-rehearsal1,
+            # 2026-09-20 (#286) — a rebuild recovers FROM a backup, so for the
+            # case this platform exists for the plugin is not optional.
+            #
+            # Installing it creates no backups; the chart decides that.
+            "storage-platform/cloudnative-pg-barman" = "true"
         }
         appSecrets = ["schmetterpause", "zaehlwerk", "tabletennis"]
     }

@@ -300,6 +300,15 @@ test_app_profiles_name_their_secret_declarations = lambda {
 
 # schmetterpause's database needs the CloudNativePG operator, which
 # platforms/storage installs only on request.
+# The operator alone is not enough: the database chart renders an ObjectStore
+# from barmancloud.cnpg.io/v1 whenever backup or recovery is set, which is
+# every rebuild (#286).
+test_tabletennis_brings_the_barman_plugin = lambda {
+    _l = c.getProfile("tabletennis").labels
+    assert _l["storage-platform/cloudnative-pg"] == "true"
+    assert _l["storage-platform/cloudnative-pg-barman"] == "true"
+}
+
 test_tabletennis_turns_on_cloudnative_pg = lambda {
     assert c.getProfile("tabletennis").labels["storage-platform/cloudnative-pg"] == "true"
 }
