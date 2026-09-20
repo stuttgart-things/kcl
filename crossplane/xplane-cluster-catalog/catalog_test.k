@@ -185,6 +185,32 @@ test_rancher_rke2_leaves_the_kubeconfig_path_to_the_play = lambda {
     assert _v["rancher_kubeconfig_path"] == ""
 }
 
+# serverDistro is what makes the pairing checkable at all: the entry says which
+# server its machineGlobalConfig is written for, the RancherCluster's
+# EnvironmentConfig says which one Rancher provisions, and assertServerDistro
+# compares the two (#282, crossplane-configurations#490). Before it, the only
+# thing relating them was that both names contained "k3s".
+test_rancher_entries_name_their_server = lambda {
+    assert c.getDistribution("rancher-k3s").serverDistro == "k3s"
+    assert c.getDistribution("rancher-rke2").serverDistro == "rke2"
+    # The ansible path installs the server itself, so there is nothing that
+    # could disagree — and the schema refuses a value there.
+    assert c.getDistribution("k3s").serverDistro == ""
+    assert c.getDistribution("rke2").serverDistro == ""
+    assert c.getDistribution("kind").serverDistro == ""
+}
+
+# The pairs that hold, including the two "not known here" cases: an offline
+# render carries no environment, and the ansible path has no rancher
+# environment at all. Neither may fail the render.
+test_assert_server_distro_accepts_what_matches = lambda {
+    assert c.assertServerDistro("rancher-k3s", "k3s")
+    assert c.assertServerDistro("rancher-rke2", "rke2")
+    assert c.assertServerDistro("rancher-k3s", "")
+    assert c.assertServerDistro("k3s", "k3s")
+    assert c.assertServerDistro("k3s", "rke2")
+}
+
 # The k3s twin. Same provisioner, same play, same CNI ownership — the entry
 # exists for machineGlobalConfig alone, and a k3s cluster carrying rke2 keys
 # keeps flannel, so cilium cannot create its vxlan device and nothing that
