@@ -42,6 +42,7 @@ items = vault_auth.vaultK8sAuth(config)
 | `vaultTokenSecretKey` | `terraform.tfvars` | Key inside the Secret. |
 | `providerConfigName` | `default` | |
 | `providerConfigKind` | `ClusterProviderConfig` | Or `ProviderConfig`. |
+| `releaseOnDelete` | `false` | Drop `Delete` from the Workspace's `managementPolicies`, so deleting the XR removes the Workspace but leaves the Vault mount, role and policies. For handing them to another owner — see below. |
 
 ### `K8sAuth`
 
@@ -107,3 +108,24 @@ The AppRole must be bound to a policy that can manage the kubernetes auth mount
 ## License
 
 Apache 2.0 — see [LICENSE](../../LICENSE).
+
+## releaseOnDelete
+
+A Vault mount created here can be taken over by `vault/vault-k8s-auth`, which
+drives Vault through provider-vault and holds no state
+([crossplane-configurations#482](https://github.com/stuttgart-things/crossplane-configurations/issues/482)).
+Adoption leaves both owners holding the same objects, and the OpenTofu side then
+has to go **without** a `tofu destroy` — a normal delete would take the mount,
+the role and the policies with it, while cert-manager is using them.
+
+```
+releaseOnDelete = True   # managementPolicies: ["Observe", "Create", "Update"]
+```
+
+The Workspace keeps reconciling until it is deleted; only the destroy is
+withheld. The Workspace object still goes away. Its tfstate Secret does not —
+remove it once the hand-over is confirmed.
+
+Doing this by hand does not work: `managementPolicies` is owned by Crossplane's
+composed-resource field manager, which holds the CRD default and takes the field
+back on the next reconcile. It has to come from the composition.

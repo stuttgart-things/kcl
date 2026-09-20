@@ -102,6 +102,25 @@ schema VaultConfig:
     providerConfigKind?: "ClusterProviderConfig" | "ProviderConfig" = "ClusterProviderConfig"
     # Required if any K8sAuth in k8sAuths has backendConfig set.
     kubernetesHost?: str
+    releaseOnDelete?: bool = False
+    r"""Let go of the Vault objects instead of destroying them, by dropping
+    Delete from the Workspace's managementPolicies.
+
+    For handing a mount over to another owner — crossplane-configurations#482
+    migrates these auths to provider-vault, which ADOPTS what tofu created. The
+    two then hold the same objects, and the tofu side must be removed without a
+    `tofu destroy`: deleting the XR normally takes the mount, the role and the
+    policies with it, out from under the new owner and the cert-manager that is
+    using them.
+
+    Patching managementPolicies on the live Workspace does not do this. The
+    field is owned by Crossplane's composed-resource field manager (it holds the
+    CRD default), so the next reconcile takes it back. It has to come from the
+    composition, which is why it is a knob here and not an operational step.
+
+    The Workspace object still disappears on delete; only the external
+    resources stay. The tfstate Secret is left behind too, and is the caller's
+    to remove once the hand-over is confirmed."""
 
 # Base HCL: vault provider (AppRole login) + auth_backend + auth_backend_role.
 #
@@ -386,6 +405,13 @@ createSingleVaultAuth = lambda auth: K8sAuth, config: VaultConfig -> otf.Workspa
             annotations = auth.annotations
         }
         spec = {
+            # Stated in BOTH directions on purpose. "*" is also the CRD default,
+            # but a defaulted field belongs to whichever manager created the
+            # object, and Crossplane then removes it when it applies a desired
+            # state that does not mention it. Writing it from the composition
+            # keeps the value where the rest of the Workspace comes from, so
+            # releaseOnDelete flips back and forth without anything drifting.
+            managementPolicies = ["Observe", "Create", "Update"] if config.releaseOnDelete else ["*"]
             providerConfigRef = {
                 name = config.providerConfigName
                 kind = config.providerConfigKind
