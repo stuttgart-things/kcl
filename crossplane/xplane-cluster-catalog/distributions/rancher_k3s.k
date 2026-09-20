@@ -48,6 +48,8 @@ rancher_k3s: s.Distribution = s.Distribution {
     cniOwnership = "platform"
     multiNode = False
     provisioner = "rancher"
+    # What the EnvironmentConfig of a matching rancher environment must say.
+    serverDistro = "k3s"
 
     machineGlobalConfig = {
         # THE WHOLE REASON THIS ENTRY EXISTS. k3s names its switches

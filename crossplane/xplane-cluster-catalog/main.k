@@ -52,6 +52,20 @@ getDistribution = lambda name: str -> s.Distribution {
     distributions[name]
 }
 
+# The entry is chosen by the order; the SERVER is chosen by the RancherCluster's
+# EnvironmentConfig. Nothing made the two agree, and disagreeing is not a render
+# error but a cluster that looks healthy for ten minutes and never registers
+# (#282). A consumer that has the environment's `distro` passes it here.
+#
+# Empty envDistro means "not known at this point" — an offline render, or the
+# ansible path, where there is no rancher environment at all. Empty serverDistro
+# is the same on the entry's side. Neither is a mismatch.
+assertServerDistro = lambda name: str, envDistro: str -> bool {
+    _d = getDistribution(name)
+    assert _d.serverDistro == "" or envDistro == "" or _d.serverDistro == envDistro, "distribution '" + name + "' configures a " + _d.serverDistro + " server, but the rancher environment provisions " + envDistro + " — its machineGlobalConfig keys would be ignored in silence; pick the matching entry"
+    True
+}
+
 getSize = lambda name: str -> s.Size {
     assert name in sizes, "unknown size '" + name + "' — known: " + _knownSize
     sizes[name]

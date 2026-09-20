@@ -65,6 +65,8 @@ rancher_rke2: s.Distribution = s.Distribution {
     # 1.2/1.3 in crossplane-configurations#438.
     multiNode = False
     provisioner = "rancher"
+    # What the EnvironmentConfig of a matching rancher environment must say.
+    serverDistro = "rke2"
 
     machineGlobalConfig = {
         # No CNI from rke2: never rke2-cilium (see the fleet note

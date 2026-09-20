@@ -133,6 +133,23 @@ schema Distribution:
     distribution's own config file. Only meaningful with provisioner
     "rancher"; a consumer passes it to the RancherCluster XR."""
 
+    serverDistro: str = ""
+    """WHICH server the keys above are written for: "k3s" or "rke2". Empty on
+    the ansible path, where the playbooks install the distribution themselves
+    and there is nothing to disagree with.
+
+    It exists because on the rancher path the server is chosen SOMEWHERE ELSE —
+    by the RancherCluster's EnvironmentConfig (`data.distro`) — while the entry
+    is chosen by `spec.distribution`, and the two are set independently.
+    machineGlobalConfig keys belong to the server, and an unknown key there is
+    IGNORED rather than refused: rancher-rke2's `cni: none` means nothing to a
+    k3s server, so flannel survives, cilium cannot create its own vxlan device,
+    and the cluster never registers — after ten minutes that look healthy
+    (stuttgart-things/kcl#282, measured twice on schmetterpause-rehearsal1).
+
+    A consumer that knows the environment's distro compares it with this field
+    through assertServerDistro() and fails the render in a second instead."""
+
     cniDefaults: {str:any} = {}
     """Defaults for the Platform's `Cni` child: the cluster-shape facts a CNI on
     THIS distribution needs, as `{cilium, gatewayAPI, values}`. A consumer merges
@@ -146,6 +163,9 @@ schema Distribution:
         len(inventoryGroups) > 0, "inventoryGroups must name at least one group"
         provisioner in ["ansible", "rancher"], "provisioner must be 'ansible' or 'rancher'"
         provisioner == "rancher" or len(machineGlobalConfig) == 0, "machineGlobalConfig belongs to the rancher provisioner — the ansible path configures the distribution through vars"
+        serverDistro in ["", "k3s", "rke2"], "serverDistro must be 'k3s', 'rke2' or empty"
+        provisioner == "rancher" or serverDistro == "", "serverDistro belongs to the rancher provisioner — on the ansible path the playbooks install the server"
+        provisioner != "rancher" or serverDistro != "", "a rancher entry must name the server its machineGlobalConfig is written for"
         cniOwnership == "platform" or len(cniDefaults) == 0, "cniDefaults only apply where the Platform owns the CNI"
 
 schema Stage:
