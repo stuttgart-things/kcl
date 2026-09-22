@@ -73,13 +73,22 @@ test_function_names_are_short = lambda {
     }, "every dependsOn twin has its short-named sibling"
 }
 
-# The two twins kind5 pins (flux#506). Unpinned, a fresh cluster floats them:
+# The two dependsOn twins, pinned (flux#506). Unpinned, a fresh cluster floats them:
 # u26-kindtest got function-kcl 0.12.3 / patch-and-transform 0.10.11 against
 # kind3's 0.12.2 / 0.10.8.
 test_function_twins_are_pinned = lambda {
     _names = [p.name for p in c.byKind(c.get("machinery"), "Function")]
     assert "crossplane-contrib-function-kcl" in _names
     assert "crossplane-contrib-function-patch-and-transform" in _names
+}
+
+# A twin runs the same version as its short sibling. Two versions of one
+# function add nothing.
+test_function_twins_match_their_short_sibling = lambda {
+    _f = {p.name: p.package.split(":")[-1] for p in c.byKind(c.get("machinery"), "Function")}
+    assert all n, v in _f {
+        not n.startswith("crossplane-contrib-") or _f[n.removeprefix("crossplane-contrib-")] == v
+    }, "a dependsOn twin is pinned to the same version as its short-named sibling"
 }
 
 # Providers are the EXCEPTION and it is not an oversight: provider-helm carries
@@ -98,19 +107,17 @@ test_provider_helm_keeps_the_long_name = lambda {
 # path; the differing mirror is what keeps the two Lock nodes distinct. Aligning
 # them yields two nodes with an IDENTICAL source and every Function on the
 # cluster goes Healthy=False (verified on kind1, 2026-07-18).
-# Der Mirror allein reicht NICHT: der Revision-Name kommt aus dem Digest,
-# dieselbe Version auf beiden Mirrors ist dasselbe Image und damit derselbe
-# Knoten. Katalog 0.5.0 hob function-kcl auf v0.12.3 -- die Version, die der
-# dependsOn-Knoten auf crossplane.io schon fuehrt -- und cicd-test4 meldete
-# fuer JEDES Paket "cannot initialize dependency graph from the packages in
-# the lock". Seit 0.7.0 ist der dependsOn-Knoten auf v0.12.2 gepinnt -- dieselbe
-# Version, wie kind5 sie healthy faehrt (gleicher Digest-Suffix, verschiedene
-# Revision-Namen). Die Erklaerung "gleicher Digest = ein Knoten" traegt also
-# allein nicht; der Pin bleibt trotzdem, bis cicd-test4 verstanden ist.
+# The version was believed to matter as well: catalog 0.5.0 raised function-kcl
+# to v0.12.3 -- the version the crossplane.io dependsOn node already ran -- and
+# cicd-test4 reported "cannot initialize dependency graph from the packages in
+# the lock" for EVERY package. Since 0.7.0 the dependsOn node is pinned at
+# v0.12.2, the same version kind5 runs healthy on both mirrors (same digest
+# suffix, different revision names). "Same digest = one node" therefore does not
+# explain that incident on its own; the pin stays until cicd-test4 is understood.
 test_function_kcl_stays_below_the_dependson_node = lambda {
     _f = [p for p in c.byKind(c.get("machinery"), "Function") if p.name == "function-kcl"]
     assert len(_f) == 1
-    assert _f[0].package.endswith(":v0.12.2"), "function-kcl bleibt auf v0.12.2, bis der cicd-test4-Vorfall (Katalog 0.5.0, v0.12.3) verstanden ist"
+    assert _f[0].package.endswith(":v0.12.2"), "function-kcl stays at v0.12.2 until the cicd-test4 incident (catalog 0.5.0, v0.12.3) is understood"
 }
 
 test_function_kcl_stays_on_the_other_mirror = lambda {

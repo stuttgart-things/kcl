@@ -157,18 +157,19 @@ machinery: s.Profile = {
             # the mirrors gives two nodes with an IDENTICAL source and freezes
             # the resolver for every package on the cluster.
             #
-            # DIE VERSION IST TEIL DERSELBEN TRENNUNG, nicht nur der Mirror.
-            # Der Revision-Name wird aus dem Digest abgeleitet: dieselbe Version
-            # auf beiden Mirrors ist DASSELBE Image, also derselbe Suffix. Ein
-            # Bump auf v0.12.3 (2026-09-04, Katalog 0.5.0) liess
-            # function-kcl-601b48f70f03 und
-            # crossplane-contrib-function-kcl-601b48f70f03 entstehen -- ein
-            # Knoten zweimal -- und cicd-test4 meldete fuer JEDES Paket
-            # "cannot initialize dependency graph from the packages in the lock",
-            # bei Installed=True und laufenden Pods. Seit 0.7.0 ist der
-            # dependsOn-Knoten selbst gepinnt (crossplane-contrib-function-kcl
-            # unten, v0.12.2 wie auf kind5). Dieser Pin bleibt auf v0.12.2, bis
-            # der cicd-test4-Vorfall verstanden ist -- siehe dort.
+            # The version was believed to be part of the same separation. A
+            # revision's name ends in a digest-derived suffix, so the same
+            # version on both mirrors is the SAME image and the same suffix. A
+            # bump to v0.12.3 (2026-09-04, catalog 0.5.0) produced
+            # function-kcl-601b48f70f03 and
+            # crossplane-contrib-function-kcl-601b48f70f03, and cicd-test4
+            # reported "cannot initialize dependency graph from the packages in
+            # the lock" for EVERY package, with Installed=True and running pods.
+            # Since 0.7.0 the dependsOn node is pinned itself
+            # (crossplane-contrib-function-kcl below, v0.12.2 as on kind5), and
+            # kind5 shows that a shared suffix alone does not collide -- see
+            # there. This pin stays at v0.12.2 until the cicd-test4 incident is
+            # understood.
             package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.2"
             apiVersion = "pkg.crossplane.io/v1"
         }
@@ -240,11 +241,18 @@ machinery: s.Profile = {
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         # The dependsOn twin, for the same reason as crossplane-contrib-function-kcl
-        # above. v0.10.8, what kind5 runs; unpinned, u26-kindtest got 0.10.11.
+        # above; unpinned, u26-kindtest got 0.10.11.
+        #
+        # v0.10.9, the SAME version as the short entry: running two versions of
+        # one function adds nothing. Allowed by every dependsOn
+        # (>=v0.10.6,<v0.11.0), and the digest is identical on both mirrors
+        # (4d729ddc8ee1...) -- the pattern kind5 already runs healthy for
+        # function-kcl. kind5 itself still has this twin at v0.10.8, from the
+        # helm pin; that pin follows the catalog.
         s.Package {
             kind = "Function"
             name = "crossplane-contrib-function-patch-and-transform"
-            package = "xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.10.8"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.10.9"
             apiVersion = "pkg.crossplane.io/v1"
         }
         # --- configurations: ROOTS ONLY --------------------------------------
