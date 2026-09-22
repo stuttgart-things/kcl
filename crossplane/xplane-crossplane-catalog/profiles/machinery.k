@@ -17,7 +17,13 @@ import ..schema as s
 # play installs; where the two disagreed, the play was right and this file was
 # behind — the drift this catalog exists to end runs in that direction, because
 # a play is run and a catalog is only read.
-
+#
+# 0.7.0 (2026-09-22) was levelled against machinery-kind5 LIVE, not against a
+# file: every Provider and root Configuration below is the version kind5 runs
+# (32/32 Configurations Healthy), and the providers and function twins the play
+# pins explicitly are now pinned here too (flux#506). The short-named Functions
+# are the one place this catalog is AHEAD of kind5 (auto-ready, go-templating,
+# environment-configs): the play's helm pins lag, and they follow the catalog.
 machinery: s.Profile = {
     crossplaneVersion = "2.3.3"
     packages = [
@@ -43,6 +49,20 @@ machinery: s.Profile = {
             name = "upbound-provider-opentofu"
             package = "xpkg.upbound.io/upbound/provider-opentofu:v1.1.6"
             clusterRole = "cluster-admin"
+            # Every reconcile of a Workspace is a full `tofu init/plan/apply`.
+            # At the image defaults (poll 10m per resource, sync 1h) six
+            # Workspaces held u26-kind3 at load 8 on 8 cores, and
+            # kube-controller-manager, kube-scheduler and friends restarted
+            # ~3950 times in 39 days because a saturated API server misses lease
+            # renewals. Same values as helm cicd/crossplane-providers.yaml.gotmpl.
+            env = {
+                CROSSPLANE_OPENTOFU_PROVIDER_POLL = "1h"
+                CROSSPLANE_OPENTOFU_PROVIDER_SYNC = "6h"
+            }
+            resources = {
+                requests = {cpu = "100m", memory = "256Mi"}
+                limits = {cpu = "2", memory = "2Gi"}
+            }
         }
         s.Package {
             kind = "Provider"
@@ -58,13 +78,76 @@ machinery: s.Profile = {
             package = "ghcr.io/stuttgart-things/provider-clusterbook-xpkg:v0.4.2"
             providerCrd = "clusterproviderconfigs.clusterbook.stuttgart-things.com"
         }
-        # provider-kubernetes is absent ON PURPOSE — every Configuration below
-        # pulls it, and naming it here would create the duplicate this catalog
-        # exists to prevent.
-
+        # --- providers that also arrive through dependsOn ---------------------
+        # Listed anyway, and that is not the duplicate it looks like: under the
+        # DERIVED name an explicit CR and the one the resolver would create are
+        # the same Lock node (the rule above). Listing them buys a PIN.
+        # Unpinned, a fresh cluster gets whatever the constraint allows that
+        # day: u26-kindtest (2026-09-19) came up with provider-kubernetes 1.3.1
+        # and proxmox-bpg 1.19.3 next to kind3's 1.2.1 / 1.18.0.
+        #
+        # THE REGISTRY IS PART OF THE IDENTITY. Each package path below is
+        # exactly the one the dependsOn names. "Modernising" one to another
+        # mirror gives a second node for the same package and takes every
+        # package on the cluster to Healthy=False.
+        s.Package {
+            kind = "Provider"
+            name = "crossplane-contrib-provider-kubernetes"
+            # Nearly every Configuration here pulls it (>=v1.2.0,<v2.0.0).
+            package = "xpkg.crossplane.io/crossplane-contrib/provider-kubernetes:v1.2.1"
+        }
+        s.Package {
+            kind = "Provider"
+            name = "valkiriaaquaticamendi-provider-proxmox-bpg"
+            # proxmoxvm pulls it (>=v1.15.0,<v2.0.0).
+            package = "xpkg.upbound.io/valkiriaaquaticamendi/provider-proxmox-bpg:v1.18.0"
+            # Upjet: every reconcile shells out to terraform with the bpg/proxmox
+            # binary. At the default 10m poll and nine Proxmox resources on
+            # u26-kind3 that was a terraform run about every 70 seconds, the
+            # largest single CPU consumer on that VM. A VM Crossplane itself
+            # manages does not drift between polls.
+            env = {
+                PROVIDER_POLL = "1h"
+                PROVIDER_SYNC = "6h"
+            }
+            resources = {
+                requests = {cpu = "100m", memory = "256Mi"}
+                limits = {cpu = "2", memory = "2Gi"}
+            }
+        }
+        s.Package {
+            kind = "Provider"
+            name = "upbound-provider-vault"
+            # vault-secrets (through cluster) and vault-k8s-auth (through
+            # platform) both depend on it, >=v4.0.4,<v5.0.0 — so it is on every
+            # machinery cluster already, only unpinned where nobody pins it.
+            #
+            # xpkg.upbound.io and NOTHING ELSE: provider-vault is published only
+            # there, and it is the path both dependsOn entries name. The same
+            # package from xpkg.crossplane.io would be a second Lock node.
+            #
+            # The package alone is inert: without a vault.m.upbound.io
+            # ClusterProviderConfig (credentials per Vault) it reconciles
+            # nothing. Those are fleet state, not catalog (stuttgart-things#3136).
+            #
+            # Runs WITHOUT the poll/sync tuning opentofu and proxmox-bpg get.
+            # Deliberate for now: measure once the seeds have moved from
+            # OpenTofu to provider-vault (stuttgart-things#3063, #3085), then
+            # decide (flux#506).
+            package = "xpkg.upbound.io/upbound/provider-vault:v4.0.4"
+            providerCrd = "clusterproviderconfigs.vault.m.upbound.io"
+        }
+        s.Package {
+            kind = "Provider"
+            name = "vshn-provider-minio"
+            # The minio Configuration pulls it (>=v0.4.5,<v0.5.0). Inert without
+            # a per-environment minio.crossplane.io ProviderConfig.
+            package = "ghcr.io/vshn/provider-minio:v0.4.5"
+        }
         # --- functions ------------------------------------------------------
-        # SHORT names, always (root CLAUDE.md). apiVersion is not guessable from
-        # the name, hence stated.
+        # SHORT names (root CLAUDE.md) — except the two dependsOn twins, which
+        # carry exactly the name the resolver derives (see below). apiVersion is
+        # not guessable from the name, hence stated.
         s.Package {
             kind = "Function"
             name = "function-kcl"
@@ -74,17 +157,41 @@ machinery: s.Profile = {
             # the mirrors gives two nodes with an IDENTICAL source and freezes
             # the resolver for every package on the cluster.
             #
-            # DIE VERSION IST TEIL DERSELBEN TRENNUNG, nicht nur der Mirror.
-            # Der Revision-Name wird aus dem Digest abgeleitet: dieselbe Version
-            # auf beiden Mirrors ist DASSELBE Image, also derselbe Suffix. Ein
-            # Bump auf v0.12.3 (2026-09-04, Katalog 0.5.0) liess
-            # function-kcl-601b48f70f03 und
-            # crossplane-contrib-function-kcl-601b48f70f03 entstehen -- ein
-            # Knoten zweimal -- und cicd-test4 meldete fuer JEDES Paket
-            # "cannot initialize dependency graph from the packages in the lock",
-            # bei Installed=True und laufenden Pods. Der dependsOn-Knoten steht
-            # heute auf crossplane.io v0.12.3; dieser Pin muss darunter bleiben.
+            # The version was believed to be part of the same separation. A
+            # revision's name ends in a digest-derived suffix, so the same
+            # version on both mirrors is the SAME image and the same suffix. A
+            # bump to v0.12.3 (2026-09-04, catalog 0.5.0) produced
+            # function-kcl-601b48f70f03 and
+            # crossplane-contrib-function-kcl-601b48f70f03, and cicd-test4
+            # reported "cannot initialize dependency graph from the packages in
+            # the lock" for EVERY package, with Installed=True and running pods.
+            # Since 0.7.0 the dependsOn node is pinned itself
+            # (crossplane-contrib-function-kcl below, v0.12.2 as on kind5), and
+            # kind5 shows that a shared suffix alone does not collide -- see
+            # there. This pin stays at v0.12.2 until the cicd-test4 incident is
+            # understood.
             package = "xpkg.upbound.io/crossplane-contrib/function-kcl:v0.12.2"
+            apiVersion = "pkg.crossplane.io/v1"
+        }
+        # The dependsOn twin, pinned. Every Configuration names function-kcl on
+        # xpkg.crossplane.io, so the resolver creates this CR on every cluster
+        # anyway — the only question is at which version. Unpinned, u26-kindtest
+        # got 0.12.3 against kind3's 0.12.2.
+        #
+        # Named EXACTLY as the resolver names it, on EXACTLY its registry: that
+        # is what makes this the dependsOn node rather than a third one.
+        #
+        # Same version as the short entry above, deliberately, because that is
+        # what kind5 runs: both at v0.12.2, both revisions ending in the same
+        # digest suffix (8faf0d7c4631), both Healthy (2026-09-22). So "same
+        # digest on both mirrors" is NOT by itself the cicd-test4 collision
+        # recorded above — the revision names still differ by their prefix. The
+        # short pin stays at v0.12.2 regardless until that incident is
+        # understood.
+        s.Package {
+            kind = "Function"
+            name = "crossplane-contrib-function-kcl"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-kcl:v0.12.2"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
@@ -133,7 +240,21 @@ machinery: s.Profile = {
             package = "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.9"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
-
+        # The dependsOn twin, for the same reason as crossplane-contrib-function-kcl
+        # above; unpinned, u26-kindtest got 0.10.11.
+        #
+        # v0.10.9, the SAME version as the short entry: running two versions of
+        # one function adds nothing. Allowed by every dependsOn
+        # (>=v0.10.6,<v0.11.0), and the digest is identical on both mirrors
+        # (4d729ddc8ee1...) -- the pattern kind5 already runs healthy for
+        # function-kcl. kind5 itself still has this twin at v0.10.8, from the
+        # helm pin; that pin follows the catalog.
+        s.Package {
+            kind = "Function"
+            name = "crossplane-contrib-function-patch-and-transform"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.10.9"
+            apiVersion = "pkg.crossplane.io/v1"
+        }
         # --- configurations: ROOTS ONLY --------------------------------------
         s.Package {
             kind = "Configuration"
@@ -150,8 +271,13 @@ machinery: s.Profile = {
             # generiertes Webhook-Token. FLOORS UNVERAENDERT — vault-pki-secrets
             # bleibt >=v0.1.5, das ist also NICHT der "raised floor"-Fall, der
             # einen bestehenden Cluster von Hand nachziehen laesst.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.7.2"
-            pulls = ["cni", "flux-init", "flux-apps", "ip-reservation", "vault-auth", "vault-pki-secrets"]
+            #
+            # v0.8.0 (kind5, ansible#1241): spec.vaultIssuer.authProvider can
+            # drive Vault through provider-vault. NEW dependsOn vault-k8s-auth
+            # >=v0.4.2,<v0.5.0, which pulls upbound-provider-vault. Fresh
+            # clusters resolve it; nothing to raise by hand.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.8.0"
+            pulls = ["cni", "flux-init", "flux-apps", "ip-reservation", "vault-auth", "vault-k8s-auth", "vault-pki-secrets"]
         }
         s.Package {
             kind = "Configuration"
@@ -191,7 +317,9 @@ machinery: s.Profile = {
             #            (crossplane-configurations#473). v0.11.2 und v0.11.3 sind
             #            v0.11.1-Inhalt — diese drei nie pinnen.
             #   v0.11.5  xplane-cluster 0.19.0 (crossplane-configurations#474).
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.11.5"
+            #   v0.11.10 what u26-kind3 and kind5 run (ansible#1245). dependsOn
+            #            floors unchanged against v0.11.5.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.11.10"
             pulls = [
                 "platform"
                 "remote-cluster"
@@ -221,7 +349,10 @@ machinery: s.Profile = {
             # Ziel-Datastore benennen kann, laeuft in ein 403. Unterhalb v0.10.0
             # kennt die XRD das Feld gar nicht, und jedes Paket meldet trotzdem
             # Healthy.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.11.0"
+            #
+            # v0.12.0: what kind5 runs. Still provider-vspherevm-xpkg
+            # >=v0.8.1,<v0.9.0 and ansible-run >=v0.1.4.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.12.0"
             providerCrd = "clusterproviderconfigs.vspherevm.m.stuttgart-things.com"
             pulls = ["ansible-run"]
         }
@@ -239,7 +370,10 @@ machinery: s.Profile = {
             # Einzelnen aendern, steht in crossplane-configurations, nicht hier;
             # kind_machinery.yaml notiert zu keinem der beiden einen neuen
             # dependsOn-Floor.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.15.0"
+            #
+            # v0.16.0: what kind5 runs. Still provider-proxmox-bpg
+            # >=v1.15.0,<v2.0.0 and ansible-run >=v0.1.4.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.16.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
@@ -296,6 +430,15 @@ machinery: s.Profile = {
             name = "stuttgart-things-crossplane-configurations-volume-claim"
             package = "ghcr.io/stuttgart-things/crossplane-configurations/volume-claim:v0.1.0"
         }
+        # Nothing pulls minio: it is on kind5 because the play installs it, and a
+        # machinery cluster rebuilt from this catalog did not have it (flux#506).
+        # Buckets need a per-environment minio.crossplane.io ProviderConfig with
+        # admin keys — cluster fact, not here.
+        s.Package {
+            kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-minio"
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/minio:v0.1.0"
+        }
         # capability und argocd-cluster: NICHTS zieht die beiden ueber dependsOn,
         # sie existieren also nur dort, wo jemand sie installiert. Auf u26-kind3
         # war das von Hand (2026-08-17/18), jeweils mit einem lebenden XR
@@ -324,13 +467,17 @@ machinery: s.Profile = {
             name = "in-cluster"
             apiVersion = "helm.m.crossplane.io/v1beta1"
             kind = "ClusterProviderConfig"
-            spec = {credentials = {source = "InjectedIdentity"}}
+            spec = {
+                credentials = {source = "InjectedIdentity"}
+            }
         }
         s.ProviderConfig {
             name = "in-cluster"
             apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
             kind = "ClusterProviderConfig"
-            spec = {credentials = {source = "InjectedIdentity"}}
+            spec = {
+                credentials = {source = "InjectedIdentity"}
+            }
         }
         # OpenTofu keeps its state in Secrets on this cluster, so a rebuilt
         # control plane does not orphan what it provisioned.

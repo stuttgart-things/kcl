@@ -53,15 +53,42 @@ test_every_package_is_pinned = lambda {
     }, "a floating tag would move a management cluster forward unattended"
 }
 
-# Function CR names stay SHORT (root CLAUDE.md). A long-named Function CR on the
-# same registry as a dependsOn-derived one adds a duplicate Lock node and
-# freezes the resolver for every package on the cluster.
+# Function CR names stay SHORT (root CLAUDE.md) — with ONE exception, and it is
+# narrow: the dependsOn twin, which carries exactly the name the resolver
+# derives, on exactly the registry our dependsOn entries name
+# (xpkg.crossplane.io). That CR is created on every cluster anyway; listing it
+# only pins it. A long name on any OTHER registry would be a node of its own
+# and freeze the resolver for every package on the cluster.
 test_function_names_are_short = lambda {
     _f = c.byKind(c.get("machinery"), "Function")
     assert len(_f) > 0
-    assert all p in _f {
-        not p.name.startswith("crossplane-contrib-")
-    }, "Function CRs use the short name"
+    _long = [p for p in _f if p.name.startswith("crossplane-contrib-")]
+    assert all p in _long {
+        p.name == c.derivedName(p.package) and p.package.startswith("xpkg.crossplane.io/")
+    }, "a long Function name is only allowed as the exact dependsOn twin on xpkg.crossplane.io"
+    # A twin never stands alone: the Compositions reference the short name.
+    _short = [p.name for p in _f if not p.name.startswith("crossplane-contrib-")]
+    assert all p in _long {
+        p.name.removeprefix("crossplane-contrib-") in _short
+    }, "every dependsOn twin has its short-named sibling"
+}
+
+# The two dependsOn twins, pinned (flux#506). Unpinned, a fresh cluster floats them:
+# u26-kindtest got function-kcl 0.12.3 / patch-and-transform 0.10.11 against
+# kind3's 0.12.2 / 0.10.8.
+test_function_twins_are_pinned = lambda {
+    _names = [p.name for p in c.byKind(c.get("machinery"), "Function")]
+    assert "crossplane-contrib-function-kcl" in _names
+    assert "crossplane-contrib-function-patch-and-transform" in _names
+}
+
+# A twin runs the same version as its short sibling. Two versions of one
+# function add nothing.
+test_function_twins_match_their_short_sibling = lambda {
+    _f = {p.name: p.package.split(":")[-1] for p in c.byKind(c.get("machinery"), "Function")}
+    assert all n, v in _f {
+        not n.startswith("crossplane-contrib-") or _f[n.removeprefix("crossplane-contrib-")] == v
+    }, "a dependsOn twin is pinned to the same version as its short-named sibling"
 }
 
 # Providers are the EXCEPTION and it is not an oversight: provider-helm carries
@@ -80,16 +107,17 @@ test_provider_helm_keeps_the_long_name = lambda {
 # path; the differing mirror is what keeps the two Lock nodes distinct. Aligning
 # them yields two nodes with an IDENTICAL source and every Function on the
 # cluster goes Healthy=False (verified on kind1, 2026-07-18).
-# Der Mirror allein reicht NICHT: der Revision-Name kommt aus dem Digest,
-# dieselbe Version auf beiden Mirrors ist dasselbe Image und damit derselbe
-# Knoten. Katalog 0.5.0 hob function-kcl auf v0.12.3 -- die Version, die der
-# dependsOn-Knoten auf crossplane.io schon fuehrt -- und cicd-test4 meldete
-# fuer JEDES Paket "cannot initialize dependency graph from the packages in
-# the lock". Der Pin muss unter dem dependsOn-Knoten bleiben.
+# The version was believed to matter as well: catalog 0.5.0 raised function-kcl
+# to v0.12.3 -- the version the crossplane.io dependsOn node already ran -- and
+# cicd-test4 reported "cannot initialize dependency graph from the packages in
+# the lock" for EVERY package. Since 0.7.0 the dependsOn node is pinned at
+# v0.12.2, the same version kind5 runs healthy on both mirrors (same digest
+# suffix, different revision names). "Same digest = one node" therefore does not
+# explain that incident on its own; the pin stays until cicd-test4 is understood.
 test_function_kcl_stays_below_the_dependson_node = lambda {
     _f = [p for p in c.byKind(c.get("machinery"), "Function") if p.name == "function-kcl"]
     assert len(_f) == 1
-    assert _f[0].package.endswith(":v0.12.2"), "function-kcl darf nicht auf die Version des dependsOn-Knotens (crossplane.io v0.12.3) angehoben werden -- gleicher Digest, gleicher Revision-Name, Lock-Kollision"
+    assert _f[0].package.endswith(":v0.12.2"), "function-kcl stays at v0.12.2 until the cicd-test4 incident (catalog 0.5.0, v0.12.3) is understood"
 }
 
 test_function_kcl_stays_on_the_other_mirror = lambda {
@@ -118,15 +146,44 @@ test_function_auto_ready_stays_below_070 = lambda {
     assert _v[2] >= 5, "unterhalb v0.6.5 verletzt die untere Grenze der dependsOn-Spanne"
 }
 
-# provider-kubernetes must NOT be an entry: every Configuration pulls it, so
-# naming it would be the duplicate this catalog prevents. Asserted separately
-# because it is the one absence a reader is most likely to mistake for an
-# omission.
-test_provider_kubernetes_is_not_installed_explicitly = lambda {
+# provider-kubernetes IS an entry since 0.7.0, under the derived name — the
+# same Lock node the dependsOn creates, so listing it pins it and adds nothing.
+# What must never appear is the SHORT name: that would be the duplicate.
+# Until 0.6.0 this test asserted the opposite, on the belief that listing it at
+# all was the duplicate; with derived names it is not (flux#506).
+test_provider_kubernetes_is_pinned_under_the_derived_name = lambda {
     _pkgs = c.get("machinery").packages
     assert all p in _pkgs {
         p.name != "provider-kubernetes"
-    }, "provider-kubernetes arrives through every Configuration's dependsOn"
+    }, "the short name would be a second Lock node"
+    _k = [p for p in _pkgs if p.name == "crossplane-contrib-provider-kubernetes"]
+    assert len(_k) == 1
+    assert _k[0].package.startswith("xpkg.crossplane.io/crossplane-contrib/provider-kubernetes:")
+}
+
+# The registry is part of a pulled provider's identity: the explicit entry must
+# name exactly the path the dependsOn names, or it is a second node.
+test_pulled_providers_keep_the_dependson_registry = lambda {
+    _want = {
+        "crossplane-contrib-provider-kubernetes" = "xpkg.crossplane.io/crossplane-contrib/provider-kubernetes:"
+        "valkiriaaquaticamendi-provider-proxmox-bpg" = "xpkg.upbound.io/valkiriaaquaticamendi/provider-proxmox-bpg:"
+        "upbound-provider-vault" = "xpkg.upbound.io/upbound/provider-vault:"
+        "vshn-provider-minio" = "ghcr.io/vshn/provider-minio:"
+    }
+    _p = {p.name: p.package for p in c.byKind(c.get("machinery"), "Provider")}
+    assert all n, prefix in _want {
+        n in _p and _p[n].startswith(prefix)
+    }, "a pulled provider is pinned on exactly the registry its dependsOn names"
+}
+
+# The runtime tuning the play gives the two upjet providers that shell out to
+# terraform. Without it a Flux-built machinery reproduces the load that cost
+# u26-kind3 ~3950 control-plane restarts in 39 days.
+test_upjet_providers_are_slowed_down = lambda {
+    _p = {p.name: p for p in c.byKind(c.get("machinery"), "Provider")}
+    assert _p["upbound-provider-opentofu"].env["CROSSPLANE_OPENTOFU_PROVIDER_POLL"] == "1h"
+    assert _p["valkiriaaquaticamendi-provider-proxmox-bpg"].env["PROVIDER_POLL"] == "1h"
+    assert _p["upbound-provider-opentofu"].resources.limits.cpu == "2"
 }
 
 # Each provider gets one in-cluster ProviderConfig, and they carry no
