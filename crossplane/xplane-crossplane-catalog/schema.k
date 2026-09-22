@@ -62,9 +62,29 @@ schema Package:
     """ClusterRole to bind the provider's ServiceAccount to. Only providers that
     manage arbitrary cluster content need one."""
 
+    env?: {str:str}
+    """Environment for the provider's `package-runtime` container, rendered as a
+    DeploymentRuntimeConfig named like the provider plus a runtimeConfigRef to
+    it. Strings only: a container env value is one, and a bare number or bool
+    would be rejected by the API server.
+
+    env, never args: args in a DeploymentRuntimeConfig REPLACE the image's own
+    arguments instead of adding to them, and every upjet flag has an
+    environment variable.
+
+    A fleet fact, not tuning: at the image defaults an upjet provider re-runs
+    terraform per managed resource per poll, which held u26-kind3 at load 8 and
+    cost ~3950 control-plane restarts in 39 days. The same values sit in
+    stuttgart-things/helm cicd/crossplane-providers.yaml.gotmpl."""
+
+    resources?: {str:{str:str}}
+    """requests / limits for the same container. Quantities as strings."""
+
     check:
         ":" in package, "package must carry an explicit tag"
         not package.endswith(":latest"), "package must not use a floating tag"
+        not env or kind == "Provider", "env is a provider runtime setting"
+        not resources or kind == "Provider", "resources is a provider runtime setting"
 
 schema ProviderConfig:
     """A cluster-scoped ProviderConfig pointing a provider at its OWN cluster.
