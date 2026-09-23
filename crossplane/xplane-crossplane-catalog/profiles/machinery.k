@@ -68,6 +68,12 @@ machinery: s.Profile = {
             kind = "Provider"
             name = "stuttgart-things-provider-kubeconfig-xpkg"
             package = "ghcr.io/stuttgart-things/provider-kubeconfig-xpkg:v0.13.2"
+            # Supplied by the provider-kubeconfig-vault chart, which the cluster
+            # installs as part of its fleet state. It mounts the lab CA bundle
+            # into the provider pod; without the reference the provider keeps
+            # the `default` runtime config and every Vault login fails on an
+            # unknown authority.
+            runtimeConfig = "provider-kubeconfig"
         }
         # Not pulled by anything: ip-reservation classes clusterbook as a
         # cluster precondition rather than a package dependency, so without this

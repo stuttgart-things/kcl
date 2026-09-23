@@ -305,3 +305,23 @@ test_machinery_carries_the_unpulled_configurations = lambda {
     _t = c.transitive(_p)
     assert "capability" not in _t and "argocd-cluster" not in _t
 }
+
+# provider-kubeconfig muss seine DeploymentRuntimeConfig benennen. Ohne die
+# Referenz laeuft der Provider mit `default`, bekommt kein VAULT_CACERT und
+# jeder Vault-Login scheitert an "x509: certificate signed by unknown
+# authority" — was wie ein Credential-Problem aussieht und keines ist.
+#
+# Auf kind-Clustern patcht das Playbook das CR nachtraeglich; ein Flux-Cluster
+# hat diesen Moment nicht, deswegen steht es hier. Die Config selbst liefert
+# der provider-kubeconfig-vault-Chart aus dem Fleet-State des Clusters.
+test_kubeconfig_provider_names_its_runtime_config = lambda {
+    _p = c.get("machinery")
+    _kc = [x for x in _p.packages if x.name.endswith("-provider-kubeconfig-xpkg")]
+    assert len(_kc) == 1, "provider-kubeconfig fehlt im machinery-Profil"
+    assert _kc[0]?.runtimeConfig == "provider-kubeconfig", "ohne runtimeConfig laeuft der Provider ohne Vault-CA"
+
+    # Und sonst niemand: jede weitere Referenz braucht jemanden, der die
+    # DeploymentRuntimeConfig auch ausliefert.
+    _with = [x.name for x in _p.packages if x?.runtimeConfig]
+    assert len(_with) == 1, "unerwartete runtimeConfig-Referenz: ${_with}"
+}
