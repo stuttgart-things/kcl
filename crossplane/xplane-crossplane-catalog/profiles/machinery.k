@@ -145,9 +145,26 @@ machinery: s.Profile = {
             package = "ghcr.io/vshn/provider-minio:v0.4.5"
         }
         # --- functions ------------------------------------------------------
-        # SHORT names (root CLAUDE.md) — except the two dependsOn twins, which
-        # carry exactly the name the resolver derives (see below). apiVersion is
-        # not guessable from the name, hence stated.
+        # SHORT names (root CLAUDE.md), except the dependsOn twins, which carry
+        # exactly the name the resolver derives. apiVersion is not guessable
+        # from the name, hence stated.
+        #
+        # EVERY SHORT FUNCTION SITS ON xpkg.upbound.io AND ITS TWIN ON
+        # xpkg.crossplane.io. The split is what makes the pair safe: Crossplane
+        # keys the Lock on the SOURCE, so one source under two CR names is one
+        # node twice, and then NO package on the cluster resolves. The versions
+        # may match -- kind5 runs function-kcl v0.12.2 on both mirrors, same
+        # digest, both Healthy -- because the names differ AND the sources
+        # differ. What must never match is the source.
+        #
+        # WHY IT ONLY SURFACED ON A FLUX CLUSTER (machinery, 2026-09-22, every
+        # one of its 51 packages Healthy=False): the kind_machinery play
+        # installs the functions BEFORE the Configurations, so the resolver
+        # finds the short CR by source and creates no twin at all. Flux applies
+        # configs.yaml in one pass -- the twin is created from a dependsOn while
+        # the short CR is still reconciling, and the second name lands on a
+        # source that already has one. Same catalog, different install order,
+        # and only one of the two orders shows it.
         s.Package {
             kind = "Function"
             name = "function-kcl"
@@ -211,18 +228,54 @@ machinery: s.Profile = {
             # verzichten. Der catalog-parity-Check sieht das nicht: er
             # vergleicht gegen das hoechste Semver und zeigt deshalb auf das
             # verbotene v0.7.0 -- v0.6.8 IST hier das Neueste, das geht.
-            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.8"
+            #
+            # xpkg.upbound.io since 0.8.0, and NOT cosmetic -- see the header of
+            # this section. On crossplane.io this entry had the SAME SOURCE as
+            # the dependsOn-derived twin: one package under two CR names, which
+            # is a duplicate Lock node.
+            package = "xpkg.upbound.io/crossplane-contrib/function-auto-ready:v0.6.8"
             apiVersion = "pkg.crossplane.io/v1beta1"
+        }
+        s.Package {
+            kind = "Function"
+            name = "crossplane-contrib-function-auto-ready"
+            # The dependsOn twin, pinned like the others. Unpinned it floats:
+            # machinery ran v0.6.9 against this catalog's v0.6.8 (2026-09-22).
+            # The <v0.7.0 ceiling above holds here too -- the resolver honours
+            # the dependsOn range, but a pin says so.
+            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.8"
+            apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
             kind = "Function"
             name = "function-go-templating"
-            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.4"
+            # xpkg.upbound.io since 0.8.0: this is the pair that actually
+            # collided on machinery (2026-09-22). Lock, both entries:
+            #   function-go-templating-8bc402f209ce                    v0.12.4
+            #   crossplane-contrib-function-go-templating-064e60c64420 v0.12.5
+            # one source, two CR names -- and with it 0/9 providers, 0/10
+            # functions and 0/32 configurations Healthy.
+            package = "xpkg.upbound.io/crossplane-contrib/function-go-templating:v0.12.4"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         s.Package {
             kind = "Function"
+            name = "crossplane-contrib-function-go-templating"
+            # Floated to v0.12.5 on machinery before it was pinned here.
+            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.4"
+            apiVersion = "pkg.crossplane.io/v1"
+        }
+        s.Package {
+            kind = "Function"
             name = "function-environment-configs"
+            # xpkg.upbound.io since 0.8.0, same reason as the two above.
+            package = "xpkg.upbound.io/crossplane-contrib/function-environment-configs:v0.7.4"
+            apiVersion = "pkg.crossplane.io/v1"
+        }
+        s.Package {
+            kind = "Function"
+            name = "crossplane-contrib-function-environment-configs"
+            # Floated to v0.7.5 on machinery before it was pinned here.
             package = "xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.7.4"
             apiVersion = "pkg.crossplane.io/v1"
         }

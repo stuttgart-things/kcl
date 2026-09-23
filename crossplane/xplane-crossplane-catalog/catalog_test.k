@@ -82,6 +82,41 @@ test_function_twins_are_pinned = lambda {
     assert "crossplane-contrib-function-patch-and-transform" in _names
 }
 
+# THE RULE THE WHOLE LOCK RESTS ON: no two packages may share a SOURCE.
+#
+# Crossplane keys its Lock on the source, so one source under two CR names is
+# one node twice, and then nothing on the cluster resolves -- not the pair, all
+# of it. machinery came up on 2026-09-22 with every one of its 51 packages
+# Healthy=False because function-go-templating and its dependsOn twin were both
+# on xpkg.crossplane.io.
+#
+# Checked across the whole profile, not just the functions: a Provider or
+# Configuration listed twice (say under a derived and a short name) is the same
+# failure.
+test_no_two_packages_share_a_source = lambda {
+    _pkgs = c.get("machinery").packages
+    _srcs = [p.package.split(":")[0] for p in _pkgs]
+    _dupes = sorted({x: "" for x in _srcs if len([y for y in _srcs if y == x]) > 1})
+    assert _dupes == [], "one source under two CR names is a duplicate Lock node"
+}
+
+# Its consequence for the functions, stated where it is easy to get wrong: the
+# short name lives on xpkg.upbound.io, the twin on xpkg.crossplane.io (the
+# registry every dependsOn in crossplane-configurations names). Mirroring them
+# the other way round would be just as fine -- what is NOT fine is both on one.
+test_short_functions_and_twins_split_the_mirrors = lambda {
+    _f = c.byKind(c.get("machinery"), "Function")
+    _short = [p for p in _f if not p.name.startswith("crossplane-contrib-")]
+    _twins = [p for p in _f if p.name.startswith("crossplane-contrib-")]
+    assert all p in _short {
+        p.package.startswith("xpkg.upbound.io/")
+    }, "a short Function CR sits on xpkg.upbound.io, away from its dependsOn twin"
+    assert all p in _twins {
+        p.package.startswith("xpkg.crossplane.io/")
+    }, "a dependsOn twin sits on xpkg.crossplane.io, the registry the dependsOn names"
+    assert len(_twins) == len(_short), "every short Function has its twin pinned"
+}
+
 # A twin runs the same version as its short sibling. Two versions of one
 # function add nothing.
 test_function_twins_match_their_short_sibling = lambda {
