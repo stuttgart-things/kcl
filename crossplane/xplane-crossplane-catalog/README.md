@@ -59,11 +59,30 @@ therefore retain a narrow exposure to the upgrade window above. There is no way
 around it that does not break `functionRef`, so it is documented rather than
 fixed.
 
-`function-kcl` additionally lives on **xpkg.upbound.io** while our `dependsOn`
-entries use `xpkg.crossplane.io`. Two sources, two Lock nodes, healthy —
-verified on kind1. Aligning the mirrors gives two nodes with an *identical*
-source and freezes the resolver for every package on the cluster. The split is
-load-bearing.
+**Every short Function sits on `xpkg.upbound.io`, every twin on
+`xpkg.crossplane.io`** — the registry our `dependsOn` entries name. Two
+sources, two Lock nodes, healthy. One source under two names is one node twice,
+and then *no* package on the cluster resolves. The versions may match: kind5
+runs `function-kcl` v0.12.2 on both mirrors, same digest, both Healthy. What
+must never match is the source.
+
+Since 0.8.0 all five twins are listed too, so they are pinned rather than
+floating.
+
+### Why that only showed up on a Flux cluster
+
+Until 0.8.0 `function-auto-ready`, `-go-templating` and `-environment-configs`
+were on `xpkg.crossplane.io`, the same registry as their twins. Every kind
+cluster was fine, because the `kind_machinery` play installs the functions
+**before** the Configurations: the resolver finds the short CR by source and
+creates no twin at all. Flux applies the whole list in one pass, the twin is
+created from a `dependsOn` while the short CR is still reconciling, and the
+second name lands on a source that already has one. On `machinery`
+(2026-09-22) that took **all 51 packages** to `Healthy=False`, with the Lock
+holding `xpkg.crossplane.io/crossplane-contrib/function-go-templating` twice.
+
+Same catalog, different install order, and only one of the two orders shows
+it — which is why the rule is now asserted rather than described.
 
 ### Listed although pulled — to pin them
 
@@ -113,7 +132,9 @@ returns the whole set: the honest answer to what is actually on the cluster.
 - every Provider and Configuration uses the derived name
 - the derivation matches Crossplane's, for both the upstream and the ghcr path shape
 - Function CR names stay short
-- `function-kcl` stays on the other mirror
+- no two packages share a source — the rule the whole Lock rests on
+- short Functions sit on `xpkg.upbound.io`, their twins on `xpkg.crossplane.io`,
+  and every short Function has its twin pinned
 - a long Function name is only the exact dependsOn twin on `xpkg.crossplane.io`,
   and never without its short sibling
 - `function-auto-ready` stays below v0.7.0 — v0.7.0 makes Configurations report
