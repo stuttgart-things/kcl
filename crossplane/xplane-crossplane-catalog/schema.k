@@ -62,6 +62,25 @@ schema Package:
     """ClusterRole to bind the provider's ServiceAccount to. Only providers that
     manage arbitrary cluster content need one."""
 
+    runtimeConfig?: str
+    """A DeploymentRuntimeConfig this provider's pod must run with.
+
+    STRUCTURAL, and it has to live here rather than beside the object that
+    creates that config. Crossplane creates the Provider CR from a package
+    path, so whoever ships the DeploymentRuntimeConfig -- a Helm chart, a
+    Kustomization -- cannot also own `spec.runtimeConfigRef` on the CR without
+    becoming its second owner. The kind machinery play works around that with a
+    kubectl patch after the fact; a Flux cluster has no such moment, so the
+    reference belongs in the package definition.
+
+    The config itself is NOT created here. The name is a contract: something
+    else on the cluster must supply it, and a provider pointed at a missing one
+    does not start. First case: provider-kubeconfig, whose
+    `provider-kubeconfig-vault` chart mounts the lab CA bundle -- without it
+    every Vault login fails with "x509: certificate signed by unknown
+    authority", which reads like a credential problem and is not one.
+    """
+
     env?: {str:str}
     """Environment for the provider's `package-runtime` container, rendered as a
     DeploymentRuntimeConfig named like the provider plus a runtimeConfigRef to
