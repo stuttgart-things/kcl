@@ -1472,3 +1472,30 @@ test_component_umbrella_may_come_from_the_caller = lambda {
     }}).labels
     assert _l["storage-platform/cloudnative-pg"] == "true"
 }
+
+# Eine Order muss ein Label ueberschreiben koennen, das ein PROFIL schon setzt.
+# Vorher ging genau das nicht: `|` kann einen Schluessel nicht ueberschreiben,
+# KCL wertet zwei Werte fuer dasselbe Attribut als Konflikt und bricht die
+# ganze Evaluation ab. Gefunden an app-dev, das NFS anschalten wollte, waehrend
+# storage-openebs `storage-platform/nfs-csi-install: "false"` setzt
+# (stuttgart-things#3065).
+test_order_labels_override_profile_labels = lambda {
+    _spec = {
+        profiles = ["network", "security", "storage-openebs"]
+        rancher = {
+            argocd = {
+                register = True
+                labels = {
+                    "storage-platform/nfs-csi-install" = "true"
+                    "storage-platform/nfs-csi-storageclasses" = "true"
+                }
+            }
+        }
+    }
+    _b = l.argocdBlock(_spec)
+    assert _b.labels["storage-platform/nfs-csi-install"] == "true", "die Order muss das Profil schlagen"
+    assert _b.labels["storage-platform/nfs-csi-storageclasses"] == "true"
+    # und was die Order NICHT anfasst, bleibt beim Profilwert
+    assert _b.labels["storage-platform/longhorn"] == "false"
+    assert _b.labels["storage-platform"] == "true"
+}
