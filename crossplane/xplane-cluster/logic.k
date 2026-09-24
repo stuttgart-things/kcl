@@ -536,12 +536,28 @@ argocdBlock = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     """
     _a = (spec?.rancher or {})?.argocd or {}
     _d = derivedArgocd(spec, appArgocd)
-    _labels = profileLabels(spec) | _d.labels | (_a?.labels or {})
+
+    # mergeLastWins, NOT `|`. A dict union cannot OVERRIDE a key: KCL treats two
+    # different values for the same attribute as a conflict and fails the whole
+    # evaluation ("conflicting values on the attribute ..."). The precedence
+    # documented above therefore held only for keys no lower layer had set --
+    # and the case that matters is exactly a key a profile DOES set: an order
+    # asking for storage-platform/nfs-csi-install: "true" could not have it,
+    # because storage-openebs sets it to "false" on purpose.
+    #
+    # Same fix and same reasoning as the profile layer in mergeLastWins above.
+    _pairsL = [[k, v] for k, v in profileLabels(spec)]
+    _derivedL = [[k, v] for k, v in _d.labels]
+    _ownL = [[k, v] for k, v in (_a?.labels or {})]
+    _labels = mergeLastWins(_pairsL + _derivedL + _ownL)
+    _pairsA = [[k, v] for k, v in profileAnnotations(spec)]
+    _derivedA = [[k, v] for k, v in _d.annotations]
+    _ownA = [[k, v] for k, v in (_a?.annotations or {})]
     _orphans = sorted([k for k, v in profileLabels(spec) if "/" in k and v == "true" and (_labels[k.split("/")[0]] or "") != "true"])
     assert len(_orphans) == 0, "profiles " + ", ".join(spec?.profiles or []) + " switch on " + ", ".join(_orphans) + " without its platform (" + ", ".join(dedup([k.split("/")[0] for k in _orphans])) + ") — add the matching profile, e.g. storage-openebs for storage-platform"
     _a | {
         labels = _labels
-        annotations = profileAnnotations(spec) | _d.annotations | (_a?.annotations or {})
+        annotations = mergeLastWins(_pairsA + _derivedA + _ownA)
     }
 }
 
