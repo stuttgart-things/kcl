@@ -149,6 +149,17 @@ machinery: s.Profile = {
             # The minio Configuration pulls it (>=v0.4.5,<v0.5.0). Inert without
             # a per-environment minio.crossplane.io ProviderConfig.
             package = "ghcr.io/vshn/provider-minio:v0.4.5"
+            # The lab PKI, which this provider cannot get any other way: its
+            # ProviderConfig has exactly minioURL and credentials -- no CA, no
+            # skip-verify -- so an endpoint behind a lab certificate fails at
+            # OBSERVE with "x509: certificate signed by unknown authority", one
+            # level below a MinioBucket that just says Ready=False. Measured on
+            # the machinery cluster, 2026-09-24.
+            #
+            # Supplied by the cluster's fleet state (a DeploymentRuntimeConfig
+            # mounting vault-pki-ca into SSL_CERT_FILE), not by this catalog --
+            # see the field's doc in schema.k.
+            runtimeConfig = "provider-minio"
         }
         # --- functions ------------------------------------------------------
         # SHORT names (root CLAUDE.md), except the dependsOn twins, which carry
