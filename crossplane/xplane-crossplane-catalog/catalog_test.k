@@ -320,8 +320,13 @@ test_kubeconfig_provider_names_its_runtime_config = lambda {
     assert len(_kc) == 1, "provider-kubeconfig fehlt im machinery-Profil"
     assert _kc[0]?.runtimeConfig == "provider-kubeconfig", "ohne runtimeConfig laeuft der Provider ohne Vault-CA"
 
-    # Und sonst niemand: jede weitere Referenz braucht jemanden, der die
-    # DeploymentRuntimeConfig auch ausliefert.
-    _with = [x.name for x in _p.packages if x?.runtimeConfig]
-    assert len(_with) == 1, "unerwartete runtimeConfig-Referenz: ${_with}"
+    # Und die Liste derer, die eine benennen, bleibt bewusst kurz: jede
+    # Referenz braucht jemanden, der die DeploymentRuntimeConfig auch
+    # ausliefert -- provider-kubeconfig ueber seinen Chart, provider-minio
+    # ueber den Fleet-State des Clusters.
+    _with = sorted([x.name for x in _p.packages if x?.runtimeConfig])
+    assert _with == ["stuttgart-things-provider-kubeconfig-xpkg", "vshn-provider-minio"], "unerwartete runtimeConfig-Referenz: ${_with}"
+
+    _minio = [x for x in _p.packages if x.name == "vshn-provider-minio"]
+    assert _minio[0]?.runtimeConfig == "provider-minio", "ohne runtimeConfig traut provider-minio der Lab-CA nicht"
 }
