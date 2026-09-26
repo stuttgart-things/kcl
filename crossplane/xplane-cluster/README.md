@@ -28,6 +28,17 @@ ClusterStack                                                provisioner: rancher
 └─ Usage ×4                                                 + the VM outlives the RancherCluster
 ```
 
+```
+ClusterStack                                  provisioner: rancher, provider: harvester (0.22.0)
+├─ RancherCluster                      {name}-rancher         infrastructure: harvester — Rancher builds the VM
+├─ VaultSecretSet                      {name}-kubeconfig-set  Rancher's kubeconfig -> kubeconfigs/<cluster>
+├─ ClusterAccess                       {name}-access          -> the ClusterProviderConfigs
+├─ Object (Observe)                    {name}-apiserver       the node's direct API endpoint
+├─ Platform                            {name}-platform        no CNI — the distribution keeps its own
+├─ VaultSecretSet ×n                   {name}-secrets-<app>   per-cluster app secrets, unchanged
+└─ Usage ×6                                                   the RancherCluster is "the machine"
+```
+
 ## Two provisioners (0.13.0)
 
 The catalog entry decides which shape a stack has — `provisioner: ansible` (k3s, kind, rke2) or `provisioner: rancher` (`rancher-k3s`, `rancher-rke2`).
@@ -71,6 +82,63 @@ The upload writes that Vault entry; nothing removed it. A torn-down cluster left
 - **The credential** is the writer approle in `terraform.tfvars` form (`vault-kubeconfig-writer` by default). Its policy needs `create`/`update` on `kubeconfigs/metadata/*` — added and verified on the infra Vault on 2026-09-16; before that the same call was a 403.
 - **Values travel as Workspace vars**, so the HCL stays a constant and a cluster name never lands inside a quoted HCL literal.
 - **One more Usage:** `ClusterAccess` reads the entry, so the Workspace outlives it.
+
+## Rancher builds the Harvester VM: a machine pool (0.22.0)
+
+On Harvester the rancher path has a second shape. Harvester is registered in
+Rancher as a cloud provider, so the `RancherCluster` can carry a **machine pool**
+(`infrastructure: harvester`, a HarvesterConfig) and Rancher creates, boots and
+joins the node itself — the way `tabletennis` was built on crossplane-mgmt. For
+`provider: harvester` with a rancher entry that is now the **default**; the
+custom-node shape stays reachable with `spec.rancher.infrastructure: generic`.
+
+Why default: the custom-node Harvester VM this stack builds cannot be logged
+into by its own ansible stages — no cloud-init users, `ssh_pwauth: false`
+([crossplane-configurations#503](https://github.com/stuttgart-things/crossplane-configurations/issues/503)).
+Rancher's node driver brings its own cloud-init, and there is no play to log in.
+
+What changes against the custom-node path, and why:
+
+| | custom node (`generic`) | machine pool (`harvester`) |
+|---|---|---|
+| VM | `{name}-vm`, built here | none — the RancherCluster's pool **is** the node |
+| sizing | the VM XR | `spec.harvester.{cpuCount,memorySize,diskSize,quantity}` from the catalog size; `spec.rancher.harvester` on top. Credential, image, network come from the rancher EnvironmentConfig |
+| join stage | `{name}-join` | none — `nodeRegistration` is not published |
+| kubeconfig in Vault | the join play uploads it | `{name}-kubeconfig-set`: a VaultSecretSet from `<cluster>-kubeconfig-bridged` |
+| owner of `kubeconfigs/<cluster>` | the Workspace (`kubeconfig.lifecycle`) | the VaultSecretSet (`deleteAllVersions`); `lifecycle.enabled: true` fails the render |
+| CNI | the Platform (catalog `machineGlobalConfig` switches the distribution's off) | **the distribution**: no catalog keys, `cni.enabled: false`, `share.cniOwnership: self` |
+| `vaultIssuer.kubernetesHost` | ClusterAccess's `apiEndpoint` | the node's endpoint from `default/kubernetes`, read by `{name}-apiserver` |
+
+**The CNI cannot come from the Platform here.** The only kubeconfig a machine
+pool has is Rancher's, and every path through Rancher needs
+`cattle-cluster-agent` — an ordinary Deployment on the pod network. With the CNI
+switched off the agent never starts and Rancher never finishes the cluster. So
+the distribution keeps flannel (k3s) and only the order's own
+`spec.rancher.machineGlobalConfig` reaches the server. Profiles that assume
+cilium (`network-platform/cilium-lb`, `…/cilium-gateway`) need the order to
+switch them off, or an rke2 environment with `cni: cilium`.
+
+**The kubeconfig needs the split layout.** rancher-cluster bridges Rancher's
+`<name>-kubeconfig` onto the control plane only when Crossplane and Rancher run
+on different clusters (`rancherProviderConfigRef != providerConfigRef`), and a
+VaultSecretSet reads only its own namespace. A co-located environment fails the
+render instead of waiting forever. The writer is the provider-vault
+ClusterProviderConfig `vault.kubeconfigWriter.providerConfigName` from the
+stack's EnvironmentConfig, default `vault-kubeconfig-writer`.
+
+**The API endpoint is the node's, not Rancher's.** ClusterAccess's
+`apiEndpoint` is the server of the kubeconfig it read — here Rancher's proxy.
+Vault's Kubernetes auth calls back to `kubernetesHost` with a downstream
+ServiceAccount token, which the proxy does not accept: the mount would be
+created and every login would fail. So `{name}-apiserver` observes
+`default/kubernetes` through `<cluster>-kubernetes`, and when the Platform
+derives a host it **waits** for that endpoint. `status.share.apiEndpoint` reports
+the same address.
+
+Teardown: the three machine guards (`platform-uses-`, `access-uses-`,
+`mgmt-uses-`) point at the RancherCluster instead of a VM, plus
+`access-uses-kubeconfig-set` (the reader goes before the entry's owner) and
+`apiserver-uses-access` (the probe observes through ClusterAccess's config).
 
 ## Argo CD labels: profiles, derived facts, overrides (0.15.0)
 
@@ -309,7 +377,7 @@ They are applied to **both** ansible stages, deliberately. `upload_kubeconfig_va
 |---|---|
 | `logic.k` | pure resource construction — explicit args in, dict out, unit-tested |
 | `main.k` | wiring: reads `option("params")`, decides which gates are open, patches status |
-| `logic_test.k` | 111 tests, no Crossplane and no cluster required |
+| `logic_test.k` | 123 tests, no Crossplane and no cluster required |
 
 `main.k` is deliberately thin and untested-by-unit: it is exercised by the Configuration's `crossplane render` with synthetic `--observed-resources`, which is the only way to test gate transitions honestly.
 

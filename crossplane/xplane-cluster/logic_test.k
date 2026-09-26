@@ -1499,3 +1499,130 @@ test_order_labels_override_profile_labels = lambda {
     assert _b.labels["storage-platform/longhorn"] == "false"
     assert _b.labels["storage-platform"] == "true"
 }
+
+# --- machine pool: Rancher builds the Harvester VM (0.22.0) ---------------
+# The tabletennis shape, as a ClusterStack: Harvester is a cloud in Rancher, the
+# RancherCluster gets a machine pool, and this stack builds no VM and runs no
+# join. Found wanting because the custom-node Harvester VM cannot be logged into
+# by its own ansible stages (crossplane-configurations#503).
+_poolSpec = {
+    provider = "harvester"
+    distribution = "rancher-k3s"
+    clusterName = "hv1"
+    environmentConfig = "sthings-lab"
+    size = "medium"
+    rancher = {
+        environmentConfig = "rancher-join-sthings-lab"
+        argocd = {register = True}
+    }
+}
+
+_poolEnv = {
+    distro = "k3s"
+    providerConfigRef = "in-cluster"
+    rancherProviderConfigRef = "rancher-mgmt"
+}
+
+test_harvester_on_rancher_is_a_machine_pool_by_default = lambda {
+    assert l.isMachinePool(_poolSpec) == True
+    assert l.rancherInfrastructure(_poolSpec) == "harvester"
+    # the custom-node shape stays reachable, and other providers never pool
+    assert l.isMachinePool(_poolSpec | {
+        rancher = {infrastructure = "generic"}
+    }) == False
+    assert l.isMachinePool(_poolSpec | {provider = "proxmox"}) == False
+    # the ansible path has no Rancher to build anything
+    assert l.isMachinePool(_poolSpec | {distribution = "k3s"}) == False
+}
+
+test_machine_pool_rancher_child_carries_the_harvester_pool = lambda {
+    _c = l.rancherChild("hv1", "default", _poolSpec, {}, cat.getSize("medium"))
+    assert _c.spec.infrastructure == "harvester"
+    assert _c.spec.harvester.cpuCount == 4
+    assert _c.spec.harvester.memorySize == 8
+    assert _c.spec.harvester.diskSize == 64
+    assert _c.spec.harvester.quantity == 1
+    # infra identity is left to rancher-cluster's own EnvironmentConfig
+    assert "cloudCredentialSecretName" not in _c.spec.harvester
+    assert "imageName" not in _c.spec.harvester
+    # nothing joins by hand, so no registration command is published
+    assert "nodeRegistration" not in _c.spec
+}
+
+test_machine_pool_order_overrides_the_size = lambda {
+    _s = _poolSpec | {
+        rancher = {environmentConfig = "rancher-join-sthings-lab", harvester = {memorySize = 12, imageName = "default/other"}}
+    }
+    _h = l.rancherChild("hv1", "default", _s, {}, cat.getSize("medium")).spec.harvester
+    assert _h.memorySize == 12
+    assert _h.cpuCount == 4
+    assert _h.imageName == "default/other"
+}
+
+# The catalog switches the distribution's CNI off so the Platform can install
+# cilium through the node's own kubeconfig. A machine pool has only Rancher's,
+# which needs cattle-cluster-agent on a pod network first -- so the catalog keys
+# must not reach it, and the Platform must not install a second CNI.
+test_machine_pool_keeps_the_distribution_cni = lambda {
+    _c = l.rancherChild("hv1", "default", _poolSpec, {}, cat.getSize("medium"))
+    assert "machineGlobalConfig" not in _c.spec
+    _o = l.rancherChild("hv1", "default", _poolSpec | {
+        rancher = {
+            machineGlobalConfig = {disable = ["traefik"]}
+        }
+    }, {}, cat.getSize("medium"))
+    assert _o.spec.machineGlobalConfig.disable == ["traefik"]
+    assert "flannel-backend" not in _o.spec.machineGlobalConfig
+
+    _p = l.platformChild("hv1", "default", _poolSpec, "https://192.168.10.50:6443", _poolEnv)
+    assert _p.spec.cni.enabled == False
+    assert "cilium" not in _p.spec.cni
+}
+
+test_machine_pool_writes_the_rancher_kubeconfig_into_vault = lambda {
+    _k = l.machinePoolKubeconfigSet("hv1", "default", _poolSpec, _poolEnv)
+    assert _k.kind == "VaultSecretSet"
+    assert _k.metadata.name == "hv1-kubeconfig-set"
+    assert _k.spec.providerConfigRef.name == "vault-kubeconfig-writer"
+    assert _k.spec.mount == {path = "kubeconfigs", create = False}
+    _s = _k.spec.secrets[0]
+    # the path and key ClusterAccess reads
+    _a = l.clusterAccess("hv1", "default", _poolSpec)
+    assert _s.path == _a.spec.source.path
+    assert _s.data[0].key == _a.spec.source.key
+    assert _s.data[0].secretKeyRef == {name = "hv1-kubeconfig-bridged", key = "value"}
+    assert _s.deleteAllVersions == True
+    # the writer is an environment value
+    _w = l.machinePoolKubeconfigSet("hv1", "default", _poolSpec, _poolEnv | {
+        vault = {
+            kubeconfigWriter = {providerConfigName = "w2"}
+        }
+    })
+    assert _w.spec.providerConfigRef.name == "w2"
+}
+
+# One entry, one owner: the set deletes kubeconfigs/<cluster> with the stack,
+# which is the kubeconfig Workspace's job on the join path.
+test_machine_pool_does_not_compose_the_kubeconfig_workspace = lambda {
+    assert l.kubeconfigLifecycleEnabled(_poolSpec) == False
+    assert l.kubeconfigLifecycleEnabled(_poolSpec | {
+        rancher = {infrastructure = "generic"}
+    }) == True
+}
+
+test_machine_pool_reads_the_direct_endpoint = lambda {
+    _o = l.apiEndpointObject("hv1", "default", _poolSpec)
+    assert _o.spec.managementPolicies == ["Observe"]
+    assert _o.spec.providerConfigRef.name == "hv1-kubernetes"
+    assert _o.spec.forProvider.manifest.kind == "Endpoints"
+    assert l.observedApiEndpoint({}) == ""
+    _obs = {status.atProvider.manifest.subsets = [{addresses = [{ip = "192.168.10.50"}], ports = [{name = "https", port = 6443}]}]}
+    assert l.observedApiEndpoint(_obs) == "https://192.168.10.50:6443"
+}
+
+test_machine_pool_usages_resolve_their_groups = lambda {
+    _u = l.usage("VaultSecretSet", "hv1-kubeconfig-set", "ClusterAccess", "hv1-access", "access-uses-kubeconfig-set", True, "hv1")
+    assert _u.spec.of.apiVersion == "vault.stuttgart-things.com/v1alpha1"
+    _o = l.usage("ClusterAccess", "hv1-access", "Object", "hv1-apiserver", "apiserver-uses-access", True, "hv1")
+    assert _o.spec.by.apiVersion == "kubernetes.m.crossplane.io/v1alpha1"
+}
