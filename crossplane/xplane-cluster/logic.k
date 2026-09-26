@@ -18,6 +18,7 @@ deleted, recreated AnsibleRun re-runs its play against a live machine.
 """
 
 import xplane_cluster_catalog as cat
+import yaml
 
 # --- small helpers ---------------------------------------------------------
 
@@ -351,7 +352,11 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
         rke2 = "/etc/rancher/rke2/rke2.yaml"
     }
     _dist = spec?.distribution or "k3s"
-    _paths = ["kubeconfig_path+-" + _serverPaths[_dist]] if _dist in _serverPaths else []
+
+    # A rancher entry names the SERVER it provisions (serverDistro): on a
+    # machine pool this stage fetches Rancher's k3s or rke2 admin kubeconfig.
+    _srv = cat.getDistribution(_dist).serverDistro or _dist
+    _paths = ["kubeconfig_path+-" + _serverPaths[_srv]] if _srv in _serverPaths else []
 
     # extraVars belongs here too. It was wired into the base-OS and
     # distribution stages only, so an override aimed at THIS stage —
@@ -417,7 +422,14 @@ joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret
 # namespace, because ansible-run reads extraEnvSecretName from the PipelineRun's
 # namespace — not from next to this XR. A registration command published only
 # beside the XR is a command the join cannot read.
-rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} = {}, size: any = None -> {str:any} {
+#
+# On a MACHINE POOL there is no join: Rancher builds and joins the node itself,
+# at the static address `nodeIP` this stack reserved in clusterbook (see
+# nodeReservation below). The address is also written to an annotation, so a
+# momentarily unreadable reservation cannot rewrite the node's network config.
+NODE_IP_ANNOTATION = "cluster.stuttgart-things.com/node-ip"
+
+rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} = {}, size: any = None, nodeIP: str = "", env: {str:any} = {} -> {str:any} {
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
     _r = spec?.rancher or {}
@@ -431,15 +443,12 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
     # Catalog first, XR on top: a caller can override one key without
     # restating the set that keeps rke2 out of the network.
     #
-    # NOT on a machine pool. The catalog's keys switch the distribution's own
-    # CNI off so the Platform can install cilium through the node's admin
-    # kubeconfig -- which only the join play has. Here the only kubeconfig is
-    # Rancher's, and every path Rancher offers goes through its proxy, which
-    # needs `cattle-cluster-agent`, an ordinary Deployment on the pod network.
-    # With the CNI switched off that agent never starts and the cluster never
-    # finishes provisioning. So the distribution keeps its CNI, and only what
-    # the order itself writes reaches the server.
-    _mgc = (_r?.machineGlobalConfig or {}) if _pool else (_dist.machineGlobalConfig | (_r?.machineGlobalConfig or {}))
+    # The same on a machine pool: the node comes up WITHOUT a CNI, and the
+    # Platform installs cilium through the node's own admin kubeconfig, which
+    # the kubeconfig stage fetches over SSH from the reserved address. Rancher's
+    # proxy cannot be that path -- it needs cattle-cluster-agent, which needs a
+    # pod network -- and does not have to be.
+    _mgc = _dist.machineGlobalConfig | (_r?.machineGlobalConfig or {})
     _nodeReg = (_r?.nodeRegistration or {}) | {
         publish = True
         secretNamespace = (_r?.nodeRegistration or {})?.secretNamespace or _ans?.pipelineNamespace or "tekton-ci"
@@ -450,21 +459,23 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
         metadata = {
             name = "{}-rancher".format(name)
             namespace = ns
-            annotations = {"krm.kcl.dev/composition-resource-name" = "rancher"}
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "rancher"
+                if _pool and nodeIP:
+                    "${NODE_IP_ANNOTATION}": nodeIP
+            }
         }
         spec = _passthrough | {
             name = _cluster
+            machineGlobalConfig = _mgc
             if _pool:
                 infrastructure = rancherInfrastructure(spec)
-                harvester = machinePoolHarvester(spec, size)
+                harvester = machinePoolHarvester(spec, size, nodeIP, env)
                 # Nothing joins by hand, so nothing needs the command -- and it
                 # is a credential. Passed through only if the order asks.
                 if _r?.nodeRegistration:
                     nodeRegistration = _r.nodeRegistration
-                if _mgc:
-                    machineGlobalConfig = _mgc
             else:
-                machineGlobalConfig = _mgc
                 nodeRegistration = _nodeReg
             # Only when there is something to register or derive — an empty
             # argocd block would be a diff on every existing RancherCluster.
@@ -474,9 +485,10 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
     }
 }
 
-# The HarvesterConfig sizing of a machine pool, from the catalog size, with the
-# order's `spec.rancher.harvester` on top. The catalog keeps memory in MiB and
-# disk in GiB as strings; the RancherCluster XRD wants integer GiB for both.
+# The HarvesterConfig of a machine pool: sizing from the catalog size, the
+# static address as cloud-init networkData, and the order's
+# `spec.rancher.harvester` on top. The catalog keeps memory in MiB and disk in
+# GiB as strings; the RancherCluster XRD wants integer GiB for both.
 #
 # The infra identity (cloud credential, image, network, VM namespace, SSH user)
 # is deliberately NOT set here: rancher-cluster falls back to its own
@@ -485,113 +497,138 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
 #
 # One node, like every rancher entry in the catalog (multiNode false): the size
 # check rejects `medium-ha` before this runs.
-machinePoolHarvester = lambda spec: {str:any}, size: any -> {str:any} {
+machinePoolHarvester = lambda spec: {str:any}, size: any, nodeIP: str = "", env: {str:any} = {} -> {str:any} {
     _user = (spec?.rancher or {})?.harvester or {}
     _sized = {
         cpuCount = int(size.cpu)
         memorySize = int(int(size.memory) / 1024)
         diskSize = int(size.disk)
         quantity = 1
+        if nodeIP:
+            networkData = nodeNetworkData(nodeIP, env)
     } if size else {}
     # KCL's `|` unifies rather than overrides, so drop what the order sets.
     {k: v for k, v in _sized if k not in _user} | _user
 }
 
-# --- the machine-pool kubeconfig: Rancher's, copied into Vault -------------
-# ClusterAccess reads a kubeconfig from Vault -- it knows no other source -- and
-# on the custom-node path the join play puts it there. A machine pool has no
-# play, so this stack writes the entry itself: a VaultSecretSet whose one key
-# comes from the Secret rancher-cluster bridges onto this control plane,
-# `<cluster>-kubeconfig-bridged` (key `value`, raw kubeconfig YAML), in this
-# XR's namespace -- the only namespace a VaultSecretSet reads from.
+# --- the machine pool's node address: reserved, then static (0.22.0) -------
+# The kubeconfig stage has to reach the node by SSH, and ClusterAccess the API
+# server on it -- both BEFORE the cluster has a CNI. Rancher names the VM at
+# random and DHCP picks its address, so nothing here could find it. Instead the
+# address is decided first: reserved in clusterbook, then handed to the VM as a
+# static cloud-init network config (rancher-cluster >= v0.10.0,
+# `harvester.networkData`).
 #
-# That Secret exists only in the SPLIT layout, Crossplane and Rancher on
-# different clusters (rancherProviderConfigRef != providerConfigRef). Co-located,
-# Rancher's own Secret sits in fleet-default, out of reach, and the set would
-# wait forever on a source that never resolves -- so that fails the render.
+# That also takes the API address off a DHCP lease, which is what broke
+# homerun2-dev's etcd peer URL (harvester#238).
 #
-# It is a Rancher-PROXY kubeconfig: everything Crossplane then applies goes
-# through Rancher. Fine for Platform and ClusterAccess; not fine as the address
-# Vault's Kubernetes auth calls back to, which is why the Platform gets the
-# node's direct endpoint instead (apiEndpointObject below).
+# Environment half, in the stack's EnvironmentConfig
+# (cluster.stuttgart-things.com/environment):
 #
-# `deleteAllVersions` makes the set the owner of kubeconfigs/<cluster>, which is
-# the job the kubeconfig Workspace does on the join path. The two must not both
-# own one entry, so the Workspace defaults off here and asking for it fails.
-KUBECONFIG_BRIDGED_SUFFIX = "-kubeconfig-bridged"
+#   machinePool:
+#     networkKey: "192.168.10"          clusterbook network to reserve from
+#     prefixLength: 24
+#     gateway: 192.168.10.1
+#     nameservers: [192.168.10.1]
+#     clusterbookProviderConfigRef: default   (provider-clusterbook)
+#
+# The reservation is keyed `<cluster>-node` in clusterbook, NOT `<cluster>`:
+# the Argo CD registration reserves the cluster's LoadBalancer address under the
+# cluster's own name, and one key would hand both the same address.
+NODE_RESERVATION_SUFFIX = "-node"
 
-machinePoolKubeconfigSet = lambda name: str, ns: str, spec: {str:any}, env: {str:any} -> {str:any} {
-    _cluster = spec?.clusterName or name
-    _kc = spec?.kubeconfig or {}
-    _l = _kc?.lifecycle or {}
-    _r = spec?.rancher or {}
-    _cpc = _r?.providerConfigRef or env?.providerConfigRef or ""
-    _rcpc = _r?.rancherProviderConfigRef or env?.rancherProviderConfigRef or _cpc
-    assert _cpc == "" or _rcpc != _cpc, "a machine pool needs Rancher on another cluster than Crossplane (rancherProviderConfigRef != providerConfigRef in the rancher EnvironmentConfig '" + (_r?.environmentConfig or "(unset)") + "') -- only then does rancher-cluster bridge the kubeconfig next to this XR, where the VaultSecretSet can read it"
-    assert not (_l?.enabled or False), "kubeconfig.lifecycle is the join path's owner of kubeconfigs/" + _cluster + "; on a machine pool the kubeconfig VaultSecretSet owns that entry and deletes it with the stack -- remove kubeconfig.lifecycle.enabled"
-    _writer = ((env?.vault or {})?.kubeconfigWriter or {})?.providerConfigName or "vault-kubeconfig-writer"
-    {
-        apiVersion = VAULT_SECRET_SET_API_VERSION
-        kind = "VaultSecretSet"
-        metadata = {
-            name = "{}-kubeconfig-set".format(name)
-            namespace = ns
-            annotations = {"krm.kcl.dev/composition-resource-name" = "kubeconfig-set"}
-        }
-        spec = {
-            providerConfigRef = {name = _writer, kind = "ClusterProviderConfig"}
-            mount = {path = _l?.mount or "kubeconfigs", create = False}
-            secrets = [{
-                path = _kc?.vaultPath or _cluster
-                deleteAllVersions = True
-                data = [{
-                    key = "kubeconfig"
-                    secretKeyRef = {name = _cluster + KUBECONFIG_BRIDGED_SUFFIX, key = "value"}
-                }]
-            }]
-        }
-    }
+machinePoolNetwork = lambda spec: {str:any}, env: {str:any} -> {str:any} {
+    _n = env?.machinePool or {}
+    _envName = spec?.environmentConfig or "(unset)"
+    _missing = [k for k in ["networkKey", "prefixLength", "gateway"] if not _n?[k]]
+    assert len(_missing) == 0, "machinePool." + ", machinePool.".join(_missing) + " missing in the EnvironmentConfig for environment '" + _envName + "' (label cluster.stuttgart-things.com/environment) -- a machine pool's node gets a static address reserved in clusterbook, and needs the network it lives on"
+    _n
 }
 
-# The node's DIRECT API endpoint, read off the new cluster's `default/kubernetes`
-# Endpoints through the ClusterProviderConfig ClusterAccess created. Observe
-# only: it never writes to the cluster.
-#
-# Why not ClusterAccess's apiEndpoint, as on the join path: that is the server
-# of the kubeconfig it read, and here that is Rancher's proxy. Vault's Kubernetes
-# auth calls back to kubernetesHost with a downstream ServiceAccount token, which
-# the proxy does not accept -- the mount would be created, and every login would
-# fail. rancher-cluster reads the same Endpoints for its Argo CD registration.
-apiEndpointObject = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
+nodeReservation = lambda name: str, ns: str, spec: {str:any}, env: {str:any} -> {str:any} {
     _cluster = spec?.clusterName or name
+    _n = machinePoolNetwork(spec, env)
     {
         apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
         kind = "Object"
         metadata = {
-            name = "{}-apiserver".format(name)
+            name = "{}-node-ip".format(name)
             namespace = ns
-            annotations = {"krm.kcl.dev/composition-resource-name" = "apiserver"}
+            annotations = {"krm.kcl.dev/composition-resource-name" = "node-ip"}
         }
         spec = {
-            managementPolicies = ["Observe"]
-            providerConfigRef = {name = "{}-kubernetes".format(_cluster), kind = "ClusterProviderConfig"}
+            # IPReservation is a cluster-scoped managed resource, and a
+            # namespaced composite cannot compose one directly.
+            providerConfigRef = {name = "in-cluster", kind = "ClusterProviderConfig"}
+            readiness.policy = "DeriveFromObject"
             forProvider.manifest = {
-                apiVersion = "v1"
-                kind = "Endpoints"
-                metadata = {name = "kubernetes", namespace = "default"}
+                apiVersion = "ipreservation.clusterbook.stuttgart-things.com/v1alpha1"
+                kind = "IPReservation"
+                metadata.name = _cluster + NODE_RESERVATION_SUFFIX
+                spec = {
+                    forProvider = {
+                        networkKey = str(_n.networkKey)
+                        clusterName = _cluster + NODE_RESERVATION_SUFFIX
+                        count = 1
+                        createDNS = False
+                    }
+                    providerConfigRef = {name = _n?.clusterbookProviderConfigRef or "default", kind = "ClusterProviderConfig"}
+                }
             }
         }
     }
 }
 
-observedApiEndpoint = lambda obj: {str:} -> str {
-    """https://<ip>:<port> from an observed apiEndpointObject, "" until it reports."""
-    _subsets = ((obj?.status?.atProvider or {})?.manifest or {})?.subsets or []
-    _addrs = (_subsets[0]?.addresses or []) if _subsets else []
-    _ports = (_subsets[0]?.ports or []) if _subsets else []
-    _ip = (_addrs[0]?.ip or "") if _addrs else ""
-    _port = (_ports[0]?.port or 6443) if _ports else 6443
-    "https://{}:{}".format(_ip, _port) if _ip else ""
+observedNodeIP = lambda obj: {str:} -> str {
+    """The reserved address off an observed nodeReservation, "" until clusterbook answered."""
+    _ips = ((((obj?.status?.atProvider or {})?.manifest or {})?.status or {})?.atProvider or {})?.ipAddresses or []
+    str(_ips[0]) if _ips else ""
+}
+
+# cloud-init network-config v2 for the node. `match: en*` rather than an
+# interface name: the name depends on the machine type Harvester gives the VM,
+# and matching is what netplan offers for exactly that.
+nodeNetworkData = lambda ip: str, env: {str:any} -> str {
+    _n = env?.machinePool or {}
+    yaml.encode({
+        version = 2
+        ethernets = {
+            nic0 = {
+                match.name = "en*"
+                dhcp4 = False
+                addresses = ["{}/{}".format(ip, _n?.prefixLength or 24)]
+                routes = [{to = "default", via = str(_n?.gateway or "")}]
+                if _n?.nameservers:
+                    nameservers.addresses = [str(x) for x in _n.nameservers]
+            }
+        }
+    })
+}
+
+# The kubeconfig stage retries on its own on a machine pool, because nothing
+# can tell it when to start: Rancher reports nothing useful while the cluster
+# has no CNI, and the VM, the rancher-system-agent and k3s take their time. A
+# run against a node that is not up yet fails fast (no SSH, or no k3s.yaml), and
+# the next attempt is the same thing a hand-bumped runIDs.kubeconfig does: a new
+# PipelineRun under a new name. Capped, so a real failure -- wrong credentials --
+# ends as a failed stage and not as an endless loop.
+KUBECONFIG_MAX_ATTEMPTS = 12
+ATTEMPT_MARK = "-try"
+
+attemptOf = lambda runName: str -> int {
+    """The attempt a kubeconfig PipelineRun name carries; 1 when it carries none."""
+    _parts = runName.split(ATTEMPT_MARK)
+    int(_parts[-1]) if (len(_parts) > 1 and _parts[-1].isdigit()) else 1
+}
+
+withAttempt = lambda spec: {str:any}, stage: str, attempt: int -> {str:any} {
+    """spec with runIDs.<stage> extended by the attempt, from the second on."""
+    _ids = spec?.runIDs or {}
+    _rid = str(_ids[stage]) if stage in _ids else ""
+    _new = (_rid + ATTEMPT_MARK + str(attempt)) if (attempt > 1 and _rid) else (("try" + str(attempt)) if attempt > 1 else _rid)
+    _rest = {k: v for k, v in _ids if k != stage}
+    _runIDs = _rest | ({"${stage}": _new} if _new else {})
+    {k: v for k, v in spec if k != "runIDs"} | ({runIDs = _runIDs} if _runIDs else {})
 }
 
 # --- Argo CD labels and annotations: profiles, derived facts, overrides -----
@@ -831,9 +868,7 @@ kubeconfigLifecycleEnabled = lambda spec: {str:any} -> bool {
     """
     _l = kubeconfigLifecycle(spec)
 
-    # Off by default on a machine pool: the kubeconfig VaultSecretSet owns the
-    # entry there (machinePoolKubeconfigSet), and one entry has one owner.
-    _l.enabled if "enabled" in _l else (cat.getDistribution(spec?.distribution or "k3s").provisioner == "rancher" and not isMachinePool(spec))
+    _l.enabled if "enabled" in _l else (cat.getDistribution(spec?.distribution or "k3s").provisioner == "rancher")
 }
 
 kubeconfigWorkspace = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
@@ -1285,16 +1320,13 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str, en
     _passthrough = {k: v for k, v in (spec?.platform or {}) if k not in ["clusterName", "cni", "vaultIssuer"]}
     _userCni = (spec?.platform or {})?.cni or {}
 
-    # A machine pool keeps the distribution's own CNI (see rancherChild): the
-    # Platform installing a second one on top is how a cluster ends up with two.
-    _pool = isMachinePool(spec)
-    _cniEnabled = cat.platformCniEnabled(spec?.distribution or "k3s") and not _pool
+    _cniEnabled = cat.platformCniEnabled(spec?.distribution or "k3s")
 
     # Cluster-shape facts from the catalog (API server address, gateway API,
     # l2/externalIPs, hubble) UNDER the caller's own cni block, so one key can
     # be overridden without restating the set. Empty for distributions that
     # install their own CNI.
-    _cniDefaults = {} if _pool else cat.getDistribution(spec?.distribution or "k3s").cniDefaults
+    _cniDefaults = cat.getDistribution(spec?.distribution or "k3s").cniDefaults
 
     # vaultIssuer.kubernetesHost is the API server address Vault's Kubernetes
     # auth mount is configured with. Every Platform in the fleet states it by
@@ -1380,7 +1412,6 @@ groupOf = {
     "ManagementPlane" = "config.stuttgart-things.com/v1alpha1"
     "RancherCluster" = "resources.stuttgart-things.com/v1alpha1"
     "Workspace" = "opentofu.m.upbound.io/v1beta1"
-    "VaultSecretSet" = "vault.stuttgart-things.com/v1alpha1"
     "Object" = "kubernetes.m.crossplane.io/v1alpha1"
 }
 

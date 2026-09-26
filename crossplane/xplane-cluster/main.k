@@ -85,9 +85,11 @@ _isRancher = _dist.provisioner == "rancher"
 
 # WHO builds the machine on that path (0.22.0). A machine pool is Rancher's own:
 # Harvester is registered in Rancher as a cloud, so Rancher creates, boots and
-# joins the node. This stack then composes no VM and no join stage; it copies
-# Rancher's kubeconfig into Vault for ClusterAccess and reads the node's direct
-# endpoint back for the Platform. Everything after ClusterAccess is unchanged.
+# joins the node. This stack then composes no VM and no join stage. It reserves
+# the node's address in clusterbook first, hands it to the VM as a static
+# network config, and fetches the node's admin kubeconfig from there -- the
+# same upload stage the ansible path runs. Everything after that is unchanged:
+# ClusterAccess talks to node:6443, the Platform installs cilium.
 _machinePool = l.isMachinePool(_spec)
 
 # A SIBLING of spec.platform, not a key inside it: `platform` is a verbatim
@@ -134,17 +136,18 @@ _kcVaultOpen = l.kubeconfigLifecycleEnabled(_spec)
 _kcVaultObs = _byName("{}-kubeconfig-vault".format(_name))
 _kcVaultReady = len([1 for c in ((_kcVaultObs[0] if _kcVaultObs else {})?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
 
-# Machine pool only: the VaultSecretSet that writes Rancher's kubeconfig into
-# kubeconfigs/<cluster>. Emitted from the start, like the RancherCluster -- it
-# writes nothing until its source Secret exists, and not emitting it later
-# would delete the entry.
-_kcSetOpen = _machinePool
-_kcSetObs = _byName("{}-kubeconfig-set".format(_name))
-_kcSetReady = len([1 for c in ((_kcSetObs[0] if _kcSetObs else {})?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
-
 _rancherObs = _byName("{}-rancher".format(_name))
 _rancher = _rancherObs[0] if _rancherObs else {}
 _rancherReady = len([c for c in (_rancher?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
+
+# Machine pool only: the node address reserved in clusterbook. Emitted from the
+# start; the RancherCluster waits for it. Once the RancherCluster exists, the
+# address it was built with (its annotation) is the one that counts -- a
+# reservation that is momentarily unreadable must not rewrite the node's network
+# config.
+_nodeResObs = _byName("{}-node-ip".format(_name))
+_nodeIPReserved = l.observedNodeIP(_nodeResObs[0] if _nodeResObs else {})
+_nodeIP = ((_rancher?.metadata?.annotations or {})[l.NODE_IP_ANNOTATION] or _nodeIPReserved) if _machinePool else ""
 
 # What the VM waits for: the Secret RancherCluster publishes with the node
 # registration command. Empty until Rancher has minted the token.
@@ -175,12 +178,6 @@ _vssReady = lambda n: str -> bool {
     len([c for r in _byName(n) for c in (r?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
 }
 
-# Machine pool only: the node's direct API endpoint, read off the new cluster.
-# ClusterAccess's apiEndpoint is Rancher's proxy there, and Vault's Kubernetes
-# auth cannot call back through it.
-_apiObs = _byName("{}-apiserver".format(_name))
-_apiDirect = l.observedApiEndpoint(_apiObs[0] if _apiObs else {})
-
 _platObs = _byKind("Platform")
 _plat = _platObs[0] if _platObs else {}
 _platReady = len([c for c in (_plat?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
@@ -201,26 +198,19 @@ _platDomain = l.platformDomain(_plat)
 _vmOpen = (not _machinePool) and ((not _isRancher) or _nodeCommandSecret != "" or len(_vmObs) > 0)
 
 _distOpen = (not _isRancher) and ((_vmReady and _vmIP != "" and _baseosOk) or len(_distObs) > 0)
-_kcOpen = (not _isRancher) and ((_distOk and _vmIP != "") or len(_kcObs) > 0)
+
+# On a machine pool the upload stage is the one after Rancher: it fetches the
+# node's admin kubeconfig from the reserved address. Opened once the
+# RancherCluster exists -- the stage retries until the node answers (below).
+_kcOpen = ((not _isRancher) and _distOk and _vmIP != "") or (_machinePool and _nodeIP != "" and len(_rancherObs) > 0) or len(_kcObs) > 0
+_rancherOpen = _isRancher and ((not _machinePool) or _nodeIP != "" or len(_rancherObs) > 0)
 
 # The join replaces both of the above — it registers the node AND uploads the
 # kubeconfig, so ClusterAccess waits for this one instead.
 _joinOpen = _isRancher and (not _machinePool) and ((_vmReady and _vmIP != "" and _baseosOk) or len(_joinObs) > 0)
 
-# On a machine pool nothing succeeds before ClusterAccess except Rancher itself:
-# the entry is written once Rancher published the kubeconfig and the bridge
-# carried it over, and that is what the set's Ready says.
-_accessOpen = (_kcSetReady if _machinePool else (_joinOk if _isRancher else _kcOk)) or len(_accessObs) > 0
-
-# The endpoint probe needs the ClusterProviderConfigs ClusterAccess creates.
-_apiOpen = _machinePool and (_accessReady or len(_apiObs) > 0)
-
-# The endpoint the Platform derives vaultIssuer.kubernetesHost from. On a machine
-# pool the Platform WAITS for the direct one when it will derive a host: created
-# without it, its VaultK8sAuth would carry no address, or -- worse -- the proxy's.
-_platEndpoint = _apiDirect if _machinePool else (_accessShare?.apiEndpoint or "")
-_needsHost = _machinePool and (((_spec?.platform or {})?.vaultIssuer or {})?.enabled or False) and not (((_spec?.platform or {})?.vaultIssuer or {})?.kubernetesHost or "")
-_platOpen = _platformEnabled and ((_accessReady and (not _needsHost or _apiDirect != "")) or len(_platObs) > 0)
+_accessOpen = ((_joinOk if (_isRancher and not _machinePool) else _kcOk)) or len(_accessObs) > 0
+_platOpen = _platformEnabled and (_accessReady or len(_platObs) > 0)
 
 # Gated on ClusterAccess, the same as the Platform child and for the same
 # reason: both need only the ClusterProviderConfigs, and neither needs the
@@ -268,8 +258,18 @@ _reemit = lambda prev: any, stage: str -> {str:any} {
 # changes pipelineRunName AND crossplaneObjectName, so the repair arrives as a
 # NEW Object instead of an update to a sealed one — which is why the seal is
 # lifted the moment the derived name stops matching what is observed.
+# The kubeconfig stage's own retry on a machine pool (logic.KUBECONFIG_MAX_ATTEMPTS):
+# a FAILED run under the cap gets a successor under a new name, exactly what a
+# hand-bumped runIDs.kubeconfig does. The attempt is read back off the observed
+# run's name, so no counter has to be kept anywhere.
+_kcAttempt = l.attemptOf(_kcRun?.spec?.pipelineRunName or "")
+_kcFailed = (_kcRun?.status?.succeeded or "") == "False"
+_kcNext = (_kcAttempt + 1) if (_machinePool and _kcFailed and _kcAttempt < l.KUBECONFIG_MAX_ATTEMPTS) else _kcAttempt
+_specKc = l.withAttempt(_spec, "kubeconfig", _kcNext) if _machinePool else _spec
+_kcIP = _nodeIP if _machinePool else _vmIP
+
 _desiredRunName = lambda stage: str -> str {
-    _rid = l.runIDFor(_spec, stage)
+    _rid = l.runIDFor(_specKc if stage == "kubeconfig" else _spec, stage)
     _suffix = "-{}".format(_rid) if _rid else ""
     "{}-{}{}".format(_name, stage, _suffix)
 }
@@ -279,7 +279,7 @@ _sealed = lambda run: {str:any}, stage: str -> bool {
 }
 
 _distChild = _reemit(_distRun, "distribution") if (len(_distObs) > 0 and (_vmIP == "" or _sealed(_distRun, "distribution"))) else l.distributionRun(_name, _ns, _spec, _vmIP)
-_kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and (_vmIP == "" or _sealed(_kcRun, "kubeconfig"))) else l.kubeconfigRun(_name, _ns, _spec, _vmIP)
+_kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and (_kcIP == "" or _sealed(_kcRun, "kubeconfig"))) else l.kubeconfigRun(_name, _ns, _specKc, _kcIP)
 _joinChild = _reemit(_joinRun, "join") if (len(_joinObs) > 0 and (_vmIP == "" or _sealed(_joinRun, "join"))) else l.joinRun(_name, _ns, _spec, _vmIP, _nodeCommandSecret)
 
 # WHAT "the machine" is for the guards below: the VM this stack built, or -- on
@@ -339,13 +339,10 @@ _usageGroups = [
     [l.usage(_machKind, _machName, "Platform", "{}-platform".format(_name), "platform-uses-" + _machLabel, True, _name)] if _platOpen else []
     [l.usage("ClusterAccess", "{}-access".format(_name), "Platform", "{}-platform".format(_name), "platform-uses-access", True, _name)] if (_platOpen and _accessOpen) else []
     [l.usage(_machKind, _machName, "ClusterAccess", "{}-access".format(_name), "access-uses-" + _machLabel, True, _name)] if _accessOpen else []
-    # Machine pool: ClusterAccess reads the entry the set writes, and the set
-    # deletes it with every version -- so the reader goes first, as with the
-    # Workspace on the join path.
-    [l.usage("VaultSecretSet", "{}-kubeconfig-set".format(_name), "ClusterAccess", "{}-access".format(_name), "access-uses-kubeconfig-set", True, _name)] if (_kcSetOpen and _accessOpen) else []
-    # The endpoint probe observes THROUGH ClusterAccess's provider config; with
-    # that gone first its finalizer has nothing to talk to.
-    [l.usage("ClusterAccess", "{}-access".format(_name), "Object", "{}-apiserver".format(_name), "apiserver-uses-access", True, _name)] if _apiOpen else []
+    # Machine pool: the node's address goes back to clusterbook only once the
+    # VM holding it is gone -- else the next reservation hands out an address
+    # that is still in use.
+    [l.usage("Object", "{}-node-ip".format(_name), "RancherCluster", "{}-rancher".format(_name), "rancher-uses-node-ip", True, _name)] if (_machinePool and _rancherOpen) else []
     [l.usage("ClusterStack", _name, "Platform", "{}-platform".format(_name), "stack-uses-platform", False, _name)] if _platOpen else []
     # The RancherCluster applies Objects THROUGH the cluster its own node runs:
     # the bootstrap namespace, the Argo CD service account, the vault reviewer.
@@ -375,7 +372,7 @@ _usages = sum(_usageGroups, [])
 _platDone = _platReady or (not _platformEnabled and _accessReady)
 _mgmtDone = _mgmtReady or not _mgmtEnabled
 
-_stage = "ready" if (_platDone and _mgmtDone) else ("platform" if (_platOpen and not _platDone) else ("management-plane" if _mgmtOpen else ("access" if _accessOpen else ("join" if _joinOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else ("vm" if _vmOpen else "rancher"))))))))
+_stage = "ready" if (_platDone and _mgmtDone) else ("platform" if (_platOpen and not _platDone) else ("management-plane" if _mgmtOpen else ("access" if _accessOpen else ("join" if _joinOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else ("vm" if _vmOpen else ("node-ip" if (_machinePool and _nodeIP == "") else "rancher")))))))))
 
 _dxr = _params?.dxr or {}
 _dxrPatched = _dxr | {
@@ -384,15 +381,11 @@ _dxrPatched = _dxr | {
         stage = _stage
         share = {
             clusterName = _cluster
-            # A machine pool keeps the distribution's CNI (logic.rancherChild).
-            cniOwnership = "self" if _machinePool else _dist.cniOwnership
-            if _vmIP:
-                ip = _vmIP
-            # The node's own address. On a machine pool ClusterAccess only
-            # knows Rancher's proxy, which is not an address anyone else can use
-            # as "the API server of this cluster".
-            if _platEndpoint:
-                apiEndpoint = _platEndpoint
+            cniOwnership = _dist.cniOwnership
+            if _kcIP:
+                ip = _kcIP
+            if _accessShare?.apiEndpoint:
+                apiEndpoint = _accessShare.apiEndpoint
             if _accessShare?.clusterType:
                 clusterType = _accessShare.clusterType
             if _accessShare?.serverVersion:
@@ -406,9 +399,9 @@ _dxrPatched = _dxr | {
             distribution = {succeeded = _distOk, emitted = _distOpen}
             kubeconfig = {succeeded = _kcOk, emitted = _kcOpen}
             if _machinePool:
-                rancher = {infrastructure = l.rancherInfrastructure(_spec), ready = _rancherReady, emitted = True}
-                kubeconfigSet = {ready = _kcSetReady, emitted = True}
-                apiEndpoint = {endpoint = _apiDirect, emitted = _apiOpen}
+                rancher = {infrastructure = l.rancherInfrastructure(_spec), ready = _rancherReady, emitted = _rancherOpen}
+                nodeIP = {ip = _nodeIP, emitted = True}
+                kubeconfigAttempts = {attempt = _kcNext, max = l.KUBECONFIG_MAX_ATTEMPTS}
             elif _isRancher:
                 rancher = {nodeCommandSecret = _nodeCommandSecret, emitted = True}
                 join = {succeeded = _joinOk, emitted = _joinOpen}
@@ -434,15 +427,14 @@ _dxrPatched = _dxr | {
 _groups = [
     [l.kubeconfigWorkspace(_name, _ns, _spec)] if _kcVaultOpen else []
     [l.appSecretRequirements(_appNames)] if _appNames else []
-    [l.rancherChild(_name, _ns, _specEff, _appArgocd, _size)] if _isRancher else []
-    [l.machinePoolKubeconfigSet(_name, _ns, _spec, _env)] if _kcSetOpen else []
+    [l.nodeReservation(_name, _ns, _spec, _env)] if _machinePool else []
+    [l.rancherChild(_name, _ns, _specEff, _appArgocd, _size, _nodeIP, _env)] if _rancherOpen else []
     [l.vmChild(_name, _ns, _spec, _size)] if _vmOpen else []
     [_distChild] if _distOpen else []
     [_kcChild] if _kcOpen else []
     [_joinChild] if _joinOpen else []
     [l.clusterAccess(_name, _ns, _spec)] if _accessOpen else []
-    [l.apiEndpointObject(_name, _ns, _spec)] if _apiOpen else []
-    [l.platformChild(_name, _ns, _specEff, _platEndpoint, _env)] if _platOpen else []
+    [l.platformChild(_name, _ns, _specEff, _accessShare?.apiEndpoint or "", _env)] if _platOpen else []
     # Tied to the stack, not the Platform: `platformEnabled: false` (phase 1 of
     # a teardown) must not delete the generated values a rebuild would reuse.
     [l.vaultSecretSetChild(_name, _ns, s) for s in _appPlan.sets]

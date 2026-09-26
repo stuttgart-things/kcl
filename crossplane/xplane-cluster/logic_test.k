@@ -3,6 +3,7 @@
 # exercised by the Configuration's `crossplane render`, not here.
 import .logic as l
 import xplane_cluster_catalog as cat
+import yaml
 
 # Specs are written out in full rather than merged from a base: KCL types a dict
 # literal by its keys, so `base | {clusterName = ...}` fails type checking on the
@@ -1501,10 +1502,12 @@ test_order_labels_override_profile_labels = lambda {
 }
 
 # --- machine pool: Rancher builds the Harvester VM (0.22.0) ---------------
-# The tabletennis shape, as a ClusterStack: Harvester is a cloud in Rancher, the
-# RancherCluster gets a machine pool, and this stack builds no VM and runs no
-# join. Found wanting because the custom-node Harvester VM cannot be logged into
-# by its own ansible stages (crossplane-configurations#503).
+# Harvester is a cloud in Rancher, the RancherCluster gets a machine pool, and
+# this stack builds no VM and runs no join. The node's address is reserved in
+# clusterbook first and handed to the VM as a static network config, so the
+# kubeconfig stage can fetch the node's admin kubeconfig and the Platform can
+# install cilium through node:6443 -- the custom-node Harvester VM could not be
+# logged into at all (crossplane-configurations#503).
 _poolSpec = {
     provider = "harvester"
     distribution = "rancher-k3s"
@@ -1519,8 +1522,12 @@ _poolSpec = {
 
 _poolEnv = {
     distro = "k3s"
-    providerConfigRef = "in-cluster"
-    rancherProviderConfigRef = "rancher-mgmt"
+    machinePool = {
+        networkKey = "192.168.10"
+        prefixLength = 24
+        gateway = "192.168.10.1"
+        nameservers = ["192.168.10.1"]
+    }
 }
 
 test_harvester_on_rancher_is_a_machine_pool_by_default = lambda {
@@ -1536,7 +1543,7 @@ test_harvester_on_rancher_is_a_machine_pool_by_default = lambda {
 }
 
 test_machine_pool_rancher_child_carries_the_harvester_pool = lambda {
-    _c = l.rancherChild("hv1", "default", _poolSpec, {}, cat.getSize("medium"))
+    _c = l.rancherChild("hv1", "default", _poolSpec, {}, cat.getSize("medium"), "192.168.10.176", _poolEnv)
     assert _c.spec.infrastructure == "harvester"
     assert _c.spec.harvester.cpuCount == 4
     assert _c.spec.harvester.memorySize == 8
@@ -1547,82 +1554,86 @@ test_machine_pool_rancher_child_carries_the_harvester_pool = lambda {
     assert "imageName" not in _c.spec.harvester
     # nothing joins by hand, so no registration command is published
     assert "nodeRegistration" not in _c.spec
+    # the address the node was built with, kept on the child
+    assert _c.metadata.annotations[l.NODE_IP_ANNOTATION] == "192.168.10.176"
 }
 
-test_machine_pool_order_overrides_the_size = lambda {
+# The node comes up WITHOUT a CNI, like every rancher entry: the Platform
+# installs cilium through the node's own kubeconfig.
+test_machine_pool_switches_the_distribution_cni_off = lambda {
+    _c = l.rancherChild("hv1", "default", _poolSpec, {}, cat.getSize("medium"), "192.168.10.176", _poolEnv)
+    assert _c.spec.machineGlobalConfig["flannel-backend"] == "none"
+    assert _c.spec.machineGlobalConfig["disable-kube-proxy"] == True
+    _p = l.platformChild("hv1", "default", _poolSpec, "https://192.168.10.176:6443", _poolEnv)
+    assert _p.spec.cni.enabled == True
+    assert _p.spec.cni.cilium.k8sServiceHost == "127.0.0.1"
+}
+
+test_machine_pool_node_gets_the_reserved_address_statically = lambda {
+    _h = l.rancherChild("hv1", "default", _poolSpec, {}, cat.getSize("medium"), "192.168.10.176", _poolEnv).spec.harvester
+    _nd = yaml.decode(_h.networkData)
+    _nic = _nd.ethernets.nic0
+    assert _nd.version == 2
+    assert _nic.dhcp4 == False
+    assert _nic.addresses == ["192.168.10.176/24"]
+    assert _nic.routes == [{to = "default", via = "192.168.10.1"}]
+    assert _nic.nameservers.addresses == ["192.168.10.1"]
+    # no address yet, no network config
+    assert "networkData" not in l.machinePoolHarvester(_poolSpec, cat.getSize("medium"), "", _poolEnv)
+}
+
+test_machine_pool_order_overrides_the_harvester_block = lambda {
     _s = _poolSpec | {
         rancher = {environmentConfig = "rancher-join-sthings-lab", harvester = {memorySize = 12, imageName = "default/other"}}
     }
-    _h = l.rancherChild("hv1", "default", _s, {}, cat.getSize("medium")).spec.harvester
+    _h = l.rancherChild("hv1", "default", _s, {}, cat.getSize("medium"), "192.168.10.176", _poolEnv).spec.harvester
     assert _h.memorySize == 12
     assert _h.cpuCount == 4
     assert _h.imageName == "default/other"
 }
 
-# The catalog switches the distribution's CNI off so the Platform can install
-# cilium through the node's own kubeconfig. A machine pool has only Rancher's,
-# which needs cattle-cluster-agent on a pod network first -- so the catalog keys
-# must not reach it, and the Platform must not install a second CNI.
-test_machine_pool_keeps_the_distribution_cni = lambda {
-    _c = l.rancherChild("hv1", "default", _poolSpec, {}, cat.getSize("medium"))
-    assert "machineGlobalConfig" not in _c.spec
-    _o = l.rancherChild("hv1", "default", _poolSpec | {
-        rancher = {
-            machineGlobalConfig = {disable = ["traefik"]}
-        }
-    }, {}, cat.getSize("medium"))
-    assert _o.spec.machineGlobalConfig.disable == ["traefik"]
-    assert "flannel-backend" not in _o.spec.machineGlobalConfig
-
-    _p = l.platformChild("hv1", "default", _poolSpec, "https://192.168.10.50:6443", _poolEnv)
-    assert _p.spec.cni.enabled == False
-    assert "cilium" not in _p.spec.cni
+# Keyed <cluster>-node: the Argo CD registration reserves the LoadBalancer
+# address under the cluster's own name, and one key would hand both one address.
+test_machine_pool_reserves_the_node_address_in_clusterbook = lambda {
+    _o = l.nodeReservation("hv1", "default", _poolSpec, _poolEnv)
+    _r = _o.spec.forProvider.manifest
+    assert _o.metadata.name == "hv1-node-ip"
+    assert _r.kind == "IPReservation"
+    assert _r.spec.forProvider.clusterName == "hv1-node"
+    assert _r.spec.forProvider.networkKey == "192.168.10"
+    assert _r.spec.forProvider.count == 1
+    assert _r.spec.providerConfigRef.name == "default"
+    assert l.observedNodeIP({}) == ""
+    assert l.observedNodeIP({status.atProvider.manifest.status.atProvider.ipAddresses = ["192.168.10.176"]}) == "192.168.10.176"
 }
 
-test_machine_pool_writes_the_rancher_kubeconfig_into_vault = lambda {
-    _k = l.machinePoolKubeconfigSet("hv1", "default", _poolSpec, _poolEnv)
-    assert _k.kind == "VaultSecretSet"
-    assert _k.metadata.name == "hv1-kubeconfig-set"
-    assert _k.spec.providerConfigRef.name == "vault-kubeconfig-writer"
-    assert _k.spec.mount == {path = "kubeconfigs", create = False}
-    _s = _k.spec.secrets[0]
-    # the path and key ClusterAccess reads
-    _a = l.clusterAccess("hv1", "default", _poolSpec)
-    assert _s.path == _a.spec.source.path
-    assert _s.data[0].key == _a.spec.source.key
-    assert _s.data[0].secretKeyRef == {name = "hv1-kubeconfig-bridged", key = "value"}
-    assert _s.deleteAllVersions == True
-    # the writer is an environment value
-    _w = l.machinePoolKubeconfigSet("hv1", "default", _poolSpec, _poolEnv | {
-        vault = {
-            kubeconfigWriter = {providerConfigName = "w2"}
-        }
-    })
-    assert _w.spec.providerConfigRef.name == "w2"
+test_machine_pool_kubeconfig_stage_reads_the_server_path = lambda {
+    _r = l.kubeconfigRun("hv1", "default", _poolSpec, "192.168.10.176")
+    assert _r.spec.ansiblePlaybooks == ["sthings.container.upload_kubeconfig_vault"]
+    assert "kubeconfig_path+-/etc/rancher/k3s/k3s.yaml" in _r.spec.ansibleVarsFile
+    assert _r.spec.ansibleVarsInventory[0] == 'all+["192.168.10.176"]' or '192.168.10.176' in _r.spec.ansibleVarsInventory[0]
+    _k = l.kubeconfigRun("hv1", "default", _poolSpec | {distribution = "rancher-rke2"}, "192.168.10.176")
+    assert "kubeconfig_path+-/etc/rancher/rke2/rke2.yaml" in _k.spec.ansibleVarsFile
 }
 
-# One entry, one owner: the set deletes kubeconfigs/<cluster> with the stack,
-# which is the kubeconfig Workspace's job on the join path.
-test_machine_pool_does_not_compose_the_kubeconfig_workspace = lambda {
-    assert l.kubeconfigLifecycleEnabled(_poolSpec) == False
-    assert l.kubeconfigLifecycleEnabled(_poolSpec | {
-        rancher = {infrastructure = "generic"}
-    }) == True
+# The retry is a runIDs bump the stack makes itself: attempt 1 keeps the name,
+# every later attempt carries -try<n>, after the order's own runID if it has one.
+test_machine_pool_kubeconfig_attempts = lambda {
+    assert l.attemptOf("hv1-kubeconfig") == 1
+    assert l.attemptOf("hv1-kubeconfig-try3") == 3
+    assert l.attemptOf("hv1-kubeconfig-2-try4") == 4
+    assert l.runIDFor(l.withAttempt(_poolSpec, "kubeconfig", 1), "kubeconfig") == ""
+    assert l.runIDFor(l.withAttempt(_poolSpec, "kubeconfig", 2), "kubeconfig") == "try2"
+    _s = _poolSpec | {
+        runIDs = {kubeconfig = "2", join = "5"}
+    }
+    assert l.runIDFor(l.withAttempt(_s, "kubeconfig", 3), "kubeconfig") == "2-try3"
+    assert l.runIDFor(l.withAttempt(_s, "kubeconfig", 3), "join") == "5"
+    assert l.attemptOf(l.kubeconfigRun("hv1", "d", l.withAttempt(_s, "kubeconfig", 3), "1.2.3.4").spec.pipelineRunName) == 3
 }
 
-test_machine_pool_reads_the_direct_endpoint = lambda {
-    _o = l.apiEndpointObject("hv1", "default", _poolSpec)
-    assert _o.spec.managementPolicies == ["Observe"]
-    assert _o.spec.providerConfigRef.name == "hv1-kubernetes"
-    assert _o.spec.forProvider.manifest.kind == "Endpoints"
-    assert l.observedApiEndpoint({}) == ""
-    _obs = {status.atProvider.manifest.subsets = [{addresses = [{ip = "192.168.10.50"}], ports = [{name = "https", port = 6443}]}]}
-    assert l.observedApiEndpoint(_obs) == "https://192.168.10.50:6443"
-}
-
-test_machine_pool_usages_resolve_their_groups = lambda {
-    _u = l.usage("VaultSecretSet", "hv1-kubeconfig-set", "ClusterAccess", "hv1-access", "access-uses-kubeconfig-set", True, "hv1")
-    assert _u.spec.of.apiVersion == "vault.stuttgart-things.com/v1alpha1"
-    _o = l.usage("ClusterAccess", "hv1-access", "Object", "hv1-apiserver", "apiserver-uses-access", True, "hv1")
-    assert _o.spec.by.apiVersion == "kubernetes.m.crossplane.io/v1alpha1"
+test_machine_pool_node_ip_usage_resolves_its_group = lambda {
+    _u = l.usage("Object", "hv1-node-ip", "RancherCluster", "hv1-rancher", "rancher-uses-node-ip", True, "hv1")
+    assert _u.spec.of.apiVersion == "kubernetes.m.crossplane.io/v1alpha1"
+    assert _u.spec.by.apiVersion == "resources.stuttgart-things.com/v1alpha1"
 }
