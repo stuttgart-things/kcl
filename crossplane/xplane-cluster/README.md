@@ -28,6 +28,20 @@ ClusterStack                                                provisioner: rancher
 └─ Usage ×4                                                 + the VM outlives the RancherCluster
 ```
 
+```
+ClusterStack                                  provisioner: rancher, provider: harvester (0.22.0)
+├─ Workspace                           {name}-kubeconfig-vault  owns kubeconfigs/<cluster>
+├─ Object (IPReservation)              {name}-node-ip          the node's address, from clusterbook
+├─ RancherCluster                      {name}-rancher          infrastructure: harvester — Rancher builds the VM,
+│                                                               at that address (static networkData), no CNI
+├─ AnsibleRun                          {name}-kubeconfig       node's admin kubeconfig -> Vault, retries itself
+├─ ClusterAccess                       {name}-access           -> node:6443
+├─ Platform                            {name}-platform         cilium, …  — as on every rancher path
+├─ VaultSecretSet ×n                   {name}-secrets-<app>    per-cluster app secrets, unchanged
+└─ Usage                                                       the RancherCluster is "the machine"; it outlives
+                                                                nothing that runs through it, the IP outlives it
+```
+
 ## Two provisioners (0.13.0)
 
 The catalog entry decides which shape a stack has — `provisioner: ansible` (k3s, kind, rke2) or `provisioner: rancher` (`rancher-k3s`, `rancher-rke2`).
@@ -71,6 +85,77 @@ The upload writes that Vault entry; nothing removed it. A torn-down cluster left
 - **The credential** is the writer approle in `terraform.tfvars` form (`vault-kubeconfig-writer` by default). Its policy needs `create`/`update` on `kubeconfigs/metadata/*` — added and verified on the infra Vault on 2026-09-16; before that the same call was a 403.
 - **Values travel as Workspace vars**, so the HCL stays a constant and a cluster name never lands inside a quoted HCL literal.
 - **One more Usage:** `ClusterAccess` reads the entry, so the Workspace outlives it.
+
+## Rancher builds the Harvester VM: a machine pool (0.22.0)
+
+On Harvester the rancher path has a second shape. Harvester is registered in
+Rancher as a cloud provider, so the `RancherCluster` can carry a **machine pool**
+(`infrastructure: harvester`, a HarvesterConfig) and Rancher creates, boots and
+joins the node itself — the way `tabletennis` was built on crossplane-mgmt. For
+`provider: harvester` with a rancher entry that is now the **default**; the
+custom-node shape stays reachable with `spec.rancher.infrastructure: generic`.
+
+Why default: the custom-node Harvester VM this stack builds boots with no user
+its own ansible stages can log in as — no cloud-init users, `ssh_pwauth: false`
+([crossplane-configurations#503](https://github.com/stuttgart-things/crossplane-configurations/issues/503)).
+Rancher's node driver boots the lab's Packer image, whose login the ansible
+credentials already are.
+
+**Everything after the node is the rancher path as it was:** the distribution
+comes up without a CNI (the catalog's `machineGlobalConfig`), the node's own
+admin kubeconfig goes to Vault, ClusterAccess talks to `node:6443`, and the
+Platform installs cilium. The one thing that has to be different is how the
+stack finds the node. Rancher's proxy cannot be the way in — it needs
+`cattle-cluster-agent`, which needs the pod network the Platform has not
+installed yet — and Rancher names the VM at random while DHCP picks its
+address. So the address is decided **before** the VM exists:
+
+1. **`{name}-node-ip`** reserves it in clusterbook (`IPReservation`,
+   provider-clusterbook), keyed `<cluster>-node` so it cannot collide with the
+   LoadBalancer address the Argo CD registration reserves under `<cluster>`.
+2. **`{name}-rancher`** waits for that address and hands it to the VM as a
+   static cloud-init network config (`spec.harvester.networkData`,
+   rancher-cluster >= v0.10.0). The address is also kept as the annotation
+   `cluster.stuttgart-things.com/node-ip`, so a momentarily unreadable
+   reservation cannot rewrite the node's network.
+3. **`{name}-kubeconfig`** runs the ansible path's upload stage against that
+   address, with the kubeconfig path of the server the entry names
+   (`serverDistro`: `/etc/rancher/k3s/k3s.yaml` for `rancher-k3s`).
+
+Taking the API address off a DHCP lease is a gain of its own: a lease change is
+what cost `homerun2-dev` its etcd peer URL (harvester#238).
+
+**The kubeconfig stage retries on its own.** Nothing can tell it when the node
+is ready: Rancher reports nothing useful while there is no CNI, and VM, system
+agent and k3s take their time. A run against a node that is not up yet fails
+fast (no SSH, no `k3s.yaml`), and a failed run under the cap gets a successor
+under a new name — `-try2`, `-try3`, … appended to `runIDs.kubeconfig` — which
+is exactly what bumping that runID by hand does. After
+`KUBECONFIG_MAX_ATTEMPTS` (12) failures it stops, so wrong credentials end as a
+failed stage rather than a loop. The attempt is read back off the observed
+run's name; `status.stages.kubeconfigAttempts` shows it.
+
+Sizing comes from the catalog size (`spec.harvester.{cpuCount,memorySize,diskSize,quantity}`,
+`medium` = 4 CPU / 8 GiB / 64 GiB), with `spec.rancher.harvester` on top. The
+cloud credential, image, network and SSH user are rancher-cluster's own
+EnvironmentConfig. The environment half here, in the stack's EnvironmentConfig:
+
+```yaml
+data:
+  machinePool:
+    networkKey: "192.168.10"            # clusterbook network the node address comes from
+    prefixLength: 24
+    gateway: 192.168.10.1
+    nameservers: [192.168.10.1]
+    clusterbookProviderConfigRef: default   # provider-clusterbook, the default
+```
+
+A missing `networkKey`, `prefixLength` or `gateway` fails the render.
+
+Teardown: the three machine guards (`platform-uses-`, `access-uses-`,
+`mgmt-uses-`) point at the RancherCluster instead of a VM, and
+`rancher-uses-node-ip` keeps the address reserved until the VM holding it is
+gone.
 
 ## Argo CD labels: profiles, derived facts, overrides (0.15.0)
 
@@ -309,7 +394,7 @@ They are applied to **both** ansible stages, deliberately. `upload_kubeconfig_va
 |---|---|
 | `logic.k` | pure resource construction — explicit args in, dict out, unit-tested |
 | `main.k` | wiring: reads `option("params")`, decides which gates are open, patches status |
-| `logic_test.k` | 111 tests, no Crossplane and no cluster required |
+| `logic_test.k` | 124 tests, no Crossplane and no cluster required |
 
 `main.k` is deliberately thin and untested-by-unit: it is exercised by the Configuration's `crossplane render` with synthetic `--observed-resources`, which is the only way to test gate transitions honestly.
 
