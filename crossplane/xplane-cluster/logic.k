@@ -18,6 +18,7 @@ deleted, recreated AnsibleRun re-runs its play against a live machine.
 """
 
 import xplane_cluster_catalog as cat
+import yaml
 
 # --- small helpers ---------------------------------------------------------
 
@@ -102,6 +103,43 @@ vmKindOf = {
 
 vmKind = lambda provider: str -> str {
     vmKindOf[provider] or vmKindOf["proxmox"]
+}
+
+# --- who builds the machine: this stack, or Rancher (0.22.0) ---------------
+# On the rancher path there are two ways to get a node, and they differ in who
+# creates the VM:
+#
+#   generic    this stack builds the VM (NativeProxmoxVM, NativeVsphereVM,
+#              HarvesterVM), the base-OS play prepares it and the join play
+#              registers it with the command Rancher publishes. A custom-node
+#              cluster.
+#   harvester  RANCHER builds the VM. Harvester is registered in Rancher as a
+#              cloud provider, so the RancherCluster gets a machine pool backed
+#              by a HarvesterConfig, and Rancher creates, boots and joins the
+#              node itself -- the way `tabletennis` was built on crossplane-mgmt.
+#
+# For `provider: harvester` the second one is the DEFAULT. The first builds a VM
+# its own ansible stages cannot log into (no cloud-init users, ssh_pwauth false,
+# crossplane-configurations#503), while Rancher's node driver carries its own
+# cloud-init and needs no play at all. An order can still ask for the custom-
+# node shape with `spec.rancher.infrastructure: generic`.
+#
+# Only `harvester` has a node driver behind it here; `infrastructure: harvester`
+# with another provider is a contradiction and fails the render.
+MACHINE_POOL_PROVIDERS = ["harvester"]
+
+rancherInfrastructure = lambda spec: {str:any} -> str {
+    _provider = spec?.provider or "proxmox"
+    _r = spec?.rancher or {}
+    _default = "harvester" if _provider in MACHINE_POOL_PROVIDERS else "generic"
+    _infra = _r?.infrastructure or _default
+    assert _infra == "generic" or _provider in MACHINE_POOL_PROVIDERS, "rancher.infrastructure '" + _infra + "' needs provider " + " or ".join(MACHINE_POOL_PROVIDERS) + ", not '" + _provider + "' -- Rancher can only build machines on a cloud it has a node driver for"
+    _infra
+}
+
+isMachinePool = lambda spec: {str:any} -> bool {
+    """True when RANCHER builds the machines (a machine pool), not this stack."""
+    cat.getDistribution(spec?.distribution or "k3s").provisioner == "rancher" and rancherInfrastructure(spec) != "generic"
 }
 
 vmChild = lambda name: str, ns: str, spec: {str:any}, size: any -> {str:any} {
@@ -314,7 +352,11 @@ kubeconfigRun = lambda name: str, ns: str, spec: {str:any}, ip: str -> {str:any}
         rke2 = "/etc/rancher/rke2/rke2.yaml"
     }
     _dist = spec?.distribution or "k3s"
-    _paths = ["kubeconfig_path+-" + _serverPaths[_dist]] if _dist in _serverPaths else []
+
+    # A rancher entry names the SERVER it provisions (serverDistro): on a
+    # machine pool this stage fetches Rancher's k3s or rke2 admin kubeconfig.
+    _srv = cat.getDistribution(_dist).serverDistro or _dist
+    _paths = ["kubeconfig_path+-" + _serverPaths[_srv]] if _srv in _serverPaths else []
 
     # extraVars belongs here too. It was wired into the base-OS and
     # distribution stages only, so an override aimed at THIS stage —
@@ -380,15 +422,32 @@ joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret
 # namespace, because ansible-run reads extraEnvSecretName from the PipelineRun's
 # namespace — not from next to this XR. A registration command published only
 # beside the XR is a command the join cannot read.
-rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
+#
+# On a MACHINE POOL there is no join: Rancher builds and joins the node itself,
+# at the static address `nodeIP` this stack reserved in clusterbook (see
+# nodeReservation below). The address is also written to an annotation, so a
+# momentarily unreadable reservation cannot rewrite the node's network config.
+NODE_IP_ANNOTATION = "cluster.stuttgart-things.com/node-ip"
+
+rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} = {}, size: any = None, nodeIP: str = "", env: {str:any} = {} -> {str:any} {
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
     _r = spec?.rancher or {}
     _ans = stageAnsible(spec, "join")
-    _passthrough = {k: v for k, v in _r if k not in ["name", "machineGlobalConfig", "nodeRegistration"]}
+    _pool = isMachinePool(spec)
+
+    # On a machine pool `infrastructure` and `harvester` are composed below;
+    # on the custom-node path they pass through untouched, as before.
+    _passthrough = {k: v for k, v in _r if k not in ["name", "machineGlobalConfig", "nodeRegistration"] + (["infrastructure", "harvester"] if _pool else [])}
 
     # Catalog first, XR on top: a caller can override one key without
     # restating the set that keeps rke2 out of the network.
+    #
+    # The same on a machine pool: the node comes up WITHOUT a CNI, and the
+    # Platform installs cilium through the node's own admin kubeconfig, which
+    # the kubeconfig stage fetches over SSH from the reserved address. Rancher's
+    # proxy cannot be that path -- it needs cattle-cluster-agent, which needs a
+    # pod network -- and does not have to be.
     _mgc = _dist.machineGlobalConfig | (_r?.machineGlobalConfig or {})
     _nodeReg = (_r?.nodeRegistration or {}) | {
         publish = True
@@ -400,18 +459,176 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
         metadata = {
             name = "{}-rancher".format(name)
             namespace = ns
-            annotations = {"krm.kcl.dev/composition-resource-name" = "rancher"}
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = "rancher"
+                if _pool and nodeIP:
+                    "${NODE_IP_ANNOTATION}": nodeIP
+            }
         }
         spec = _passthrough | {
             name = _cluster
             machineGlobalConfig = _mgc
-            nodeRegistration = _nodeReg
+            if _pool:
+                infrastructure = rancherInfrastructure(spec)
+                harvester = machinePoolHarvester(spec, size, nodeIP, env)
+                # Nothing joins by hand, so nothing needs the command -- and it
+                # is a credential. Passed through only if the order asks.
+                if _r?.nodeRegistration:
+                    nodeRegistration = _r.nodeRegistration
+            else:
+                nodeRegistration = _nodeReg
             # Only when there is something to register or derive — an empty
             # argocd block would be a diff on every existing RancherCluster.
             if (_r?.argocd or spec?.profiles or spec?.secretStores):
                 argocd = argocdBlock(spec, appArgocd)
         }
     }
+}
+
+# The HarvesterConfig of a machine pool: sizing from the catalog size, the
+# static address as cloud-init networkData, and the order's
+# `spec.rancher.harvester` on top. The catalog keeps memory in MiB and disk in
+# GiB as strings; the RancherCluster XRD wants integer GiB for both.
+#
+# The infra identity (cloud credential, image, network, VM namespace, SSH user)
+# is deliberately NOT set here: rancher-cluster falls back to its own
+# EnvironmentConfig for those, which is where a lab's Harvester is described
+# once. Writing a default here would override that for every order.
+#
+# One node, like every rancher entry in the catalog (multiNode false): the size
+# check rejects `medium-ha` before this runs.
+machinePoolHarvester = lambda spec: {str:any}, size: any, nodeIP: str = "", env: {str:any} = {} -> {str:any} {
+    _user = (spec?.rancher or {})?.harvester or {}
+    _sized = {
+        cpuCount = int(size.cpu)
+        memorySize = int(int(size.memory) / 1024)
+        diskSize = int(size.disk)
+        quantity = 1
+        if nodeIP:
+            networkData = nodeNetworkData(nodeIP, env)
+    } if size else {}
+    # KCL's `|` unifies rather than overrides, so drop what the order sets.
+    {k: v for k, v in _sized if k not in _user} | _user
+}
+
+# --- the machine pool's node address: reserved, then static (0.22.0) -------
+# The kubeconfig stage has to reach the node by SSH, and ClusterAccess the API
+# server on it -- both BEFORE the cluster has a CNI. Rancher names the VM at
+# random and DHCP picks its address, so nothing here could find it. Instead the
+# address is decided first: reserved in clusterbook, then handed to the VM as a
+# static cloud-init network config (rancher-cluster >= v0.10.0,
+# `harvester.networkData`).
+#
+# That also takes the API address off a DHCP lease, which is what broke
+# homerun2-dev's etcd peer URL (harvester#238).
+#
+# Environment half, in the stack's EnvironmentConfig
+# (cluster.stuttgart-things.com/environment):
+#
+#   machinePool:
+#     networkKey: "192.168.10"          clusterbook network to reserve from
+#     prefixLength: 24
+#     gateway: 192.168.10.1
+#     nameservers: [192.168.10.1]
+#     clusterbookProviderConfigRef: default   (provider-clusterbook)
+#
+# The reservation is keyed `<cluster>-node` in clusterbook, NOT `<cluster>`:
+# the Argo CD registration reserves the cluster's LoadBalancer address under the
+# cluster's own name, and one key would hand both the same address.
+NODE_RESERVATION_SUFFIX = "-node"
+
+machinePoolNetwork = lambda spec: {str:any}, env: {str:any} -> {str:any} {
+    _n = env?.machinePool or {}
+    _envName = spec?.environmentConfig or "(unset)"
+    _missing = [k for k in ["networkKey", "prefixLength", "gateway"] if not _n?[k]]
+    assert len(_missing) == 0, "machinePool." + ", machinePool.".join(_missing) + " missing in the EnvironmentConfig for environment '" + _envName + "' (label cluster.stuttgart-things.com/environment) -- a machine pool's node gets a static address reserved in clusterbook, and needs the network it lives on"
+    _n
+}
+
+nodeReservation = lambda name: str, ns: str, spec: {str:any}, env: {str:any} -> {str:any} {
+    _cluster = spec?.clusterName or name
+    _n = machinePoolNetwork(spec, env)
+    {
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+        kind = "Object"
+        metadata = {
+            name = "{}-node-ip".format(name)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "node-ip"}
+        }
+        spec = {
+            # IPReservation is a cluster-scoped managed resource, and a
+            # namespaced composite cannot compose one directly.
+            providerConfigRef = {name = "in-cluster", kind = "ClusterProviderConfig"}
+            readiness.policy = "DeriveFromObject"
+            forProvider.manifest = {
+                apiVersion = "ipreservation.clusterbook.stuttgart-things.com/v1alpha1"
+                kind = "IPReservation"
+                metadata.name = _cluster + NODE_RESERVATION_SUFFIX
+                spec = {
+                    forProvider = {
+                        networkKey = str(_n.networkKey)
+                        clusterName = _cluster + NODE_RESERVATION_SUFFIX
+                        count = 1
+                        createDNS = False
+                    }
+                    providerConfigRef = {name = _n?.clusterbookProviderConfigRef or "default", kind = "ClusterProviderConfig"}
+                }
+            }
+        }
+    }
+}
+
+observedNodeIP = lambda obj: {str:} -> str {
+    """The reserved address off an observed nodeReservation, "" until clusterbook answered."""
+    _ips = ((((obj?.status?.atProvider or {})?.manifest or {})?.status or {})?.atProvider or {})?.ipAddresses or []
+    str(_ips[0]) if _ips else ""
+}
+
+# cloud-init network-config v2 for the node. `match: en*` rather than an
+# interface name: the name depends on the machine type Harvester gives the VM,
+# and matching is what netplan offers for exactly that.
+nodeNetworkData = lambda ip: str, env: {str:any} -> str {
+    _n = env?.machinePool or {}
+    yaml.encode({
+        version = 2
+        ethernets = {
+            nic0 = {
+                match.name = "en*"
+                dhcp4 = False
+                addresses = ["{}/{}".format(ip, _n?.prefixLength or 24)]
+                routes = [{to = "default", via = str(_n?.gateway or "")}]
+                if _n?.nameservers:
+                    nameservers.addresses = [str(x) for x in _n.nameservers]
+            }
+        }
+    })
+}
+
+# The kubeconfig stage retries on its own on a machine pool, because nothing
+# can tell it when to start: Rancher reports nothing useful while the cluster
+# has no CNI, and the VM, the rancher-system-agent and k3s take their time. A
+# run against a node that is not up yet fails fast (no SSH, or no k3s.yaml), and
+# the next attempt is the same thing a hand-bumped runIDs.kubeconfig does: a new
+# PipelineRun under a new name. Capped, so a real failure -- wrong credentials --
+# ends as a failed stage and not as an endless loop.
+KUBECONFIG_MAX_ATTEMPTS = 12
+ATTEMPT_MARK = "-try"
+
+attemptOf = lambda runName: str -> int {
+    """The attempt a kubeconfig PipelineRun name carries; 1 when it carries none."""
+    _parts = runName.split(ATTEMPT_MARK)
+    int(_parts[-1]) if (len(_parts) > 1 and _parts[-1].isdigit()) else 1
+}
+
+withAttempt = lambda spec: {str:any}, stage: str, attempt: int -> {str:any} {
+    """spec with runIDs.<stage> extended by the attempt, from the second on."""
+    _ids = spec?.runIDs or {}
+    _rid = str(_ids[stage]) if stage in _ids else ""
+    _new = (_rid + ATTEMPT_MARK + str(attempt)) if (attempt > 1 and _rid) else (("try" + str(attempt)) if attempt > 1 else _rid)
+    _rest = {k: v for k, v in _ids if k != stage}
+    _runIDs = _rest | ({"${stage}": _new} if _new else {})
+    {k: v for k, v in spec if k != "runIDs"} | ({runIDs = _runIDs} if _runIDs else {})
 }
 
 # --- Argo CD labels and annotations: profiles, derived facts, overrides -----
@@ -650,6 +867,7 @@ kubeconfigLifecycleEnabled = lambda spec: {str:any} -> bool {
     exist. An explicit `enabled` wins either way.
     """
     _l = kubeconfigLifecycle(spec)
+
     _l.enabled if "enabled" in _l else (cat.getDistribution(spec?.distribution or "k3s").provisioner == "rancher")
 }
 
@@ -1101,6 +1319,7 @@ platformChild = lambda name: str, ns: str, spec: {str:any}, apiEndpoint: str, en
     # `enabled` is no longer filtered here — it lives on spec.platformEnabled.
     _passthrough = {k: v for k, v in (spec?.platform or {}) if k not in ["clusterName", "cni", "vaultIssuer"]}
     _userCni = (spec?.platform or {})?.cni or {}
+
     _cniEnabled = cat.platformCniEnabled(spec?.distribution or "k3s")
 
     # Cluster-shape facts from the catalog (API server address, gateway API,
@@ -1193,6 +1412,7 @@ groupOf = {
     "ManagementPlane" = "config.stuttgart-things.com/v1alpha1"
     "RancherCluster" = "resources.stuttgart-things.com/v1alpha1"
     "Workspace" = "opentofu.m.upbound.io/v1beta1"
+    "Object" = "kubernetes.m.crossplane.io/v1alpha1"
 }
 
 # Ties the two maps together, so a fourth provider cannot be half-added: the
