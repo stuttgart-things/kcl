@@ -404,7 +404,12 @@ machinery: s.Profile = {
             #            SYNCED kippt (stuttgart-things#3226).
             #            v0.12.0 traegt v0.11.10-Inhalt unter neuer Nummer
             #            (crossplane-configurations#506) -- nie pinnen.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.12.1"
+            #   v0.12.2  xplane-cluster 0.23.0: stages.baseos.extraPlaybooks, damit
+            #            eine LabDA-vSphere-VM die 4sthings-Zone aufloest, bevor
+            #            sie sich beim LabDA-Rancher registriert
+            #            (crossplane-configurations#508). dependsOn-Floors
+            #            unveraendert gegen v0.12.1.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.12.2"
             pulls = [
                 "platform"
                 "remote-cluster"
