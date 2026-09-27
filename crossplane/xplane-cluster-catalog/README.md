@@ -126,6 +126,8 @@ Named Argo CD label sets selecting app platforms (decision 6.2 in
 | `homerun2` | `homerun2-platform` | — · **appSecrets:** `homerun2` |
 | `tabletennis` | `tabletennis-platform`; **on:** `storage-platform/cloudnative-pg` (schmetterpause's database; needs a storage profile for the umbrella) | — · **appSecrets:** `schmetterpause`, `zaehlwerk`, `tabletennis` |
 
+Whether these labels still match what the AppSets select on is checked daily against stuttgart-things/argocd main by [`tests/lint/profile-gates.py`](../../tests/lint/profile-gates.py): a label no AppSet selects on (a gate renamed upstream) fails, and so does an opt-out gate an exclusive profile such as `kargo` leaves on.
+
 The platform ApplicationSets are **opt-out** — an umbrella label turns every
 component on unless it says `"false"`. So a profile is the umbrella plus what
 cannot render on a ClusterStack-built cluster: the Platform owns the Vault

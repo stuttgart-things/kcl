@@ -58,7 +58,8 @@ profileTable: {str:s.Profile} = {
     # and the rest -- unless each is switched off by name. Hence the list: it is
     # every opt-out key platforms/cicd selects on (2026-09-27), all "false"
     # except kargo, which the umbrella leaves on. An AppSet added there later is
-    # ON for this profile until it is listed here.
+    # ON for this profile until it is listed here -- tests/lint/profile-gates.py
+    # compares the list with argocd main every day and fails until it is.
     #
     # openebs: storage-openebs already installs it through platforms/storage.
     # The crossplane-ansible/-proxmoxvm/-vspherevm gates are opt-in and stay
