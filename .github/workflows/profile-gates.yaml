@@ -1,0 +1,47 @@
+# Do the cluster profiles still switch what the ArgoCD catalog selects on?
+#
+# SCHEDULED, NOT ONLY ON CHANGES, for catalog-parity's reason: the ArgoCD
+# catalog is consumed from main, so an AppSet added or renamed in
+# stuttgart-things/argocd changes every cluster carrying the umbrella -- in a
+# repository this workflow does not watch. The failure it exists for (a new
+# opt-out component under cicd-platform, installed on app-dev through the
+# `kargo` profile, stuttgart-things/stuttgart-things#3232) never touches a path
+# here.
+name: Profile Gates
+
+on:
+  schedule:
+    # Daily, an hour after catalog-parity.
+    - cron: '0 7 * * *'
+  pull_request:
+    paths:
+      - 'crossplane/xplane-cluster-catalog/profiles.k'
+      - 'tests/lint/profile-gates.py'
+      - '.github/workflows/profile-gates.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile-gates:
+    name: Profile labels match the ArgoCD AppSets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install KCL
+        # The profiles are read through `kcl run`, as the module evaluates them.
+        run: |
+          set -euo pipefail
+          curl -sSL https://kcl-lang.io/script/install-cli.sh | /bin/bash
+          kcl --version
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - run: pip install --quiet --disable-pip-version-check pyyaml
+
+      - run: python3 tests/lint/profile-gates.py
