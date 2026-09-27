@@ -163,9 +163,16 @@ vmChild = lambda name: str, ns: str, spec: {str:any}, size: any -> {str:any} {
         "update_packages+-true"
     ] + _hostnameVars + (_ans?.extraVars or [])
 
+    # extraPlaybooks run AFTER setup, in the same run and with the same varsFile.
+    # The hook exists for what has to be on the machine before the next stage
+    # can reach anything: in LabDA the Rancher answers only under
+    # 4sthings.tiab.ssc.sva.de, which the lab resolver cannot resolve, so a node
+    # has to be pointed at the zone's PowerDNS (sthings.baseos.dns_zones) before
+    # the join stage curls it (crossplane-configurations#508). Appended, never
+    # replacing setup: the base-OS stage without setup is not a base-OS stage.
     _ansible = {
         enabled = True
-        playbooks = ["sthings.baseos.setup"]
+        playbooks = ["sthings.baseos.setup"] + (_ans?.extraPlaybooks or [])
         varsFile = _baseVars
         crossplaneProviderConfig = _ans?.crossplaneProviderConfig or "in-cluster"
         pipelineNamespace = _ans?.pipelineNamespace or "tekton-ci"

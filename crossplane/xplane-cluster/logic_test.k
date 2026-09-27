@@ -368,6 +368,32 @@ test_stage_overrides_merge_over_the_shared_ansible_block = lambda {
     assert l.distributionRun("c", "ns", _spec, "10.0.0.1").spec.namespace == "tekton-ci"
 }
 
+# extraPlaybooks on the base-OS stage run after setup, never instead of it, and
+# reach no other stage.
+test_baseos_extra_playbooks_are_appended_after_setup = lambda {
+    _spec = {
+        provider = "vsphere"
+        distribution = "rancher-k3s"
+        size = "medium"
+        ansible = {
+            stages = {
+                baseos = {
+                    extraPlaybooks = ["sthings.baseos.dns_zones"]
+                    extraVars = ['dns_forward_zones+-[{"zone": "4sthings.tiab.ssc.sva.de", "server": "10.100.136.115"}]']
+                }
+            }
+        }
+    }
+    _a = l.vmChild("c", "ns", _spec, cat.getSize("small")).spec.ansible
+    assert _a.playbooks == ["sthings.baseos.setup", "sthings.baseos.dns_zones"]
+    assert 'dns_forward_zones+-[{"zone": "4sthings.tiab.ssc.sva.de", "server": "10.100.136.115"}]' in _a.varsFile
+}
+
+test_baseos_runs_only_setup_by_default = lambda {
+    _a = l.vmChild("c", "ns", {provider = "vsphere", distribution = "k3s", size = "medium"}, cat.getSize("small")).spec.ansible
+    assert _a.playbooks == ["sthings.baseos.setup"]
+}
+
 test_no_stage_overrides_keeps_the_shared_list_everywhere = lambda {
     _spec = {provider = "proxmox", distribution = "k3s", size = "medium", ansible = {extraCollections = ["only:1"]}}
     assert l.vmChild("c", "ns", _spec, cat.getSize("small")).spec.ansible.extraCollections == ["only:1"]

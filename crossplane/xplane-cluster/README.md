@@ -358,6 +358,23 @@ ansible:
 
 Why it exists: the shared list reaches every run, so pinning one collection for the base-OS stage silently replaced the set the k3s stage needed. On the first live build that meant restating `sthings-rke` — required only by the distribution stage — in order to bump `sthings-baseos`, required only by the base-OS stage.
 
+### `stages.baseos.extraPlaybooks`
+
+Playbooks run **after** `sthings.baseos.setup`, in the same run and with the same `varsFile` (0.23.0). Appended, never replacing setup.
+
+The case it exists for: a node that has to reach something by a name the lab resolver cannot resolve before the next stage runs. In LabDA the Rancher answers only under `4sthings.tiab.ssc.sva.de`, whose PowerDNS the lab resolver `10.100.101.5` does not reach, so the join stage's `curl` fails with "could not resolve the rancher host" ([crossplane-configurations#508](https://github.com/stuttgart-things/crossplane-configurations/issues/508)):
+
+```yaml
+ansible:
+  stages:
+    baseos:
+      extraPlaybooks: [sthings.baseos.dns_zones]
+      extraVars:
+        - 'dns_forward_zones+-[{"zone": "4sthings.tiab.ssc.sva.de", "server": "10.100.136.115"}]'
+```
+
+Stage `extraVars` **replace** the shared ones, like every other stage key.
+
 ### `setHostname`
 
 The base-OS stage sets `vm_hostname` by default; on Proxmox that is what actually names the guest, since bpg cloud-init cannot without a snippets datastore.
