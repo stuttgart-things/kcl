@@ -52,6 +52,35 @@ profileTable: {str:s.Profile} = {
     base = s.Profile {
         labels = {"base-platform" = "true"}
     }
+    # platforms/cicd, KARGO ONLY (stuttgart-things/stuttgart-things#3232). Every
+    # AppSet there is opt-out behind the one umbrella `cicd-platform`, so turning
+    # it on turns on the whole delivery layer -- crossplane, tekton, machinery
+    # and the rest -- unless each is switched off by name. Hence the list: it is
+    # every opt-out key platforms/cicd selects on (2026-09-27), all "false"
+    # except kargo, which the umbrella leaves on. An AppSet added there later is
+    # ON for this profile until it is listed here.
+    #
+    # openebs: storage-openebs already installs it through platforms/storage.
+    # The crossplane-ansible/-proxmoxvm/-vspherevm gates are opt-in and stay
+    # unset.
+    #
+    # kargo-admin comes from Vault: the `kargo` AppSecretProfile writes
+    # kargo/<cluster>, and the stack derives the store and the
+    # cicd-platform.stuttgart-things.com/secrets-config gate that
+    # appset-kargo reads (argocd v0.57.0).
+    kargo = s.Profile {
+        labels = {
+            "cicd-platform" = "true"
+            "cicd-platform/argo-rollouts" = "false"
+            "cicd-platform/crossplane" = "false"
+            "cicd-platform/dapr" = "false"
+            "cicd-platform/kro" = "false"
+            "cicd-platform/machinery" = "false"
+            "cicd-platform/openebs" = "false"
+            "cicd-platform/tekton" = "false"
+        }
+        appSecrets = ["kargo"]
+    }
     # --- app platforms, with the secrets they read (#464) --------------------
     # platforms/homerun2: redis-stack, omni-pitcher, catchers, scout. Gated on
     # homerun2-platform.stuttgart-things.com/secrets-config, which the stack

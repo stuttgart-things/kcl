@@ -122,6 +122,7 @@ Named Argo CD label sets selecting app platforms (decision 6.2 in
 | `storage-openebs` | `storage-platform`; **off:** `longhorn`, `nfs-csi-install`, `nfs-csi-storageclasses` | `storage-class: openebs-hostpath` for observability and homerun2 |
 | `observability` | `observability-platform` | — |
 | `base` | `base-platform` | — |
+| `kargo` | `cicd-platform`; **off:** `argo-rollouts`, `crossplane`, `dapr`, `kro`, `machinery`, `openebs`, `tekton` — Kargo is the one component the umbrella keeps | — · **appSecrets:** `kargo` |
 | `homerun2` | `homerun2-platform` | — · **appSecrets:** `homerun2` |
 | `tabletennis` | `tabletennis-platform`; **on:** `storage-platform/cloudnative-pg` (schmetterpause's database; needs a storage profile for the umbrella) | — · **appSecrets:** `schmetterpause`, `zaehlwerk`, `tabletennis` |
 
