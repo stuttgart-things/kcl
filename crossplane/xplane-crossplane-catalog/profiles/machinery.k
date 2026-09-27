@@ -389,7 +389,22 @@ machinery: s.Profile = {
             #   v0.11.5  xplane-cluster 0.19.0 (crossplane-configurations#474).
             #   v0.11.10 what u26-kind3 and kind5 run (ansible#1245). dependsOn
             #            floors unchanged against v0.11.5.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.11.10"
+            #   v0.12.1  xplane-cluster 0.22.0. Bis 0.20.0 merkte logic.k die
+            #            Label-Ebenen mit `|`, und ein dict-union in KCL
+            #            ueberschreibt nicht, er KOLLIDIERT -- eine Order, die ein
+            #            Profil-Label ueberschreibt, liess die GANZE Komposition
+            #            fatal scheitern (kcl#301, in xplane-cluster 0.21.0).
+            #            ANGEHOBENER FLOOR: dependsOn rancher-cluster >=v0.10.0.
+            #            Ein bereits installiertes aelteres muss von Hand
+            #            nachgezogen werden -- der Resolver hebt eine einmal
+            #            aufgeloeste Abhaengigkeit nie an.
+            #            app-dev auf machinery reconcilete deswegen vom 24.09.
+            #            bis 27.09. nicht (stuttgart-things#3220), unbemerkt:
+            #            ein fatal gescheitertes XR behaelt READY=True, nur
+            #            SYNCED kippt (stuttgart-things#3226).
+            #            v0.12.0 traegt v0.11.10-Inhalt unter neuer Nummer
+            #            (crossplane-configurations#506) -- nie pinnen.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.12.1"
             pulls = [
                 "platform"
                 "remote-cluster"
