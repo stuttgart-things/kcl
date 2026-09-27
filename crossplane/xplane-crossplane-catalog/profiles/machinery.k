@@ -409,7 +409,10 @@ machinery: s.Profile = {
             #            sie sich beim LabDA-Rancher registriert
             #            (crossplane-configurations#508). dependsOn-Floors
             #            unveraendert gegen v0.12.1.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.12.2"
+            #   v0.12.3  xplane-cluster 0.23.1: Katalog 0.10.0 mit dem Profil
+            #            `kargo` (stuttgart-things/stuttgart-things#3232). Nur der
+            #            Modul-Tag aendert sich, dependsOn unveraendert.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.12.3"
             pulls = [
                 "platform"
                 "remote-cluster"
