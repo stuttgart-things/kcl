@@ -1248,6 +1248,13 @@ _extraAll = {
             }
         }
     })
+    "app-secret-profile-kargo" = _asp("kargo", {
+        mount = "kargo"
+        entries = [{suffix = "", keys = {
+            password = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+            tokenSigningKey = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+        }}]
+    })
 }
 
 _appEnv = {
@@ -1257,8 +1264,9 @@ _appEnv = {
             homerun2 = ["read-homerun2-clusters"]
             schmetterpause = ["read-schmetterpause-clusters"]
             observability = ["read-observability-clusters"]
+            kargo = ["read-kargo-clusters"]
         }
-        mounts = {homerun2 = "homerun2", schmetterpause = "schmetterpause"}
+        mounts = {homerun2 = "homerun2", schmetterpause = "schmetterpause", kargo = "kargo"}
         shared = {
             "git-pat" = {mount = "homerun2", entry = "_git-pat"}
             "object-store-backup" = {mount = "schmetterpause", entry = "_backup"}
@@ -1383,6 +1391,23 @@ test_app_secret_facts_per_owner = lambda {
         "tabletennis-platform.stuttgart-things.com/homerun2-secret-key" = "c8"
     }
     assert "tabletennis-platform.stuttgart-things.com/secret-store" not in _a.annotations
+}
+
+# The kargo profile (catalog 0.10.0, stuttgart-things/stuttgart-things#3232):
+# its platform is `cicd-platform`, so the gate and the store land under that
+# name -- exactly the keys argocd's appset-kargo reads (argocd v0.57.0). If
+# either side renames them, kargo-admin quietly stays the hand-made Secret.
+test_kargo_profile_derives_what_appset_kargo_reads = lambda {
+    _o = _appOrder | {clusterName = "c9", profiles = ["security", "storage-openebs", "kargo"], secretStores = []}
+    _p = _plan(_o)
+    assert [s.app for s in _p.sets] == ["kargo"]
+    assert [x.path for x in _p.sets[0].secrets] == ["c9"]
+    assert [d.key for d in _p.sets[0].secrets[0].data] == ["password", "tokenSigningKey"]
+    assert _p.stores == ["kargo"]
+    _a = l.appSecretArgocd(_p)
+    assert _a.labels == {"cicd-platform.stuttgart-things.com/secrets-config" = "true"}
+    assert _a.annotations["cicd-platform.stuttgart-things.com/kargo-secret-store"] == "vault-kargo"
+    assert _a.annotations["cicd-platform.stuttgart-things.com/kargo-secret-key"] == "c9"
 }
 
 test_app_secret_facts_reach_the_rancher_cluster = lambda {
