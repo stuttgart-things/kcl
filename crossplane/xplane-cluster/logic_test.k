@@ -1741,3 +1741,74 @@ test_machine_pool_node_ip_usage_resolves_its_group = lambda {
     assert _u.spec.of.apiVersion == "kubernetes.m.crossplane.io/v1alpha1"
     assert _u.spec.by.apiVersion == "resources.stuttgart-things.com/v1alpha1"
 }
+
+# --- LabDA: stores on the OpenBao, one KV mount per cluster (#508 point 6) ---
+_labdaEnv = {
+    vault = {
+        certManagerPolicies = ["pki-issue-4sthings"]
+        secretStores = {}
+        eso = {
+            providerConfigName = "openbao-labda"
+            vaultAddr = "https://openbao.sthings-infra.4sthings.tiab.ssc.sva.de"
+            ownMount = True
+        }
+    }
+}
+
+_labdaOrder = {
+    clusterName = "labda-x"
+    distribution = "rancher-k3s"
+    environmentConfig = "labda"
+    secretStores = ["own"]
+    platform = {
+        vaultIssuer = {enabled = True, authProvider = "provider-vault", vaultProviderConfigRef = "vault-labda", vaultAddr = "https://pki"}
+    }
+    rancher = {
+        argocd = {register = True}
+    }
+}
+
+# The eso auth goes to the OpenBao with the cluster's own mount; cert-manager
+# stays on the PKI Vault.
+test_labda_eso_auth_goes_to_the_openbao = lambda {
+    _vi = l.platformChild("labda-x", "default", _labdaOrder, "", _labdaEnv).spec.vaultIssuer
+    assert _vi.tokenPolicies == ["pki-issue-4sthings"]
+    assert _vi.vaultProviderConfigRef == "vault-labda"
+    _eso = [a for a in _vi.additionalAuths if a.name == "eso"][0]
+    assert _eso.vaultProviderConfigRef == "openbao-labda"
+    assert _eso.vaultAddr == "https://openbao.sthings-infra.4sthings.tiab.ssc.sva.de"
+    assert _eso.ownKvMount == True
+    # `own` maps to no looked-up policy: the Platform composes xp-<cluster>-eso-own.
+    assert _eso.tokenPolicies == []
+}
+
+# The stores AppSet reads the cluster's mount under its real name, from the
+# OpenBao's address.
+test_labda_stores_annotations_name_the_cluster_mount_and_the_openbao = lambda {
+    _a = l.argocdBlock(_labdaOrder, {}, _labdaEnv).annotations
+    assert _a["external-secrets.stuttgart-things.com/kv-mounts"] == "labda-x"
+    assert _a["external-secrets.stuttgart-things.com/vault-server"] == "https://openbao.sthings-infra.4sthings.tiab.ssc.sva.de"
+    # the issuer's address is untouched -- it is still the PKI Vault
+    assert _a["clusterbook.stuttgart-things.com/vault-server"] == "https://pki"
+}
+
+# LabUL: no vault.eso, nothing changes -- no second address, no own mount.
+test_labul_stores_get_no_eso_vault_server = lambda {
+    _a = l.argocdBlock(_rancherOrder, {}, _labulEnv).annotations
+    assert "external-secrets.stuttgart-things.com/vault-server" not in _a
+    _eso = [a for a in l.platformChild("c7", "default", _rancherOrder, "", _labulEnv).spec.vaultIssuer.additionalAuths if a.name == "eso"][0]
+    assert "vaultProviderConfigRef" not in _eso
+    assert "ownKvMount" not in _eso
+}
+
+# `own` next to a mapped store: both, policies only from the mapped one.
+test_own_store_mixes_with_mapped_stores = lambda {
+    _env = {vault = _labdaEnv.vault | {
+        secretStores = {shared = ["read-shared"]}
+    }}
+    _o = _labdaOrder | {secretStores = ["own", "shared"]}
+    _eso = [a for a in l.platformChild("labda-x", "default", _o, "", _env).spec.vaultIssuer.additionalAuths if a.name == "eso"][0]
+    assert _eso.tokenPolicies == ["read-shared"]
+    assert _eso.ownKvMount == True
+    assert l.argocdBlock(_o, {}, _env).annotations["external-secrets.stuttgart-things.com/kv-mounts"] == "labda-x,shared"
+}
