@@ -124,6 +124,111 @@ nativeVaultAuth = lambda spec: {str:} -> bool {
     ((spec?.vaultIssuer or {})?.authProvider or "opentofu") == "provider-vault"
 }
 
+# --- an auth on ANOTHER Vault ----------------------------------------------
+# LabDA runs two: cert-manager signs from the PKI Vault, while External Secrets
+# reads from an OpenBao (crossplane-configurations#508 point 6). A VaultK8sAuth
+# drives exactly one Vault through one provider config, so an additionalAuth
+# that names a different `vaultProviderConfigRef` gets a VaultK8sAuth of its
+# own -- one per foreign provider config. provider-vault only: the OpenTofu path
+# carries one AppRole Secret for every auth and cannot aim two of them apart.
+issuerVaultPc = lambda spec: {str:} -> str {
+    (spec?.vaultIssuer or {})?.vaultProviderConfigRef or "vault"
+}
+
+isForeignAuth = lambda spec: {str:}, a: {str:} -> bool {
+    bool(a?.vaultProviderConfigRef) and a.vaultProviderConfigRef != issuerVaultPc(spec)
+}
+
+localAuths = lambda spec: {str:} -> [{str:}] {
+    [a for a in ((spec?.vaultIssuer or {})?.additionalAuths or []) if not isForeignAuth(spec, a)]
+}
+
+foreignAuths = lambda spec: {str:} -> {str:[{str:}]} {
+    """Foreign auths grouped by provider config, in first-seen order."""
+    _all = [a for a in ((spec?.vaultIssuer or {})?.additionalAuths or []) if isForeignAuth(spec, a)]
+    _pcs = [p for i, p in [a.vaultProviderConfigRef for a in _all] if p not in [a.vaultProviderConfigRef for a in _all][:i:]]
+    {p: [a for a in _all if a.vaultProviderConfigRef == p] for p in _pcs}
+}
+
+foreignVaultAuthKey = lambda name: str, pc: str -> str {
+    "{}-vault-auth-{}".format(name, pc)
+}
+
+# --- the cluster's OWN KV mount ----------------------------------------------
+# LabDA gives every cluster one KV v2 mount named after it, read whole by its
+# External Secrets (`labda-dev-a/data/backstage`). vault/vault-k8s-auth builds
+# policies from SUBTREES of a mount (`own`, `_shared`) and cannot grant a whole
+# one, so `ownKvMount: true` composes the mount and its read policy here.
+#
+# Only the mount NAMED AFTER THE CLUSTER, never a chosen one: a whole-mount read
+# of an arbitrary name is how a cluster reads another's secrets. The policy is
+# xp-<cluster>-<auth>-own, inside the xp-* prefix both Vault AppRoles may write.
+#
+# The mount is created and never deleted -- no `Delete` in its management
+# policies -- so a teardown keeps the secrets, like the LabDA build pipeline.
+# The policy has a full lifecycle: without the role that names it, it is dead.
+ownKvPolicyName = lambda cluster: str, a: {str:} -> str {
+    "xp-{}-{}-own".format(cluster, a?.name or "extra")
+}
+
+ownKvResources = lambda name: str, ns: str, cluster: str, pc: str, a: {str:} -> [{str:any}] {
+    _auth = a?.name or "extra"
+    _mountKey = "{}-kv-{}".format(name, _auth)
+    _policyKey = "{}-kv-{}-policy".format(name, _auth)
+    _pcRef = {name = pc, kind = "ClusterProviderConfig"}
+    [
+        {
+            apiVersion = "vault.vault.m.upbound.io/v1alpha1"
+            kind = "Mount"
+            metadata = {
+                name = _mountKey
+                namespace = ns
+                annotations = {
+                    "krm.kcl.dev/composition-resource-name" = _mountKey
+                    # The path IS the identity: an existing mount is adopted
+                    # instead of colliding with "path is already in use".
+                    "crossplane.io/external-name" = cluster
+                }
+            }
+            spec = {
+                managementPolicies = ["Observe", "Create", "Update", "LateInitialize"]
+                providerConfigRef = _pcRef
+                forProvider = {
+                    path = cluster
+                    $type = "kv"
+                    options = {version = "2"}
+                    description = "KV v2 of cluster {} -- read by its External Secrets".format(cluster)
+                }
+            }
+        }
+        {
+            apiVersion = "vault.vault.m.upbound.io/v1alpha1"
+            kind = "Policy"
+            metadata = {
+                name = _policyKey
+                namespace = ns
+                annotations = {
+                    "krm.kcl.dev/composition-resource-name" = _policyKey
+                    "crossplane.io/external-name" = ownKvPolicyName(cluster, a)
+                }
+            }
+            spec = {
+                providerConfigRef = _pcRef
+                forProvider = {
+                    name = ownKvPolicyName(cluster, a)
+                    policy = "path \"{0}/data/*\" {{ capabilities = [\"read\"] }}\npath \"{0}/metadata/*\" {{ capabilities = [\"read\", \"list\"] }}\n".format(cluster)
+                }
+            }
+        }
+    ]
+}
+
+authProblems = lambda spec: {str:}, cluster: str -> [str] {
+    """What an additionalAuth may not ask for. Empty when fine."""
+    _native = nativeVaultAuth(spec)
+    ["additionalAuth {}: vaultProviderConfigRef {} differs from the issuer's but authProvider is not provider-vault — the OpenTofu path drives every auth with one AppRole".format(a?.name, a.vaultProviderConfigRef) for a in ((spec?.vaultIssuer or {})?.additionalAuths or []) if isForeignAuth(spec, a) and not _native] + ["additionalAuth {}: on another Vault ({}) but no vaultAddr — the VaultK8sAuth publishes it as the address its consumers log in to".format(a?.name, a.vaultProviderConfigRef) for a in ((spec?.vaultIssuer or {})?.additionalAuths or []) if isForeignAuth(spec, a) and not a?.vaultAddr] + ["additionalAuth {}: ownKvMount needs authProvider provider-vault — the mount and its policy are provider-vault resources".format(a?.name) for a in ((spec?.vaultIssuer or {})?.additionalAuths or []) if a?.ownKvMount and not _native] + ["additionalAuth {}: ownKvMount needs a cluster name to name the mount after".format(a?.name) for a in ((spec?.vaultIssuer or {})?.additionalAuths or []) if a?.ownKvMount and not cluster]
+}
+
 vaultAuthApiVersion = lambda spec: {str:} -> str {
     """API group of the VaultK8sAuth child - the two packages share the kind."""
     "vault.stuttgart-things.com/v1alpha1" if nativeVaultAuth(spec) else "config.stuttgart-things.com/v1alpha1"
