@@ -346,7 +346,13 @@ machinery: s.Profile = {
             # drive Vault through provider-vault. NEW dependsOn vault-k8s-auth
             # >=v0.4.2,<v0.5.0, which pulls upbound-provider-vault. Fresh
             # clusters resolve it; nothing to raise by hand.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.8.0"
+            #
+            # v0.9.0: vaultIssuer.additionalAuths[] vaultProviderConfigRef /
+            # vaultAddr / ownKvMount -- an auth on another Vault (LabDA: ESO on
+            # the OpenBao, crossplane-configurations#508 point 6). cluster
+            # v0.14.0 dependsOn >=v0.9.0: an older XRD prunes the fields.
+            # dependsOn unchanged.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/platform:v0.9.0"
             pulls = ["cni", "flux-init", "flux-apps", "ip-reservation", "vault-auth", "vault-k8s-auth", "vault-pki-secrets"]
         }
         s.Package {
@@ -417,7 +423,12 @@ machinery: s.Profile = {
             #            Default-StorageClasses (crossplane-configurations#516).
             #            Laufende rancher-k3s-Knoten werden einmal neu geplant
             #            (k3s-Neustart). dependsOn unveraendert.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.13.0"
+            #   v0.14.0  xplane-cluster 0.25.1: vault.eso im Environment schickt
+            #            die eso-Auth an einen eigenen Vault, secretStores [own]
+            #            = der Cluster-eigene KV-Mount (LabDA-OpenBao, #508
+            #            Punkt 6). dependsOn platform >=v0.9.0 (sonst verwirft
+            #            das alte XRD die neuen Felder).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.14.0"
             pulls = [
                 "platform"
                 "remote-cluster"
