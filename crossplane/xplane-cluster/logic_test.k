@@ -758,6 +758,59 @@ test_rancher_child_takes_machine_global_config_from_the_catalog = lambda {
     assert _o.spec.machineGlobalConfig["cni"] == "none"
 }
 
+# k3s's local-path is a default StorageClass; with a storage platform next to
+# it there were two (labda-rancher-2). Switched off only when something else
+# brings storage — a cluster with none keeps local-path.
+_k3sSpec = _rancherSpec | {distribution = "rancher-k3s"}
+
+test_k3s_keeps_local_storage_without_a_storage_platform = lambda {
+    _c = l.rancherChild("k3s-1", "default", _k3sSpec)
+    assert _c.spec.machineGlobalConfig.disable == ["traefik", "servicelb"]
+}
+
+test_k3s_drops_local_storage_with_the_openebs_profile = lambda {
+    _c = l.rancherChild("k3s-1", "default", _k3sSpec | {profiles = ["network", "storage-openebs"]})
+    assert _c.spec.machineGlobalConfig.disable == ["traefik", "servicelb", "local-storage"]
+    # The rest of the catalog's set survives the rewrite of `disable`.
+    assert _c.spec.machineGlobalConfig["flannel-backend"] == "none"
+    assert _c.spec.machineGlobalConfig["disable-kube-proxy"] == True
+}
+
+test_k3s_drops_local_storage_with_the_openebs_app = lambda {
+    _c = l.rancherChild("k3s-1", "default", _k3sSpec | {
+        platform = {
+            apps = {
+                openebs = {enabled = True}
+            }
+        }
+    })
+    assert "local-storage" in _c.spec.machineGlobalConfig.disable
+    _off = l.rancherChild("k3s-1", "default", _k3sSpec | {
+        platform = {
+            apps = {
+                openebs = {enabled = False}
+            }
+        }
+    })
+    assert "local-storage" not in _off.spec.machineGlobalConfig.disable
+}
+
+test_k3s_local_storage_respects_an_xr_disable = lambda {
+    _c = l.rancherChild("k3s-1", "default", _k3sSpec | {
+        profiles = ["storage-openebs"]
+        rancher = {
+            machineGlobalConfig = {disable = ["traefik", "local-storage"]}
+        }
+    })
+    # Already there: not added twice.
+    assert _c.spec.machineGlobalConfig.disable == ["traefik", "local-storage"]
+}
+
+test_rke2_is_untouched_by_the_local_storage_rule = lambda {
+    _c = l.rancherChild("rke2-1", "default", _rancherSpec | {profiles = ["storage-openebs"]})
+    assert "local-storage" not in (_c.spec.machineGlobalConfig?.disable or [])
+}
+
 # The k3s twin, end to end through the logic rather than only in the catalog:
 # whichever rancher entry is named, its OWN keys reach the RancherCluster. The
 # rke2 keys on a k3s server are ignored in silence, which left flannel running
