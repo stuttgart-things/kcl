@@ -163,6 +163,21 @@ k3s bundles `local-path` as a **default** StorageClass, and `openebs-hostpath` i
 
 It is appended to the `disable` the catalog and the XR produced, not merged over it, so an XR's own `disable` survives. rke2 is untouched (it bundles no StorageClass). **On a running cluster the change re-plans the node**: Rancher restarts the k3s server, and k3s removes the local-path provisioner — check for PVCs on `local-path` first.
 
+## Stores on another Vault: LabDA's OpenBao (0.25.0)
+
+LabDA signs certificates from its PKI Vault but keeps External Secrets on an OpenBao, with **one KV mount per cluster**, named after it (crossplane-configurations#508 point 6). The environment says so under `vault.eso`:
+
+```yaml
+vault:
+  certManagerPolicies: [pki-issue-4sthings]
+  eso:
+    providerConfigName: openbao-labda      # provider-vault ClusterProviderConfig
+    vaultAddr: https://openbao.sthings-infra.4sthings.tiab.ssc.sva.de
+    ownMount: true                         # one KV mount per cluster
+```
+
+and the order asks for its own store with `secretStores: [own]`. The derived `eso` auth then carries `vaultProviderConfigRef`/`vaultAddr` (xplane-platform ≥ 0.26.0 gives it a VaultK8sAuth of its own) and `ownKvMount: true` (the Platform composes the mount `<cluster>` and `xp-<cluster>-eso-own`); `kv-mounts` names `<cluster>`, and `external-secrets.stuttgart-things.com/vault-server` tells the stores AppSet where to log in. `own` needs `vault.eso.ownMount`, and `providerConfigName` needs `vaultAddr` — render errors otherwise. It mixes with mapped stores. An environment without `vault.eso` renders exactly as before.
+
 ## Argo CD labels: profiles, derived facts, overrides (0.15.0)
 
 `rancher-join-test5` carried ~35 hand-written labels and annotations and needed

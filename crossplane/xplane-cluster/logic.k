@@ -512,7 +512,7 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
             # Only when there is something to register or derive — an empty
             # argocd block would be a diff on every existing RancherCluster.
             if (_r?.argocd or spec?.profiles or spec?.secretStores):
-                argocd = argocdBlock(spec, appArgocd)
+                argocd = argocdBlock(spec, appArgocd, env)
         }
     }
 }
@@ -680,6 +680,12 @@ withAttempt = lambda spec: {str:any}, stage: str, attempt: int -> {str:any} {
 # Precedence: profile < derived < spec.rancher.argocd.{labels,annotations}. A
 # hand-written value always wins, so nothing a cluster needs is ever blocked.
 ESO_AUTH_NAME = "eso"
+
+# `secretStores: [own]` -- the cluster's OWN KV mount, named after it, where the
+# environment keeps one per cluster (LabDA's OpenBao, vault.eso.ownMount). It
+# becomes the mount `<cluster>` in kv-mounts and `ownKvMount` on the eso auth;
+# its policy is composed by the Platform, not looked up in vault.secretStores.
+OWN_STORE = "own"
 SHARED_WEBHOOK_ENTRY = "_omni-pitcher"
 
 # Later profile wins on a shared key. Two KCL traps shaped this:
@@ -705,7 +711,7 @@ profileAnnotations = lambda spec: {str:any} -> {str:str} {
     mergeLastWins([[k, v] for p in (spec?.profiles or []) for k, v in cat.getProfile(p).annotations])
 }
 
-derivedArgocd = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
+derivedArgocd = lambda spec: {str:any}, appArgocd: {str:any} = {}, env: {str:any} = {} -> {str:any} {
     """Labels and annotations that follow from what this stack composes.
 
     Returns {labels, annotations}. Asserts the combinations that could only be
@@ -731,6 +737,12 @@ derivedArgocd = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     _cs = _plat?.clusterSecrets or {}
     _csOn = _platOn and (_cs?.enabled or False)
     _obsStore = "observability" in _stores
+
+    # Where the stores read, when that is not the issuer's Vault (LabDA: the
+    # OpenBao). The stores AppSet reads this annotation first and falls back to
+    # clusterbook.stuttgart-things.com/vault-server.
+    _esoAddr = ((env?.vault or {})?.eso or {})?.vaultAddr or ""
+    _kvMounts = [_cluster if st == OWN_STORE else st for st in _stores]
 
     assert len(_stores) == 0 or _viOn, "secretStores needs platform.vaultIssuer.enabled — the stores log in through the Vault Kubernetes auth the Platform creates"
 
@@ -761,7 +773,9 @@ derivedArgocd = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
             if _viOn:
                 "clusterbook.stuttgart-things.com/wildcard-issuer-name" = _vi?.issuerName or "vault-pki-k8s"
             if _stores:
-                "external-secrets.stuttgart-things.com/kv-mounts" = ",".join(_stores)
+                "external-secrets.stuttgart-things.com/kv-mounts" = ",".join(_kvMounts)
+            if _stores and _esoAddr:
+                "external-secrets.stuttgart-things.com/vault-server" = _esoAddr
             if _csOn and _obsStore:
                 "observability-platform.stuttgart-things.com/secret-store" = "vault-observability"
                 # The webhook token is the omni-pitcher's, shared by every
@@ -773,7 +787,7 @@ derivedArgocd = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     }
 }
 
-argocdBlock = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
+argocdBlock = lambda spec: {str:any}, appArgocd: {str:any} = {}, env: {str:any} = {} -> {str:any} {
     """spec.rancher.argocd with profiles and derived facts merged under the
     caller's own labels and annotations.
 
@@ -784,7 +798,7 @@ argocdBlock = lambda spec: {str:any}, appArgocd: {str:any} = {} -> {str:any} {
     to a storage profile.
     """
     _a = (spec?.rancher or {})?.argocd or {}
-    _d = derivedArgocd(spec, appArgocd)
+    _d = derivedArgocd(spec, appArgocd, env)
 
     # mergeLastWins, NOT `|`. A dict union cannot OVERRIDE a key: KCL treats two
     # different values for the same attribute as a conflict and fails the whole
@@ -1066,16 +1080,21 @@ rancherVaultIssuer = lambda spec: {str:any}, env: {str:any} -> {str:any} {
     _handEso = [a for a in _auths if a?.name == ESO_AUTH_NAME]
     _stores = spec?.secretStores or []
     _storeMap = _ve?.secretStores or {}
-    _unknown = [st for st in _stores if st not in _storeMap]
+    _unknown = [st for st in _stores if st not in _storeMap and st != OWN_STORE]
     _cmPolicies = _ve?.certManagerPolicies or []
+    # The eso auth's own Vault, when it is not the issuer's (LabDA: OpenBao).
+    _esoEnv = _ve?.eso or {}
+    _own = OWN_STORE in _stores
 
     assert "tokenPolicies" not in _vi, "platform.vaultIssuer.tokenPolicies is derived in rancher mode — remove it; the cert-manager auth gets vault.certManagerPolicies from the EnvironmentConfig for environment '" + _envName + "'"
     assert len(_handTp) == 0, "tokenPolicies on platform.vaultIssuer.additionalAuths (" + ", ".join(_handTp) + ") are not accepted in rancher mode — a Vault role may be given any existing policy, so the order must not choose them"
     assert len(_handEso) == 0, "the '" + ESO_AUTH_NAME + "' auth is derived from spec.secretStores in rancher mode — remove it from platform.vaultIssuer.additionalAuths"
     assert not (_vi?.enabled or False) or len(_cmPolicies) > 0, "no vault.certManagerPolicies in the EnvironmentConfig for environment '" + _envName + "' (label cluster.stuttgart-things.com/environment) — the cert-manager auth would get a role without policies"
     assert len(_unknown) == 0, "secretStores " + ", ".join(_unknown) + " have no policy in the EnvironmentConfig for environment '" + _envName + "' (vault.secretStores) — a store whose role cannot read reports Valid while every ExternalSecret fails with a 400"
+    assert not _own or (_esoEnv?.ownMount or False), "secretStores '" + OWN_STORE + "' needs vault.eso.ownMount in the EnvironmentConfig for environment '" + _envName + "' — only an environment that keeps one KV mount per cluster has an own store"
+    assert not _esoEnv?.providerConfigName or bool(_esoEnv?.vaultAddr), "vault.eso.providerConfigName without vault.eso.vaultAddr in the EnvironmentConfig for environment '" + _envName + "' — the stores need the address they log in to"
 
-    _flat = [p for st in _stores for p in _storeMap[st]]
+    _flat = [p for st in _stores if st != OWN_STORE for p in _storeMap[st]]
     _esoPolicies = [p for i, p in _flat if p not in _flat[:i:]]
     _rest = {k: v for k, v in _vi if k not in ["tokenPolicies", "additionalAuths"]}
     _rest | {
@@ -1087,6 +1106,11 @@ rancherVaultIssuer = lambda spec: {str:any}, env: {str:any} -> {str:any} {
             boundServiceAccountNamespaces = [ESO_NAMESPACE]
             createServiceAccounts = True
             tokenPolicies = _esoPolicies
+            if _esoEnv?.providerConfigName:
+                vaultProviderConfigRef = _esoEnv.providerConfigName
+                vaultAddr = _esoEnv.vaultAddr
+            if _own:
+                ownKvMount = True
         }] if _stores else [])
     } if _vi else {}
 }
