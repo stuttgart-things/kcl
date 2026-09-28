@@ -138,6 +138,14 @@ Create]`): external-secrets normally arrives with its own Argo CD app, and
 creating it only when it is missing is what keeps the ServiceAccount from
 erroring in a retry loop until that app shows up.
 
+## An auth on another Vault, and the cluster's own KV mount (0.26.0)
+
+LabDA runs two Vaults: cert-manager signs from the PKI Vault, External Secrets reads from an OpenBao (crossplane-configurations#508 point 6). A `VaultK8sAuth` drives one Vault through one provider config, so an `additionalAuths` entry that names a **different** `vaultProviderConfigRef` gets a `VaultK8sAuth` of its own — one per foreign provider config, named `<platform>-vault-auth-<providerConfig>`. It needs its own `vaultAddr` (published as the address consumers log in to) and `authProvider: provider-vault`; the OpenTofu path drives every auth with one AppRole Secret and cannot aim two apart. Both are render failures, not silent fallbacks. `status.components.vaultIssuer.auths` merges every `VaultK8sAuth`'s auths, so `auths.eso.mountPath` reads the same whichever Vault it lives on.
+
+`ownKvMount: true` on an auth composes the cluster's **own** KV v2 mount — named after the cluster, never chosen — plus a policy `xp-<cluster>-<auth>-own` that reads it whole, and appends that policy to the auth's `tokenPolicies`. It exists because `vault/vault-k8s-auth` builds policies from subtrees (`own`, `_shared`) and cannot grant a whole mount, while LabDA keeps a cluster's entries at the top of its mount (`<cluster>/data/backstage`). The mount is adopted by path and **never deleted** (`managementPolicies` without `Delete`), so a teardown keeps the secrets; the policy has a full lifecycle. Both use the auth's provider config, so the AppRole behind it needs `sys/mounts/*` without delete and `sys/policies/acl/xp-*` — see stuttgart-things `sthings-infra/openbao-approles`.
+
+An order that uses neither field renders byte-identically to 0.25.0.
+
 ## Cluster-owned secrets in Vault
 
 The values that belong to the **cluster** rather than to an app — the Grafana

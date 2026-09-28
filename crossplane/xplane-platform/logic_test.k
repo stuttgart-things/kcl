@@ -910,3 +910,86 @@ test_vault_auth_unknown_provider_stays_opentofu = lambda {
         vaultIssuer = {authProvider = "tofu"}
     }) == "config.stuttgart-things.com/v1alpha1"
 }
+
+# --- an auth on another Vault, and the cluster's own KV mount (#508 point 6) --
+# LabDA: cert-manager on the PKI Vault, External Secrets on the OpenBao.
+_twoVaults = {
+    vaultIssuer = {
+        enabled = True
+        authProvider = "provider-vault"
+        vaultProviderConfigRef = "vault-labda"
+        additionalAuths = [
+            {name = "eso", vaultProviderConfigRef = "openbao-labda", vaultAddr = "https://openbao", ownKvMount = True}
+            {name = "other", vaultProviderConfigRef = "openbao-labda", vaultAddr = "https://openbao"}
+            {name = "plain"}
+            # Naming the issuer's own provider config is not "foreign".
+            {name = "same", vaultProviderConfigRef = "vault-labda"}
+        ]
+    }
+}
+
+test_foreign_auths_are_grouped_by_provider_config = lambda {
+    _f = l.foreignAuths(_twoVaults)
+    assert [k for k in _f] == ["openbao-labda"]
+    assert [a.name for a in _f["openbao-labda"]] == ["eso", "other"]
+    assert [a.name for a in l.localAuths(_twoVaults)] == ["plain", "same"]
+    assert l.foreignVaultAuthKey("p1", "openbao-labda") == "p1-vault-auth-openbao-labda"
+}
+
+test_no_foreign_auths_by_default = lambda {
+    _s = {
+        vaultIssuer = {enabled = True, additionalAuths = [{name = "eso"}]}
+    }
+    assert len(l.foreignAuths(_s)) == 0
+    assert [a.name for a in l.localAuths(_s)] == ["eso"]
+}
+
+test_two_vaults_is_a_valid_order = lambda {
+    assert l.authProblems(_twoVaults, "c1") == []
+}
+
+test_foreign_auth_needs_provider_vault_and_an_address = lambda {
+    _p = l.authProblems({
+        vaultIssuer = {additionalAuths = [{name = "eso", vaultProviderConfigRef = "openbao-labda"}]}
+    }, "c1")
+    assert len(_p) == 2
+    assert "not provider-vault" in _p[0]
+    assert "no vaultAddr" in _p[1]
+}
+
+test_own_kv_mount_needs_provider_vault_and_a_cluster = lambda {
+    _p = l.authProblems({
+        vaultIssuer = {additionalAuths = [{name = "eso", ownKvMount = True}]}
+    }, "")
+    assert len(_p) == 2
+    assert "provider-vault resources" in _p[0]
+    assert "cluster name" in _p[1]
+}
+
+# The mount is named after the CLUSTER, never chosen, and is never deleted.
+test_own_kv_mount_is_the_cluster_and_is_kept = lambda {
+    _r = l.ownKvResources("p1", "default", "c1", "openbao-labda", {name = "eso"})
+    _m = _r[0]
+    assert _m.kind == "Mount"
+    assert _m.spec.forProvider.path == "c1"
+    assert _m.spec.forProvider["type"] == "kv"
+    assert _m.spec.forProvider.options.version == "2"
+    assert _m.metadata.annotations["crossplane.io/external-name"] == "c1"
+    assert "Delete" not in _m.spec.managementPolicies
+    assert "*" not in _m.spec.managementPolicies
+    assert _m.spec.providerConfigRef.name == "openbao-labda"
+}
+
+# xp- prefix: the one prefix the AppRoles may write. Reads the whole mount,
+# writes nothing.
+test_own_kv_policy_reads_the_whole_mount_only = lambda {
+    _p = l.ownKvResources("p1", "default", "c1", "openbao-labda", {name = "eso"})[1]
+    assert _p.kind == "Policy"
+    assert _p.spec.forProvider.name == "xp-c1-eso-own"
+    assert l.ownKvPolicyName("c1", {name = "eso"}) == "xp-c1-eso-own"
+    assert "path \"c1/data/*\"" in _p.spec.forProvider.policy
+    assert "path \"c1/metadata/*\"" in _p.spec.forProvider.policy
+    assert "update" not in _p.spec.forProvider.policy
+    assert "create" not in _p.spec.forProvider.policy
+    assert "delete" not in _p.spec.forProvider.policy
+}

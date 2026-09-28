@@ -98,7 +98,9 @@ _discovered = {
         # status mirrors what was asked for, here it is ADDRESSED — a catalog
         # entry says `vaultIssuer.auths.eso.mountPath`, and an index would break
         # the moment someone reorders spec.vaultIssuer.additionalAuths.
-        auths = {a.name: a for a in ((_readStatus(_vaultAuthKey)?.share or {})?.auths or []) if a?.name}
+        # A foreign VaultK8sAuth (another Vault) reports its auths the same
+        # way; auth names are unique across all of them.
+        auths = {a.name: a for k in [_vaultAuthKey] + [l.foreignVaultAuthKey(_name, pc) for pc in l.foreignAuths(_spec)] for a in ((_readStatus(k)?.share or {})?.auths or []) if a?.name}
     }
 }
 
@@ -332,6 +334,25 @@ _viBackendConfig = lambda -> {str:} {
     {secretName = _viEffReviewerSecret} if _viNativeAuth else {secretName = _viEffReviewerSecret, secretNamespace = _namespace}
 }
 
+# Further auths beside cert-manager's -- external-secrets is the reason this
+# exists: it needs its own mount and role, bound to its own ServiceAccount, with
+# its own policies. Reusing cert-manager's would hand a secrets reader the right
+# to issue certificates. The same entry on the issuer's Vault or on another one.
+_viAuthEntry = lambda a: {str:} -> {str:} {
+    _tp = (a?.tokenPolicies or []) + ([l.ownKvPolicyName(_shared?.clusterName or "", a)] if a?.ownKvMount else [])
+    {
+        name = a?.name or "extra"
+        boundServiceAccountNames = a?.boundServiceAccountNames or ["default"]
+        boundServiceAccountNamespaces = a?.boundServiceAccountNamespaces or ["default"]
+        if _tp:
+            tokenPolicies = _tp
+        if a?.policies:
+            policies = a.policies
+        if _viReviewerAvailable:
+            backendConfig = _viBackendConfig()
+    }
+}
+
 _vaultK8sAuthXR = {
     apiVersion = l.vaultAuthApiVersion(_spec)
     kind = "VaultK8sAuth"
@@ -361,24 +382,34 @@ _vaultK8sAuthXR = {
             # adds the backend_config on a later reconcile.
             if _viReviewerAvailable:
                 backendConfig = _viBackendConfig()
-        }] + [{
-            # Further auths on the SAME Vault mount machinery — external-secrets
-            # is the reason this exists: it needs its own mount and role, bound
-            # to its own ServiceAccount, with its own policies. Reusing
-            # cert-manager's would hand a secrets reader the right to issue
-            # certificates.
-            name = a?.name or "extra"
-            boundServiceAccountNames = a?.boundServiceAccountNames or ["default"]
-            boundServiceAccountNamespaces = a?.boundServiceAccountNamespaces or ["default"]
-            if a?.tokenPolicies:
-                tokenPolicies = a.tokenPolicies
-            if a?.policies:
-                policies = a.policies
-            if _viReviewerAvailable:
-                backendConfig = _viBackendConfig()
-        } for a in (_viSpec?.additionalAuths or [])]
+        }] + [_viAuthEntry(a) for a in l.localAuths(_spec)]
     }
 }
+
+# An additionalAuth on ANOTHER Vault (a different vaultProviderConfigRef) gets a
+# VaultK8sAuth of its own, one per provider config -- see l.foreignAuths. Same
+# cluster, same reviewer: only the Vault differs.
+_viForeign = l.foreignAuths(_spec)
+_foreignVaultAuthXRs = [{
+    apiVersion = l.vaultAuthApiVersion(_spec)
+    kind = "VaultK8sAuth"
+    metadata = {name = l.foreignVaultAuthKey(_name, pc), namespace = _namespace, annotations = {"krm.kcl.dev/composition-resource-name" = l.foreignVaultAuthKey(_name, pc)}}
+    spec = {
+        if _shared?.clusterName:
+            clusterName = _shared.clusterName
+        vaultAddr = auths[0].vaultAddr
+        if _viSpec?.kubernetesHost:
+            kubernetesHost = _viSpec.kubernetesHost
+        providerConfigRef = {name = pc, kind = "ClusterProviderConfig"}
+        k8sAuths = [_viAuthEntry(a) for a in auths]
+    }
+} for pc, auths in _viForeign]
+
+# The cluster's own KV mount + its read policy, for every auth that asks.
+_viOwnKv = [r for a in (_viSpec?.additionalAuths or []) if a?.ownKvMount for r in l.ownKvResources(_name, _namespace, _shared?.clusterName or "", a?.vaultProviderConfigRef or _viVaultPcRef, a)]
+_viOwnKvKeys = [r.metadata.name for r in _viOwnKv]
+_authProblems = l.authProblems(_spec, _shared?.clusterName or "") if _vaultIssuerEnabled else []
+assert len(_authProblems) == 0, "vaultIssuer.additionalAuths — " + "; ".join(_authProblems)
 
 _vaultPkiSecretXR = {
     apiVersion = "config.stuttgart-things.com/v1alpha1"
@@ -649,7 +680,7 @@ _viSAObjs = [{
 # through OpenTofu and the reviewer SA/token live in kube-system — none of it
 # touches cert-manager, and all of it is the slow half. Holding it back would
 # serialise two independent waits for no reason.
-_viUngated = [_vaultK8sAuthXR, _viCmObserveObj] + _viReviewerObjects + _viSANsObjs + _viSAObjs
+_viUngated = [_vaultK8sAuthXR, _viCmObserveObj] + _foreignVaultAuthXRs + _viOwnKv + _viReviewerObjects + _viSANsObjs + _viSAObjs
 
 # GATED on cert-manager: everything that lands in its namespace or needs its
 # CRDs. VaultPkiSecret writes the CA Secret into _viCmNs, the TokenRequest RBAC
@@ -679,7 +710,14 @@ _ciliumStatus = _readStatus(_ciliumKey)
 _ciliumReady = _isReady(_ciliumStatus)
 _ipResStatus = _readStatus(_ipResKey)
 _ipResReady = _isReady(_ipResStatus)
-_vaultAuthReady = _isReady(_readStatus(_vaultAuthKey))
+
+# Every Vault this issuer touches, and the own-KV resources: an auth on the
+# OpenBao that is not Ready is a secrets store that cannot log in.
+_vaultAuthReady = _isReady(_readStatus(_vaultAuthKey)) and all pc in _viForeign {
+    _isReady(_readStatus(l.foreignVaultAuthKey(_name, pc)))
+} and all k in _viOwnKvKeys {
+    _isReady(_readStatus(k))
+}
 _vaultPkiReady = _isReady(_readStatus(_vaultPkiKey))
 _issuerReady = _isReady(_readStatus(_issuerKey))
 _vaultIssuerReady = _vaultAuthReady and _vaultPkiReady and _issuerReady
