@@ -412,7 +412,12 @@ machinery: s.Profile = {
             #   v0.12.3  xplane-cluster 0.23.1: Katalog 0.10.0 mit dem Profil
             #            `kargo` (stuttgart-things/stuttgart-things#3232). Nur der
             #            Modul-Tag aendert sich, dependsOn unveraendert.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.12.3"
+            #   v0.13.0  xplane-cluster 0.24.0: rancher-k3s schaltet local-storage
+            #            ab, wenn die Plattform Storage bringt -- sonst zwei
+            #            Default-StorageClasses (crossplane-configurations#516).
+            #            Laufende rancher-k3s-Knoten werden einmal neu geplant
+            #            (k3s-Neustart). dependsOn unveraendert.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.13.0"
             pulls = [
                 "platform"
                 "remote-cluster"
