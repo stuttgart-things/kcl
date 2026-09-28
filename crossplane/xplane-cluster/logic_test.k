@@ -1812,3 +1812,20 @@ test_own_store_mixes_with_mapped_stores = lambda {
     assert _eso.ownKvMount == True
     assert l.argocdBlock(_o, {}, _env).annotations["external-secrets.stuttgart-things.com/kv-mounts"] == "labda-x,shared"
 }
+
+# An order without clusterName: the cluster is metadata.name, and so is the
+# `own` mount (0.25.0 rendered kv-mounts: "" here -- caught by the golden).
+test_own_store_follows_the_defaulted_cluster_name = lambda {
+    _o = {k: v for k, v in _labdaOrder if k != "clusterName"}
+    _c = l.rancherChild("labda-y", "default", _o, {}, None, "", _labdaEnv)
+    assert _c.spec.argocd.annotations["external-secrets.stuttgart-things.com/kv-mounts"] == "labda-y"
+}
+
+# ...and with clusterName set, the override is the same value and must not
+# empty anything (the `|` collision trap, CLAUDE.md gotcha 8).
+test_own_store_with_explicit_cluster_name_through_rancher_child = lambda {
+    _c = l.rancherChild("some-xr", "default", _labdaOrder, {}, None, "", _labdaEnv)
+    assert _c.spec.name == "labda-x"
+    assert _c.spec.argocd.annotations["external-secrets.stuttgart-things.com/kv-mounts"] == "labda-x"
+    assert _c.spec.argocd.labels["security-platform/external-secrets-stores"] == "true"
+}

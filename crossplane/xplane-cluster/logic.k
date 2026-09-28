@@ -512,7 +512,9 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
             # Only when there is something to register or derive — an empty
             # argocd block would be a diff on every existing RancherCluster.
             if (_r?.argocd or spec?.profiles or spec?.secretStores):
-                argocd = argocdBlock(spec, appArgocd, env)
+                # clusterName resolved: an order may leave it to metadata.name,
+                # and the `own` store is named after it (0.25.1).
+                argocd = argocdBlock(spec | {clusterName = _cluster}, appArgocd, env)
         }
     }
 }
