@@ -157,6 +157,12 @@ Teardown: the three machine guards (`platform-uses-`, `access-uses-`,
 `rancher-uses-node-ip` keeps the address reserved until the VM holding it is
 gone.
 
+## One default StorageClass on k3s (0.24.0)
+
+k3s bundles `local-path` as a **default** StorageClass, and `openebs-hostpath` is one too, so a `rancher-k3s` cluster with a storage platform came up with two defaults (labda-rancher-2, 2026-09-28) and a PVC without a class landed on whichever the API server picked. The RancherCluster now appends `local-storage` to k3s's `machineGlobalConfig.disable` **when something else brings storage**: a profile that sets `storage-platform: "true"` (e.g. `storage-openebs`) or `platform.apps.openebs.enabled`. Without either, `local-path` stays — a cluster with no StorageClass at all is worse than one with two.
+
+It is appended to the `disable` the catalog and the XR produced, not merged over it, so an XR's own `disable` survives. rke2 is untouched (it bundles no StorageClass). **On a running cluster the change re-plans the node**: Rancher restarts the k3s server, and k3s removes the local-path provisioner — check for PVCs on `local-path` first.
+
 ## Argo CD labels: profiles, derived facts, overrides (0.15.0)
 
 `rancher-join-test5` carried ~35 hand-written labels and annotations and needed

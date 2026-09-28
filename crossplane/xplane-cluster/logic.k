@@ -436,6 +436,31 @@ joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret
 # momentarily unreadable reservation cannot rewrite the node's network config.
 NODE_IP_ANNOTATION = "cluster.stuttgart-things.com/node-ip"
 
+# Whether something other than the distribution brings a StorageClass: the
+# storage-platform AppSets (a profile such as storage-openebs) or the Platform's
+# own openebs app.
+providesStorage = lambda spec: {str:any} -> bool {
+    profileLabels(spec)?["storage-platform"] == "true" or bool((((spec?.platform or {})?.apps or {})?.openebs or {})?.enabled)
+}
+
+# k3s bundles local-path as a DEFAULT StorageClass, and openebs-hostpath is one
+# too — labda-rancher-2 (2026-09-28) came up with both marked default, so a PVC
+# without a class landed on whichever the API server picked. When the platform
+# brings storage, k3s's is switched off; without it, local-path stays, because
+# a cluster with no StorageClass at all is worse than one with two.
+#
+# Appended to whatever `disable` the catalog and the XR produced rather than
+# merged with `|`, so an XR that sets its own `disable` keeps it.
+#
+# k3s only: rke2 bundles no StorageClass, and an unknown key is ignored there.
+# CHANGING THIS ON A RUNNING CLUSTER re-plans the node (Rancher restarts the
+# k3s server) and k3s deletes the local-path provisioner.
+withoutK3sLocalStorage = lambda dist: any, spec: {str:any}, mgc: {str:any} -> {str:any} {
+    _disable = mgc?.disable or []
+    _add = dist.serverDistro == "k3s" and providesStorage(spec) and "local-storage" not in _disable
+    ({k: v for k, v in mgc if k != "disable"} | {disable = _disable + ["local-storage"]}) if _add else mgc
+}
+
 rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} = {}, size: any = None, nodeIP: str = "", env: {str:any} = {} -> {str:any} {
     _cluster = spec?.clusterName or name
     _dist = cat.getDistribution(spec?.distribution or "k3s")
@@ -455,7 +480,7 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
     # the kubeconfig stage fetches over SSH from the reserved address. Rancher's
     # proxy cannot be that path -- it needs cattle-cluster-agent, which needs a
     # pod network -- and does not have to be.
-    _mgc = _dist.machineGlobalConfig | (_r?.machineGlobalConfig or {})
+    _mgc = withoutK3sLocalStorage(_dist, spec, _dist.machineGlobalConfig | (_r?.machineGlobalConfig or {}))
     _nodeReg = (_r?.nodeRegistration or {}) | {
         publish = True
         secretNamespace = (_r?.nodeRegistration or {})?.secretNamespace or _ans?.pipelineNamespace or "tekton-ci"
