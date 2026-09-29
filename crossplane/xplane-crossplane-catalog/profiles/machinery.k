@@ -479,7 +479,11 @@ machinery: s.Profile = {
             #
             # v0.12.0: what kind5 runs. Still provider-vspherevm-xpkg
             # >=v0.8.1,<v0.9.0 and ansible-run >=v0.1.4.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.12.0"
+            #
+            # v0.13.0: spec.ansible.inventoryGroups puts the VM IP into a named
+            # inventory group (crossplane-configurations#521) -- what rke2 needs
+            # and the Backstage template create-vm offers. No new dependsOn floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.13.0"
             providerCrd = "clusterproviderconfigs.vspherevm.m.stuttgart-things.com"
             pulls = ["ansible-run"]
         }
@@ -500,7 +504,10 @@ machinery: s.Profile = {
             #
             # v0.16.0: what kind5 runs. Still provider-proxmox-bpg
             # >=v1.15.0,<v2.0.0 and ansible-run >=v0.1.4.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.16.0"
+            #
+            # v0.17.0: spec.ansible.inventoryGroups, same as vspherevm v0.13.0
+            # above (crossplane-configurations#521). No new dependsOn floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.17.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
