@@ -1,0 +1,110 @@
+name: KCL dependency mirror
+
+# Copies the kcl-lang packages listed in mirror/kcl-lang.yaml to
+# ghcr.io/stuttgart-things/kcl-mirror/<name> -- see that file for why.
+# oras copies the artifact unchanged, so digests (and kcl.mod.lock sums) match.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  push:
+    branches: [main]
+    paths:
+      - mirror/kcl-lang.yaml
+      - .github/workflows/kcl-mirror.yaml
+  pull_request:
+    paths:
+      - mirror/kcl-lang.yaml
+      - .github/workflows/kcl-mirror.yaml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: kcl-mirror
+  cancel-in-progress: false
+
+env:
+  SOURCE: ghcr.io/kcl-lang
+  TARGET: ghcr.io/stuttgart-things/kcl-mirror
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # From the release, not oras-project/setup-oras: the org allows only
+      # selected third-party actions.
+      - name: Set up oras
+        env:
+          ORAS_VERSION: "1.3.0"
+        run: |
+          curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin oras
+          oras version
+
+      - name: Login to GitHub Container Registry
+        # A pull request only plans: nothing is pushed, so no login.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USER || github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Mirror
+        env:
+          DRY_RUN: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -uo pipefail
+
+          # The whole point is that ghcr throttles kcl-lang: retry with backoff
+          # instead of failing the run on the first 429.
+          retry() {
+            local attempt out
+            for attempt in 1 2 3 4 5 6; do
+              if out=$("$@" 2>&1); then printf '%s\n' "$out"; return 0; fi
+              echo "  attempt ${attempt} failed: $(printf '%s' "$out" | tail -1)" >&2
+              sleep $((attempt * 20))
+            done
+            return 1
+          }
+
+          # Digest of ref, or empty when it does not exist.
+          digest() { oras manifest fetch --descriptor "$1" 2>/dev/null | jq -r .digest; }
+
+          copied=0 current=0 failed=0
+          for i in $(seq 0 $(($(yq '.packages | length' mirror/kcl-lang.yaml) - 1))); do
+            name=$(yq ".packages[$i].name" mirror/kcl-lang.yaml)
+            filter=$(yq ".packages[$i].tags" mirror/kcl-lang.yaml)
+            if ! tags=$(retry oras repo tags "${SOURCE}/${name}"); then
+              echo "::error::cannot list ${SOURCE}/${name}"; failed=$((failed + 1)); continue
+            fi
+            tags=$(printf '%s\n' "$tags" | grep -E "$filter" || true)
+            if [ -z "$tags" ]; then
+              echo "::error::${name}: no tag matches ${filter}"; failed=$((failed + 1)); continue
+            fi
+            for tag in $tags; do
+              src="${SOURCE}/${name}:${tag}" dst="${TARGET}/${name}:${tag}"
+              src_digest=$(retry oras manifest fetch --descriptor "$src" | jq -r .digest) || {
+                echo "::error::cannot read ${src}"; failed=$((failed + 1)); continue; }
+              if [ "$(digest "$dst")" = "$src_digest" ]; then
+                current=$((current + 1)); continue
+              fi
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "would copy ${src} (${src_digest})"; copied=$((copied + 1)); continue
+              fi
+              if retry oras copy "$src" "$dst" >/dev/null; then
+                echo "copied ${src} -> ${dst} (${src_digest})"; copied=$((copied + 1))
+              else
+                echo "::error::cannot copy ${src}"; failed=$((failed + 1))
+              fi
+            done
+          done
+
+          echo "### KCL mirror: ${copied} copied$([ "$DRY_RUN" = "true" ] && echo ' (dry run)'), ${current} current, ${failed} failed" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$failed" -eq 0 ]
