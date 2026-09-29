@@ -160,3 +160,43 @@ test_gateway_api_usage_composed_name_matches_the_object = lambda {
     assert u.metadata.name == "c5-cni-cilium-uses-gateway-api"
     assert u.metadata.annotations["krm.kcl.dev/composition-resource-name"] == u.metadata.name
 }
+
+# --- which Releases are emitted (kcl#319) ---
+# Arguments: gwEnabled, observeReady, gwReady, gwComposed, ciliumComposed.
+test_nothing_before_the_remote_cluster_resolves = lambda {
+    _e = l.releasesToEmit(True, False, False, False, False)
+    assert _e.gatewayAPI == False
+    assert _e.cilium == False
+}
+
+test_crds_first_cilium_waits_for_them = lambda {
+    _e = l.releasesToEmit(True, True, False, True, False)
+    assert _e.gatewayAPI == True
+    assert _e.cilium == False
+    _e2 = l.releasesToEmit(True, True, True, True, False)
+    assert _e2.cilium == True
+}
+
+test_installed_releases_survive_a_flickering_observe_gate = lambda {
+    # The delivery-test1 case: both installed, then clusterType briefly empty.
+    _e = l.releasesToEmit(True, False, True, True, True)
+    assert _e.gatewayAPI == True, "the Gateway API Release would be deleted"
+    assert _e.cilium == True, "cilium would be uninstalled from a running cluster"
+}
+
+test_installed_cilium_survives_crds_going_not_ready = lambda {
+    _e = l.releasesToEmit(True, True, False, True, True)
+    assert _e.cilium == True
+}
+
+test_without_gateway_api_cilium_is_sticky_too = lambda {
+    assert l.releasesToEmit(False, True, False, False, False).cilium == True
+    assert l.releasesToEmit(False, False, False, False, True).cilium == True
+    assert l.releasesToEmit(False, False, False, False, False).cilium == False
+    assert l.releasesToEmit(False, True, False, False, False).gatewayAPI == False
+}
+
+test_turning_gateway_api_off_still_removes_it = lambda {
+    # A spec decision, not a gate: the CRD Release goes.
+    assert l.releasesToEmit(False, True, True, True, True).gatewayAPI == False
+}
