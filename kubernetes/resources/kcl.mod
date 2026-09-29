@@ -1,9 +1,6 @@
 [package]
 name = "resources"
-version = "0.1.0"
-
-[package.metadata]
-description = "Standalone Kubernetes resources module (PVC, Secrets, ConfigMaps, etc)"
+version = "0.1.1"
 
 [dependencies]
-k8s = "1.32.4"
+k8s = "1.36"
