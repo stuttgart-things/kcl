@@ -1,0 +1,20 @@
+# kcl-lang packages mirrored to ghcr.io/stuttgart-things/kcl-mirror/<name>
+# (stuttgart-things/kcl#323).
+#
+# ghcr throttles ghcr.io/kcl-lang/* for everyone at times -- on 2026-09-29 for
+# over an hour, every render that pulled k8s failed with HTTP 429. Renders point
+# KCL at the mirror instead (KPM_REPO=stuttgart-things/kcl-mirror), which also
+# covers the short-form dependencies inside packages we do not build.
+#
+# That redirect is global: a kcl-lang package or tag missing here fails the
+# render. Add a package when a kcl.mod gains one; tags are matched by regex so
+# new ones (a Renovate bump to k8s 1.37) are picked up by the next daily run.
+packages:
+  - name: k8s
+    tags: '^1\.(2[89]|3[0-9])(\.[0-9]+)?$'
+  - name: crossplane-provider-kubernetes
+    tags: '^0\.(1[89]|[2-9][0-9])\.[0-9]+$'
+  - name: tekton-pipelines
+    tags: '^1\.[0-9]+\.[0-9]+$'
+  - name: crossplane
+    tags: '^1\.1[7-9]\.[0-9]+$'
