@@ -330,3 +330,16 @@ test_kubeconfig_provider_names_its_runtime_config = lambda {
     _minio = [x for x in _p.packages if x.name == "vshn-provider-minio"]
     assert _minio[0]?.runtimeConfig == "provider-minio", "ohne runtimeConfig traut provider-minio der Lab-CA nicht"
 }
+
+# cni is pulled by platform AND pinned, because a pulled package is never
+# raised: without this entry the xplane-cni fix for kcl#319 (an installed CNI
+# stays installed) would reach no management cluster. v0.1.5 is the floor.
+test_machinery_pins_cni_at_the_sticky_gate_fix = lambda {
+    _p = c.get("machinery")
+    _cni = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-cni"]
+    assert len(_cni) == 1, "cni must be pinned, not only pulled"
+    assert _cni[0].name == c.derivedName(_cni[0].package), "the resolver's name, or two CRs share one source"
+    _v = [int(n) for n in _cni[0].package.split(":v")[1].split(".")]
+    assert _v[0] > 0 or _v[1] > 1 or (_v[1] == 1 and _v[2] >= 5), "cni must be >= v0.1.5 (kcl#319)"
+    assert "cni" in c.transitive(_p), "platform still pulls cni; pinning does not change that"
+}

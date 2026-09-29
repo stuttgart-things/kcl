@@ -118,7 +118,12 @@ rejects either field on anything but a Provider.
 | not listed | why |
 |---|---|
 | `ansible-run` | pulled by both VM Configurations |
-| `cni`, `flux-init`, `flux-apps`, `ip-reservation`, `vault-auth`, `vault-pki-secrets` | pulled by `platform` |
+| `flux-init`, `flux-apps`, `ip-reservation`, `vault-auth`, `vault-pki-secrets` | pulled by `platform` |
+
+`cni` is pulled by `platform` too, and pinned all the same: the resolver installs
+a dependency once and never raises it, so the fix for
+[kcl#319](https://github.com/stuttgart-things/kcl/issues/319) (an installed CNI
+stays installed, cni v0.1.5) would otherwise reach no management cluster.
 
 They are recorded in each package's `pulls`, which is documentation rather than
 an exclusion list — with derived names an entry may legitimately be both
