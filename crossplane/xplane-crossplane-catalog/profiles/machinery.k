@@ -357,6 +357,24 @@ machinery: s.Profile = {
         }
         s.Package {
             kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-cni"
+            # PULLED by platform (>=v0.1.0) and pinned here anyway, because
+            # the resolver installs a dependency once and never raises it: a
+            # fix released in cni reaches no management cluster until someone
+            # patches the unlabeled Configuration by hand.
+            #
+            # v0.1.5 is such a fix (xplane-cni 0.3.2, stuttgart-things/kcl#319):
+            # before it, a Release that dropped out of the gate was deleted,
+            # and a three-minute API outage uninstalled cilium from the
+            # running delivery-test1. Every ClusterStack with a Platform runs
+            # this Composition -- app-dev, homerun2-dev2, the LabDA ones.
+            #
+            # Same derived name as the resolver gave it, so this entry and the
+            # live Configuration are one object (see README, the naming rule).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cni:v0.1.5"
+        }
+        s.Package {
+            kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-cluster"
             # >=v0.4.0 carries spec.managementPlaneEnabled — without it a
             # management cluster built from this profile cannot build further
