@@ -225,3 +225,27 @@ gatewayAPIUsage = lambda name: str, gwReleaseName: str, ciliumReleaseName: str -
         }
     }
 }
+
+# Which Releases this reconcile emits.
+#
+# The gates only order the FIRST install: the RemoteCluster must have resolved
+# (its provider config exists) and, with Gateway API on, the CRDs must be Ready
+# before cilium starts. Once a Release is composed it is emitted no matter what
+# a gate says, because not emitting a composed resource is how Crossplane
+# deletes it -- and deleting a CNI Release uninstalls the CNI from a running
+# cluster. That happened on delivery-test1: the API was unreachable for three
+# minutes, the observed RemoteCluster briefly lost clusterType, and both
+# Releases were deleted; the cluster ran without a network for ~24 minutes
+# (stuttgart-things/kcl#319).
+#
+# Turning Gateway API OFF still removes its Release: that is a decision in the
+# spec, not a gate flickering.
+releasesToEmit = lambda gwEnabled: bool, observeReady: bool, gwReady: bool, gwComposed: bool, ciliumComposed: bool -> {str:bool} {
+    _gatewayAPI = gwEnabled and (observeReady or gwComposed)
+    _ciliumGateOpen = (not gwEnabled) or gwReady or ciliumComposed
+    _cilium = ciliumComposed or (observeReady and _ciliumGateOpen)
+    {
+        gatewayAPI = _gatewayAPI
+        cilium = _cilium
+    }
+}

@@ -155,16 +155,15 @@ _gwRelease = {
         rollbackLimit = 3
     }
 }
-_gwResources = [_gwRelease] if (_gwEnabled and _observeReady) else []
 _gwReady = _isReady(_gwReleaseName)
 
-# The cilium gate is STICKY: once its Release exists it keeps being emitted,
-# because not emitting a composed resource is how Crossplane deletes it — and
-# removing the CNI from a running cluster because the CRD chart went briefly
-# NotReady is worse than the race it would close.
-_ciliumGateOpen = (not _gwEnabled) or _gwReady or (_releaseName in _ocds)
-
-_cniResources = [_release] if (_observeReady and _ciliumGateOpen) else []
+# Both gates are STICKY: a Release that exists keeps being emitted, because not
+# emitting a composed resource is how Crossplane deletes it. The observe gate
+# was not, and a three-minute API outage uninstalled cilium (kcl#319). The
+# decision lives in logic.releasesToEmit so it has a unit test.
+_emit = l.releasesToEmit(_gwEnabled, _observeReady, _gwReady, _gwReleaseName in _ocds, _releaseName in _ocds)
+_gwResources = [_gwRelease] if _emit.gatewayAPI else []
+_cniResources = [_release] if _emit.cilium else []
 
 _releaseReady = _isReady(_releaseName)
 

@@ -30,6 +30,18 @@ was ready by definition, no Release existed yet, and `function-auto-ready` put
 opened onto NotReady nodes. Either signal is safe now; see
 [crossplane-configurations#439](https://github.com/stuttgart-things/crossplane-configurations/issues/439).
 
+### The gates only order the first install
+
+Once a Release is composed it is emitted whatever the gates say. Not emitting a
+composed resource is how Crossplane deletes it, and deleting a CNI Release
+uninstalls the CNI from a running cluster. Until 0.3.2 the RemoteCluster gate
+was not sticky: on delivery-test1 the API was unreachable for three minutes,
+the observed RemoteCluster briefly lost `clusterType`, and provider-helm removed
+cilium and the Gateway API CRDs; the cluster ran without a network for ~24
+minutes ([kcl#319](https://github.com/stuttgart-things/kcl/issues/319)).
+Switching `gatewayAPI.enabled` off still removes its Release: that is a spec
+decision, not a gate flickering. The rule is `logic.releasesToEmit`.
+
 ## Gateway API comes first
 
 Cilium enables its Gateway controller **only if the CRDs exist when it starts**;
