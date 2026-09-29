@@ -343,3 +343,18 @@ test_machinery_pins_cni_at_the_sticky_gate_fix = lambda {
     assert _v[0] > 0 or _v[1] > 1 or (_v[1] == 1 and _v[2] >= 5), "cni must be >= v0.1.5 (kcl#319)"
     assert "cni" in c.transitive(_p), "platform still pulls cni; pinning does not change that"
 }
+
+# The VM configurations carry spec.ansible.inventoryGroups from these versions
+# on (crossplane-configurations#521). Below them the XRD prunes the field
+# silently, and an rke2 order renders an inventory with the IP in `all` only.
+test_machinery_vm_configurations_carry_inventory_groups = lambda {
+    _p = c.get("machinery")
+    _px = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-proxmoxvm"]
+    _vs = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-vspherevm"]
+    assert len(_px) == 1, "proxmoxvm must be pinned exactly once"
+    assert len(_vs) == 1, "vspherevm must be pinned exactly once"
+    _pv = [int(n) for n in _px[0].package.split(":v")[1].split(".")]
+    _vv = [int(n) for n in _vs[0].package.split(":v")[1].split(".")]
+    assert _pv[0] > 0 or _pv[1] >= 17, "proxmoxvm must be >= v0.17.0 (inventoryGroups)"
+    assert _vv[0] > 0 or _vv[1] >= 13, "vspherevm must be >= v0.13.0 (inventoryGroups)"
+}
