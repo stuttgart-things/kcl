@@ -1,7 +1,7 @@
 [package]
 name = "crossplane-provider-helm"
+version = "0.1.5"
 description = "Crossplane Helm Provider models for KCL"
-version = "0.1.4"
 
 [dependencies]
-k8s = "1.32.4"
+k8s = "1.36"
