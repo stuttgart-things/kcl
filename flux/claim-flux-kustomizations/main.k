@@ -13,6 +13,8 @@ Templates:
 - crossplane-functions: Crossplane functions (depends on crossplane-install)
 - crossplane-configs: Crossplane configurations (depends on crossplane-install + crossplane-functions)
 - gitrepository: Flux GitRepository source for use by Kustomizations
+- bundle: a catalog bundle (./apps/platform/root, ...) with spec.components,
+  structured substitute and substituteFrom -- see "Template: Bundle" below
 
 Usage via main.k:
     kcl run . -D templateName=gitops -D name=my-app -D sourceRefName=my-repo -D path=./manifests
@@ -67,8 +69,15 @@ _nameSuffix = _spec?.nameSuffix or option("nameSuffix") or ""
 _dependsOnNamesStr = _spec?.dependsOnNames or option("dependsOnNames") or ""
 _dependsOnNamespace = _spec?.dependsOnNamespace or option("dependsOnNamespace") or ""
 
-# Post-build substitutions (comma-separated key=value pairs)
+# Post-build substitutions: a map, or comma-separated key=value pairs.
+# The map form keeps values with "," or "=" intact; the string form cannot.
 _substituteStr = _spec?.substitute or option("substitute") or ""
+
+# Bundle: components (a list, or comma-separated) and substituteFrom sources
+# (a list of {kind, name, optional}). Structured input comes through a
+# parameters file (-Y), which the dagger kcl module writes from YAML.
+_componentsParam = _spec?.components or option("components") or []
+_substituteFromParam = _spec?.substituteFrom or option("substituteFrom") or []
 
 # Decryption
 _decryptionProvider = _spec?.decryptionProvider or option("decryptionProvider") or ""
@@ -245,14 +254,15 @@ _crossplaneConfigAnsibleRunVersion = _spec?.crossplaneConfigAnsibleRunVersion or
 _crossplaneConfigPipelineIntegrationVersion = _spec?.crossplaneConfigPipelineIntegrationVersion or option("crossplaneConfigPipelineIntegrationVersion") or "v0.1.2"
 _crossplaneConfigHarvesterVmVersion = _spec?.crossplaneConfigHarvesterVmVersion or option("crossplaneConfigHarvesterVmVersion") or "v0.3.3"
 
-# Helper: parse comma-separated dependency names to list
-_dependsOnNames = [name.strip() for name in _dependsOnNamesStr.split(",") if name.strip()] if _dependsOnNamesStr else []
+# Helper: dependency names from a list, or from a comma-separated string
+_dependsOnNames = [str(name) for name in _dependsOnNamesStr] if typeof(_dependsOnNamesStr) == "list" else [name.strip() for name in _dependsOnNamesStr.split(",") if name.strip()] if _dependsOnNamesStr else []
+_components = [str(c) for c in _componentsParam] if typeof(_componentsParam) == "list" else [c.strip() for c in _componentsParam.split(",") if c.strip()] if _componentsParam else []
 
 # Helper: parse comma-separated key=value pairs to dict
 _parseKeyValuePairs = lambda s: str -> {str:str} {
     {kv.split("=")[0].strip(): kv.split("=")[1].strip() for kv in s.split(",") if kv and "=" in kv}
 }
-_substitute: {str:str} = _parseKeyValuePairs(_substituteStr) if _substituteStr else {}
+_substitute: {str:str} = {str(k): str(v) for k, v in _substituteStr} if typeof(_substituteStr) == "dict" else _parseKeyValuePairs(_substituteStr) if _substituteStr else {}
 _commonLabels: {str:str} = _parseKeyValuePairs(_commonLabelsStr) if _commonLabelsStr else {}
 _commonAnnotations: {str:str} = _parseKeyValuePairs(_commonAnnotationsStr) if _commonAnnotationsStr else {}
 
@@ -1295,6 +1305,83 @@ if _templateName == "infrastructure":
                 }
             if _serviceAccountName:
                 serviceAccountName = _serviceAccountName
+            if _commonLabels or _commonAnnotations:
+                commonMetadata = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecCommonMetadata {
+                    if _commonLabels:
+                        labels = _commonLabels
+                    if _commonAnnotations:
+                        annotations = _commonAnnotations
+                }
+        }
+    }
+
+# Template: Bundle (a catalog bundle root with selected components)
+#
+# Renders the consumer side of a stuttgart-things/flux bundle: path is the
+# bundle root (./apps/platform/root, ./infra/platform/root, ...), components
+# selects the apps, substitute carries the vars they read, and substituteFrom
+# the Secrets/ConfigMaps (blueprints render-cluster-apps, blueprints#206).
+#
+# components is emitted only when something is selected: an empty list would
+# render `components:` as null, which the CRD rejects -- and it would fail the
+# cluster's root Kustomization, not just this one.
+if _templateName == "bundle":
+    flux.Kustomization {
+        metadata = v1.ObjectMeta {
+            name = _name
+            namespace = _namespace
+            annotations = {
+                "managed-by": "kcl-flux-kustomizations"
+                "template": "bundle"
+            }
+            labels = {
+                "app.kubernetes.io/managed-by": "flux"
+                "kustomization.stuttgart-things.com/type": "bundle"
+            }
+        }
+        spec = flux.KustomizeToolkitFluxcdIoV1KustomizationSpec {
+            interval = _interval
+            retryInterval = _retryInterval if _retryInterval else "1m"
+            timeout = _timeout if _timeout else "15m"
+            prune = _prune
+            # A bundle is Ready only when every selected app is
+            wait = True
+            force = _force
+            suspend = _suspend
+            sourceRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecSourceRef {
+                kind = _sourceRefKind
+                name = _sourceRefName
+                if _sourceRefNamespace:
+                    namespace = _sourceRefNamespace
+            }
+            path = _path
+            if _components:
+                components = _components
+            if _dependsOnNames:
+                dependsOn = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDependsOnItems0 {
+                    name = depName
+                    if _dependsOnNamespace:
+                        namespace = _dependsOnNamespace
+                } for depName in _dependsOnNames]
+            if _substitute or _substituteFromParam:
+                postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
+                    if _substitute:
+                        substitute = _substitute
+                    if _substituteFromParam:
+                        substituteFrom = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuildSubstituteFromItems0 {
+                            kind = src.kind
+                            name = src.name
+                            if src?.optional != None:
+                                optional = src.optional
+                        } for src in _substituteFromParam]
+                }
+            if _decryptionProvider == "sops" and _decryptionSecretRef:
+                decryption = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryption {
+                    provider = "sops"
+                    secretRef = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecDecryptionSecretRef {
+                        name = _decryptionSecretRef
+                    }
+                }
             if _commonLabels or _commonAnnotations:
                 commonMetadata = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecCommonMetadata {
                     if _commonLabels:

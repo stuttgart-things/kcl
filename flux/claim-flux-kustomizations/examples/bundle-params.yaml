@@ -1,0 +1,22 @@
+# Parameters file for templateName=bundle, as the dagger kcl module takes it
+# (--parameters-file). Structured values stay structured through -Y.
+templateName: bundle
+name: apps-mvp
+interval: 1h
+sourceRefName: flux-apps
+path: ./apps/platform/root
+components:
+  - ../components/keycloak
+dependsOnNames:
+  - cluster-secrets
+substitute:
+  APPS_SOURCE: flux-apps
+  INFRA_DOMAIN: cicd-test4.4sthings.tiab.ssc.sva.de
+  KEYCLOAK_STORAGE_CLASS: openebs-hostpath
+  WITH_COMMA: "a,b=c"
+substituteFrom:
+  - kind: ConfigMap
+    name: cluster-network
+  - kind: Secret
+    name: extra
+    optional: true
