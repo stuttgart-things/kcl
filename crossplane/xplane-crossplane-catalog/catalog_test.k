@@ -371,6 +371,6 @@ test_machinery_packer_configurations_at_v0_5 = lambda {
     assert len(_r) == 1, "packer-release must be pinned exactly once"
     _bv = [int(n) for n in _b[0].package.split(":v")[1].split(".")]
     _rv = [int(n) for n in _r[0].package.split(":v")[1].split(".")]
-    assert _bv[0] > 0 or _bv[1] >= 5, "packer-build must be >= v0.5.0"
-    assert _rv[0] > 0 or _rv[1] >= 5, "packer-release must be >= v0.5.0"
+    assert _bv[0] > 0 or _bv[1] >= 7, "packer-build must be >= v0.7.0 (templateUuid, kcl-tekton-pr-packer 0.7.0)"
+    assert _rv[0] > 0 or _rv[1] >= 6, "packer-release must be >= v0.6.0 (build failure surfaced)"
 }
