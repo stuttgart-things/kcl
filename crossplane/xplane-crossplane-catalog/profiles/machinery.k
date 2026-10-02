@@ -562,7 +562,10 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-scheduled-run"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/scheduled-run:v0.1.1"
+            # v0.2.0: ServiceAccount and Role per XR (crossplane-configurations
+            # #531). Before, every XR defaulted to one shared `scheduled-run`
+            # SA, composed by several XRs -- deleting one removed it for all.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/scheduled-run:v0.2.0"
         }
         s.Package {
             kind = "Configuration"
