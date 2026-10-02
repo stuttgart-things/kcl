@@ -358,3 +358,19 @@ test_machinery_vm_configurations_carry_inventory_groups = lambda {
     assert _pv[0] > 0 or _pv[1] >= 17, "proxmoxvm must be >= v0.17.0 (inventoryGroups)"
     assert _vv[0] > 0 or _vv[1] >= 13, "vspherevm must be >= v0.13.0 (inventoryGroups)"
 }
+
+# packer-build / packer-release v0.5.0 surface templateName + templateVmId and
+# pin one stage-time tag (crossplane-configurations#525). The packer
+# capability chart's EnvironmentConfigs (flux#599) carry pipelineRevision
+# v0.13.6, which the v0.4.x Compositions predate.
+test_machinery_packer_configurations_at_v0_5 = lambda {
+    _p = c.get("machinery")
+    _b = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-packer-build"]
+    _r = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-packer-release"]
+    assert len(_b) == 1, "packer-build must be pinned exactly once"
+    assert len(_r) == 1, "packer-release must be pinned exactly once"
+    _bv = [int(n) for n in _b[0].package.split(":v")[1].split(".")]
+    _rv = [int(n) for n in _r[0].package.split(":v")[1].split(".")]
+    assert _bv[0] > 0 or _bv[1] >= 5, "packer-build must be >= v0.5.0"
+    assert _rv[0] > 0 or _rv[1] >= 5, "packer-release must be >= v0.5.0"
+}
