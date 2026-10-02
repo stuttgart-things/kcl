@@ -527,12 +527,21 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-packer-build"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-build:v0.4.1"
+            # v0.5.0: status.templateName + templateVmId (Proxmox reports the
+            # VMID; the name comes from packer-manifest.json), one stage-time
+            # pin v0.13.6 (crossplane-configurations#525). Same dependsOn
+            # floors as v0.4.x. Its runtime (EnvironmentConfigs, CA) is the
+            # packer capability chart (flux#599), which does NOT install this
+            # Configuration -- the pin stays here.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-build:v0.5.0"
         }
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-packer-release"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-release:v0.4.2"
+            # v0.5.0: templateName/templateVmId on the status, the Proxmox test
+            # VM cloned by name and promoted by VMID (#214), promoters default
+            # to stage-time v0.13.6. Same dependsOn floors as v0.4.2.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-release:v0.5.0"
         }
         s.Package {
             kind = "Configuration"
