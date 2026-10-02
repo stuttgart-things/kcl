@@ -533,7 +533,11 @@ machinery: s.Profile = {
             # floors as v0.4.x. Its runtime (EnvironmentConfigs, CA) is the
             # packer capability chart (flux#599), which does NOT install this
             # Configuration -- the pin stays here.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-build:v0.5.0"
+            # v0.6.0: status.phase + condition PipelineRunSucceeded, so a failed
+            # build is visible (crossplane-configurations#527). v0.7.0:
+            # status.templateUuid for vSphere builds and kcl-tekton-pr-packer
+            # 0.7.0 / stage-time v0.13.8 (#529).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-build:v0.7.0"
         }
         s.Package {
             kind = "Configuration"
@@ -541,7 +545,9 @@ machinery: s.Profile = {
             # v0.5.0: templateName/templateVmId on the status, the Proxmox test
             # VM cloned by name and promoted by VMID (#214), promoters default
             # to stage-time v0.13.6. Same dependsOn floors as v0.4.2.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-release:v0.5.0"
+            # v0.6.0: buildReason/buildMessage + condition BuildSucceeded -- stops
+            # waiting on a failed nested build (#527).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-release:v0.6.0"
         }
         s.Package {
             kind = "Configuration"
