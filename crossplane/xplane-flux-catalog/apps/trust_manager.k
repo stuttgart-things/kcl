@@ -11,7 +11,7 @@ import ..schema as s
 # All of its own variables have manifest defaults, so nothing is required.
 trustManager: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/infra/trust-manager"
-    defaultVersion = "v1.75.1"
+    defaultVersion = "v1.113.0"
     components = [
         s.Component {
             name = "install"
