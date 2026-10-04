@@ -1,0 +1,27 @@
+# Parameters file for templateName=bundle with the catalog from an
+# OCIRepository (the whole stuttgart-things/flux repo as one artifact,
+# oci://ghcr.io/stuttgart-things/flux/repo). The bundle's children hard-code
+# sourceRef.kind: GitRepository, so a patch turns them into OCIRepository;
+# FLUX_SOURCE names the source. Rendered by blueprints render-cluster-apps
+# for spec.source.kind: OCIRepository.
+templateName: bundle
+name: infra-platform
+interval: 1h
+sourceRefKind: OCIRepository
+sourceRefName: flux-repo
+path: ./infra/platform/root
+components:
+  - ../components/cilium-lb
+  - ../components/reloader
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      kind: Kustomization
+    patch: |
+      - op: replace
+        path: /spec/sourceRef/kind
+        value: OCIRepository
+substitute:
+  FLUX_SOURCE: flux-repo
+  CILIUM_LB_IP_START: 10.0.0.10
+  CILIUM_LB_IP_STOP: 10.0.0.10

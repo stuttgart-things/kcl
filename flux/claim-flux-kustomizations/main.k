@@ -14,7 +14,7 @@ Templates:
 - crossplane-configs: Crossplane configurations (depends on crossplane-install + crossplane-functions)
 - gitrepository: Flux GitRepository source for use by Kustomizations
 - bundle: a catalog bundle (./apps/platform/root, ...) with spec.components,
-  structured substitute and substituteFrom -- see "Template: Bundle" below
+  structured substitute, substituteFrom and patches -- see "Template: Bundle" below
 
 Usage via main.k:
     kcl run . -D templateName=gitops -D name=my-app -D sourceRefName=my-repo -D path=./manifests
@@ -78,6 +78,11 @@ _substituteStr = _spec?.substitute or option("substitute") or ""
 # parameters file (-Y), which the dagger kcl module writes from YAML.
 _componentsParam = _spec?.components or option("components") or []
 _substituteFromParam = _spec?.substituteFrom or option("substituteFrom") or []
+
+# Bundle: patches (a list of {patch, target}), applied to what the bundle
+# renders -- e.g. the children's sourceRef.kind when the catalog comes from an
+# OCIRepository, as long as the catalog has no variable for the kind.
+_patchesParam = _spec?.patches or option("patches") or []
 
 # Decryption
 _decryptionProvider = _spec?.decryptionProvider or option("decryptionProvider") or ""
@@ -1320,7 +1325,8 @@ if _templateName == "infrastructure":
 # Renders the consumer side of a stuttgart-things/flux bundle: path is the
 # bundle root (./apps/platform/root, ./infra/platform/root, ...), components
 # selects the apps, substitute carries the vars they read, and substituteFrom
-# the Secrets/ConfigMaps (blueprints render-cluster-apps, blueprints#206).
+# the Secrets/ConfigMaps (blueprints render-cluster-apps, blueprints#206),
+# patches what the bundle renders (e.g. its children's sourceRef.kind).
 #
 # components is emitted only when something is selected: an empty list would
 # render `components:` as null, which the CRD rejects -- and it would fail the
@@ -1363,6 +1369,27 @@ if _templateName == "bundle":
                     if _dependsOnNamespace:
                         namespace = _dependsOnNamespace
                 } for depName in _dependsOnNames]
+            if _patchesParam:
+                patches = [flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPatchesItems0 {
+                    patch = str(p.patch)
+                    if p?.target:
+                        target = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPatchesItems0Target {
+                            if p.target?.group:
+                                group = p.target.group
+                            if p.target?.version:
+                                version = p.target.version
+                            if p.target?.kind:
+                                kind = p.target.kind
+                            if p.target?.name:
+                                name = p.target.name
+                            if p.target?.namespace:
+                                namespace = p.target.namespace
+                            if p.target?.labelSelector:
+                                labelSelector = p.target.labelSelector
+                            if p.target?.annotationSelector:
+                                annotationSelector = p.target.annotationSelector
+                        }
+                } for p in _patchesParam]
             if _substitute or _substituteFromParam:
                 postBuild = flux.KustomizeToolkitFluxcdIoV1KustomizationSpecPostBuild {
                     if _substitute:

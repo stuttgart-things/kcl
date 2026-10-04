@@ -64,7 +64,7 @@ Dazu kommen die ausgewählten `components`, `postBuild.substitute` und
 
 ```bash
 dagger call -m github.com/stuttgart-things/dagger/kcl run \
-  --oci-source ghcr.io/stuttgart-things/claim-flux-kustomizations?tag=0.4.0 \
+  --oci-source ghcr.io/stuttgart-things/claim-flux-kustomizations?tag=0.5.0 \
   --parameters-file examples/bundle-params.yaml --entrypoint main.k
 ```
 
@@ -77,6 +77,13 @@ dagger call -m github.com/stuttgart-things/dagger/kcl run \
   Liste wird `null`, und das lehnt die CRD ab.
 - `wait` ist immer `true`: Das Bundle ist erst Ready, wenn jede ausgewählte
   App es ist.
+- `patches` (ab 0.5.0) ist eine Liste von `{patch, target}` und landet als
+  `spec.patches` in der Kustomization. Gebraucht für einen Katalog aus einem
+  `OCIRepository` (`oci://ghcr.io/stuttgart-things/flux/repo`, das ganze Repo
+  als ein Artefakt): Die Kinder eines Bundles haben `sourceRef.kind:
+  GitRepository` fest im Manifest, ein Patch macht daraus `OCIRepository`.
+  Beispiel: `examples/bundle-params-oci.yaml`. Ohne `patches` ist die Ausgabe
+  dieselbe wie mit 0.4.0.
 - Ein Formular (`templates/*.yaml`) gibt es für `bundle` noch nicht, weil
   die Parameter Listen und Maps sind.
 
