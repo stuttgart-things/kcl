@@ -446,7 +446,12 @@ machinery: s.Profile = {
             #            = der Cluster-eigene KV-Mount (LabDA-OpenBao, #508
             #            Punkt 6). dependsOn platform >=v0.9.0 (sonst verwirft
             #            das alte XRD die neuen Felder).
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.14.0"
+            #   v0.15.0  xplane-cluster 0.26.0: Multinode auf dem Rancher-
+            #            Custom-Node-Pfad (Groessen medium-ha, app-ha; alle
+            #            Knoten etcd+cp+worker), crossplane-configurations#535.
+            #            Einzelknoten-Orders rendern byte-identisch. dependsOn:
+            #            vspherevm >=v0.10.0, proxmoxvm >=v0.14.0.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.15.0"
             pulls = [
                 "platform"
                 "remote-cluster"
