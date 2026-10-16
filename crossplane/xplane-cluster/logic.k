@@ -422,6 +422,147 @@ joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret
     _ansibleRun(name, ns, "join", spec, _dist.playbooks, _vars, renderInventory(_dist.inventoryGroups, ip), _vaultSecret, nodeCommandSecret)
 }
 
+# --- multi-node: nodes 2..N on the rancher custom-node path (0.26.0) --------
+# A size with masters > 1 (medium-ha, app-ha) builds that many VMs, each one an
+# etcd + control-plane + worker node of the cluster Rancher created
+# (crossplane-configurations#170). Only here: the ansible path installs with
+# deploy_configure_rke and stays single-node (its catalog entries reject the
+# size), and a machine pool is sized by Rancher (asserted below).
+#
+# NODE 1 IS TODAY'S PATH, UNCHANGED: `{name}-vm`, the base-OS stage in its own
+# spec.ansible, then `{name}-join`, which registers it AND uploads the
+# kubeconfig. Every single-node child renders byte-identical to 0.25.x.
+#
+# NODES 2..N are `{name}-vm-2` .. `{name}-vm-N`, emitted once node 1's join
+# SUCCEEDED. Each runs base OS and join in ONE run -- its own VM XR's
+# spec.ansible -- with rancher_upload_kubeconfig false: one node publishes the
+# kubeconfig, and it is node 1. Why one run on the VM XR and not a VM plus a
+# separate `{name}-join-K` AnsibleRun:
+#
+#   - the VM XRs already make their run sticky (re-emitted verbatim once it has
+#     a pipelineRunName) and publish its verdict as share.ansibleSucceeded --
+#     the two things main.k's _reemit/_sealed rebuild by hand for node 1. A
+#     separate run per extra node would need that machinery N-1 more times, and
+#     its own IP flap guard.
+#   - nothing has to happen between base OS and join on an extra node. Node 1
+#     needs the split because the VM must not even boot before Rancher has a
+#     registration command; by the time nodes 2..N are emitted it exists.
+#
+# The cost: no runIDs lever for an extra node's join (the base-OS stage never
+# had one either). A failed extra node is rebuilt by deleting its VM XR.
+#
+# ORDER: Rancher picks the init node itself, from the nodes that registered.
+# Joining 2..N only after node 1's join succeeded -- which waits for node 1's
+# admin kubeconfig, i.e. a running API server -- means node 1 IS the init node,
+# so the kubeconfig node 1 published points at the etcd that bootstrapped.
+
+# The size's masters on the custom-node path, else 1.
+nodeCount = lambda spec: {str:any}, size: any -> int {
+    _masters = (size?.masters or 1) if size else 1
+    _masters if (isRancherProvisioner(spec) and not isMachinePool(spec)) else 1
+}
+
+# Fails the render on shapes that would build fewer or broken nodes. Size is
+# immutable on the XRD, so this can only ever refuse a NEW order.
+assertMultiNode = lambda spec: {str:any}, size: any -> bool {
+    _masters = (size?.masters or 1) if size else 1
+    _provider = spec?.provider or "proxmox"
+    _ip = (spec?.vm or {})?.ipv4Address or "dhcp"
+    # Rancher sizes a machine pool by its own quantity, which is 1 here.
+    assert _masters == 1 or not isMachinePool(spec), "size asks for " + str(_masters) + " masters, but a Rancher machine pool (provider harvester) is sized by Rancher with quantity 1 -- multi-node is the custom-node path only (rancher.infrastructure: generic, provider proxmox or vsphere)"
+
+    # HarvesterVM has no spec.ansible.extraEnvSecretName, so an extra node could
+    # not read the registration command.
+    assert _masters == 1 or _provider != "harvester", "size asks for " + str(_masters) + " masters, but provider harvester cannot hand an extra node the registration command (HarvesterVM has no ansible.extraEnvSecretName) -- use proxmox or vsphere"
+    # One static address cannot be three nodes'.
+    assert _masters == 1 or _ip == "dhcp", "size asks for " + str(_masters) + " masters, but vm.ipv4Address pins ONE static address (" + _ip + ") -- every node would get it; leave it unset (dhcp) on a multi-node order (crossplane-configurations#170)"
+    True
+}
+
+# [2..N]; empty for a single node.
+extraNodeIndices = lambda count: int -> [int] {
+    [i for i in range(2, count + 1)]
+}
+
+extraNodeName = lambda name: str, index: int -> str {
+    "{}-vm-{}".format(name, index)
+}
+
+# The join stage's vars on an extra node. Distribution vars without the upload
+# (one node publishes the kubeconfig, node 1), all three roles stated rather
+# than left to the play's defaults -- the role choice is this module's, and a
+# changed default upstream must not turn the second etcd member into a worker.
+EXTRA_NODE_JOIN_VARS = {
+    rancher_upload_kubeconfig = "false"
+    rancher_node_etcd = "true"
+    rancher_node_controlplane = "true"
+    rancher_node_worker = "true"
+}
+
+# Read only by the upload, which an extra node does not run.
+EXTRA_NODE_DROPPED_VARS = ["rancher_kubeconfig_path"]
+
+extraNodeChild = lambda name: str, ns: str, spec: {str:any}, size: any, index: int, nodeCommandSecret: str -> {str:any} {
+    _cluster = spec?.clusterName or name
+    _host = "{}-{}".format(_cluster, index)
+    _distName = spec?.distribution or "k3s"
+    _dist = cat.getDistribution(_distName)
+    _base = stageAnsible(spec, "baseos")
+    _join = stageAnsible(spec, "join")
+    _r = spec?.rancher or {}
+
+    # Base-OS half: node 1's base-OS varsFile with this node's hostname. The
+    # hostname is what Rancher names the node after, so it has to differ.
+    _setHostname = _base?.setHostname if "setHostname" in _base else True
+    _baseVars = [
+        "manage_filesystem+-true"
+        "update_packages+-true"
+    ] + (["vm_hostname+-{}".format(_host)] if _setHostname else []) + (_base?.extraVars or [])
+
+    # Join half: node 1's join varsFile, upload off, roles explicit. Filtered
+    # rather than merged with `|`, which unifies instead of overriding.
+    _distVars = {k: v for k, v in _dist.vars if k not in EXTRA_NODE_JOIN_VARS and k not in EXTRA_NODE_DROPPED_VARS}
+    _joinVars = renderVars(_distVars) + renderVars(EXTRA_NODE_JOIN_VARS) + clusterNameVars(_distName, _cluster) + (_join?.extraVars or [])
+
+    # The run has to live where the registration Secret is: ansible-run reads
+    # extraEnvSecretName from the PipelineRun's namespace. Same expression the
+    # RancherCluster child publishes it with.
+    _secretNs = (_r?.nodeRegistration or {})?.secretNamespace or _join?.pipelineNamespace or "tekton-ci"
+    _collections = dedup((_base?.extraCollections or []) + (_join?.extraCollections or []))
+    _image = _join?.ansibleWorkingImage or _base?.ansibleWorkingImage or ""
+
+    _ansible = {
+        enabled = True
+        # setup + the base-OS hooks (dns_zones in LabDA: the node has to resolve
+        # the Rancher before it can join) + the join itself.
+        playbooks = dedup(["sthings.baseos.setup"] + (_base?.extraPlaybooks or []) + _dist.playbooks)
+        # Deduplicated: a SHARED ansible.extraVars reaches both stages, and two
+        # identical lines in one varsFile help nobody.
+        varsFile = dedup(_baseVars + _joinVars)
+        crossplaneProviderConfig = _join?.crossplaneProviderConfig or _base?.crossplaneProviderConfig or "in-cluster"
+        pipelineNamespace = _secretNs
+        extraEnvSecretName = nodeCommandSecret
+        if _collections:
+            extraCollections = _collections
+        if _image:
+            ansibleWorkingImage = _image
+    }
+
+    # The node-1 VM with this node's name, minus its ansible block. vmChild
+    # takes the VM name from clusterName; filtered first, see _distVars.
+    _vm = vmChild(name, ns, {k: v for k, v in spec if k != "clusterName"} | {clusterName = _host}, size)
+    {
+        apiVersion = _vm.apiVersion
+        kind = _vm.kind
+        metadata = {
+            name = extraNodeName(name, index)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "vm-{}".format(index)}
+        }
+        spec = {k: v for k, v in _vm.spec if k != "ansible"} | {ansible = _ansible}
+    }
+}
+
 # The RancherCluster child: Rancher creates the cluster, and its
 # nodeRegistration Secret is what the VM's join stage waits for.
 #

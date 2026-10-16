@@ -22,10 +22,13 @@ ClusterStack                                                provisioner: rancher
 ├─ RancherCluster                      {name}-rancher       Rancher creates the cluster
 ├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm            waits for the node command
 ├─ AnsibleRun                          {name}-join          join + kubeconfig -> Vault
+├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm-2 … -vm-N  multi-node sizes only (0.26.0): base OS + join
+│                                                           in one run, after {name}-join succeeded
 ├─ ClusterAccess                       {name}-access        -> the ClusterProviderConfigs
 ├─ Platform                            {name}-platform      cni (from the catalog), …
 ├─ VaultSecretSet ×n                   {name}-secrets-<app> per-cluster app secrets (0.17.0)
 └─ Usage ×4                                                 + the VM outlives the RancherCluster
+                                                            + node 1's guards for every extra node
 ```
 
 ```
@@ -156,6 +159,46 @@ Teardown: the three machine guards (`platform-uses-`, `access-uses-`,
 `mgmt-uses-`) point at the RancherCluster instead of a VM, and
 `rancher-uses-node-ip` keeps the address reserved until the VM holding it is
 gone.
+
+## Multi-node: N all-role nodes on the Rancher custom-node path (0.26.0)
+
+A size with `masters > 1` — `medium-ha` (4/8192/64) or `app-ha` (4/12288/100), catalog 0.11.0 — builds that many VMs, each one **etcd + control-plane + worker** of the cluster Rancher created ([crossplane-configurations#170](https://github.com/stuttgart-things/crossplane-configurations/issues/170)). Only `rancher-k3s` / `rancher-rke2` accept such a size, and only on custom nodes:
+
+| shape | result |
+|---|---|
+| rancher, provider `proxmox` / `vsphere` | N nodes |
+| ansible path (`k3s`, `kind`, `rke2`) | refused by the catalog (`multiNode = False`) |
+| rancher machine pool (provider `harvester`) | refused: Rancher sizes the pool, quantity 1 |
+| rancher, `provider: harvester` + `infrastructure: generic` | refused: `HarvesterVM` has no `ansible.extraEnvSecretName` |
+| proxmox with a static `vm.ipv4Address` | refused: one address cannot be three nodes' |
+
+Refusals only ever hit a new order — `size` is immutable on the XRD.
+
+**Node 1 is the single-node path, unchanged:** `{name}-vm`, its base-OS stage, then `{name}-join`, which registers it and uploads the kubeconfig. Every single-node order renders byte-identical to 0.25.1 (checked across the build states of every example XR and the live orders, see the PR).
+
+**Nodes 2..N** are `{name}-vm-2` … `{name}-vm-N`, emitted once `{name}-join` **succeeded**, sticky like every gate (once one exists, all keep being emitted). Each one runs base OS and the join in **one** run, from its own VM XR's `spec.ansible`:
+
+- playbooks: `sthings.baseos.setup` + the base-OS `extraPlaybooks` + the catalog's join play;
+- varsFile: node 1's base-OS vars with `vm_hostname: <cluster>-<i>` (Rancher names the node after it), the base-OS `extraVars`, the catalog's join vars with `rancher_upload_kubeconfig: false` and `rancher_node_etcd/controlplane/worker: true` stated explicitly, `cluster_name`, the join `extraVars` — deduplicated;
+- `extraCollections`: base-OS ∪ join;
+- `extraEnvSecretName`: the node-command Secret the RancherCluster publishes (also read back off the join run and the first extra VM, so a status blip cannot rebuild a booting node without it); `pipelineNamespace`: the Secret's namespace (`rancher.nodeRegistration.secretNamespace`, else the join stage's).
+
+**Why on the VM XR and not a VM plus a `{name}-join-<i>` AnsibleRun:** the VM XRs already make their run sticky and publish its verdict as `share.ansibleSucceeded` — what `_reemit`/`_sealed` rebuild by hand for node 1. And nothing has to happen *between* base OS and join on an extra node: node 1 needs the split because its VM must not boot before Rancher has a command, which is long true by the time node 2 exists. The cost: no `runIDs` lever for an extra node. A failed extra node is rebuilt by deleting its VM XR (the stack re-emits it).
+
+**Order.** Rancher picks the init node from the nodes that registered. Joining 2..N only after node 1's join succeeded — which waits for node 1's admin kubeconfig, i.e. a running API server — makes node 1 the init node, so the kubeconfig in Vault points at the etcd that bootstrapped.
+
+**Readiness is an aggregate.** `ClusterAccess` and the `Platform` do **not** wait for nodes 2..N — they talk to node 1, and cilium is what lets the other nodes go Ready at all. The **stack** waits: `status.ready` is true only when every extra node's run succeeded, and `status.stage` reads `nodes` while platform and management plane are done but a node is not. `status.stages.nodes` carries `total`, `ready` (node 1 counts with its join), `emitted`, `pending` (who is missing) and `members` (name, ip, joined). No "proceed with what came up": a cluster smaller than its size would look finished.
+
+**Teardown.** Every extra node gets node 1's guards — it outlives the RancherCluster, the ClusterAccess, the Platform and the ManagementPlane (`rancher-uses-vm-<i>`, `access-uses-vm-<i>`, `platform-uses-vm-<i>`, `mgmt-uses-vm-<i>`). One more reason than node 1 has: two of three etcd members gone and node 1's API server loses quorum, so anything still applied through it hangs. Node 1's Usages keep their labels.
+
+**Cilium.** `k8sServiceHost: 127.0.0.1` holds on every node because every node runs an API server. Worker-only nodes are future work — they need an address every node can reach first.
+
+**Limits** (unchanged by this release):
+
+- the kubeconfig, ClusterAccess and Argo CD point at **node 1's IP** ([#171](https://github.com/stuttgart-things/crossplane-configurations/issues/171)). Node 1 down = the fleet loses the API, the cluster keeps running.
+- **no resize** ([#172](https://github.com/stuttgart-things/crossplane-configurations/issues/172)).
+- **DHCP.** vSphere has no static addressing here; a changed lease on reboot breaks that node's etcd peer URL — true of node 1 since the single-node path, now of three.
+- the join play's success means the **agent** is installed and running on the node, not that Rancher has finished adding the etcd member. Rancher's own cluster status is where that shows.
 
 ## One default StorageClass on k3s (0.24.0)
 

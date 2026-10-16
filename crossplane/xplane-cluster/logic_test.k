@@ -1829,3 +1829,150 @@ test_own_store_with_explicit_cluster_name_through_rancher_child = lambda {
     assert _c.spec.argocd.annotations["external-secrets.stuttgart-things.com/kv-mounts"] == "labda-x"
     assert _c.spec.argocd.labels["security-platform/external-secrets-stores"] == "true"
 }
+
+# --- multi-node: nodes 2..N on the rancher custom-node path (0.26.0) --------
+_haOrder = {
+    provider = "vsphere"
+    distribution = "rancher-rke2"
+    size = "app-ha"
+    clusterName = "app-1"
+    environmentConfig = "labda"
+    ansible = {
+        stages = {
+            baseos = {
+                extraCollections = ["baseos.tgz"]
+                extraPlaybooks = ["sthings.baseos.dns_zones"]
+                extraVars = ['dns_forward_zones+-[{"zone": "z", "server": "1.2.3.4"}]']
+            }
+            join = {
+                pipelineNamespace = "tekton-ci"
+                extraCollections = ["rke.tgz"]
+                extraVars = ["insecure+-true"]
+            }
+        }
+    }
+    rancher = {environmentConfig = "rancher-labda-rke2"}
+}
+
+# The node count is the size's masters on the custom-node path, and 1 on every
+# other: the ansible path stays single-node, and a machine pool is Rancher's.
+test_node_count_follows_masters_on_custom_nodes_only = lambda {
+    assert l.nodeCount(_haOrder, cat.getSize("app-ha")) == 3
+    assert l.nodeCount({provider = "proxmox", distribution = "rancher-k3s"}, cat.getSize("medium-ha")) == 3
+    assert l.nodeCount({provider = "proxmox", distribution = "rancher-k3s"}, cat.getSize("large")) == 1
+    assert l.nodeCount({provider = "proxmox", distribution = "k3s"}, cat.getSize("medium")) == 1
+    assert l.nodeCount({provider = "harvester", distribution = "rancher-k3s"}, cat.getSize("medium-ha")) == 1
+}
+
+# What keeps every single-node order byte-identical: no index, nothing emitted.
+test_a_single_node_has_no_extra_nodes = lambda {
+    assert l.extraNodeIndices(1) == []
+    assert l.extraNodeIndices(3) == [2, 3]
+}
+
+test_multi_node_shapes_that_can_be_built_pass = lambda {
+    assert l.assertMultiNode(_haOrder, cat.getSize("app-ha"))
+    assert l.assertMultiNode({provider = "proxmox", distribution = "rancher-k3s", vm = {ipv4Address = "dhcp"}}, cat.getSize("medium-ha"))
+    # A static address is fine on ONE node -- the check is about sharing it.
+    assert l.assertMultiNode({provider = "proxmox", distribution = "rancher-k3s", vm = {ipv4Address = "10.0.0.5/24"}}, cat.getSize("large"))
+    assert l.assertMultiNode({provider = "harvester", distribution = "rancher-k3s"}, cat.getSize("medium"))
+}
+
+# Named after its index, with its own hostname -- Rancher names the node after
+# it, and two nodes of one name are one node to Kubernetes.
+test_extra_node_is_its_own_vm = lambda {
+    _n = l.extraNodeChild("app-1", "default", _haOrder, cat.getSize("app-ha"), 2, "app-1-node-command")
+    assert _n.kind == "NativeVsphereVM"
+    assert _n.metadata.name == "app-1-vm-2"
+    assert _n.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "vm-2"
+    assert _n.spec.vm.name == "app-1-2"
+    assert _n.spec.vm.cpu == "4"
+    assert _n.spec.vm.ram == "12288"
+    assert _n.spec.vm.disk == "100"
+    assert _n.spec.environmentConfig == "labda"
+    assert "vm_hostname+-app-1-2" in _n.spec.ansible.varsFile
+    assert "vm_hostname+-app-1" not in _n.spec.ansible.varsFile
+}
+
+# Base OS (with its hooks: dns_zones has to run before the node can resolve the
+# Rancher) and the join, in one run.
+test_extra_node_runs_base_os_and_join_in_one_run = lambda {
+    _a = l.extraNodeChild("app-1", "default", _haOrder, cat.getSize("app-ha"), 2, "app-1-node-command").spec.ansible
+    assert _a.enabled
+    assert _a.playbooks == ["sthings.baseos.setup", "sthings.baseos.dns_zones", "sthings.rke.rancher_register"]
+    assert _a.extraCollections == ["baseos.tgz", "rke.tgz"]
+    assert 'dns_forward_zones+-[{"zone": "z", "server": "1.2.3.4"}]' in _a.varsFile
+    assert "insecure+-true" in _a.varsFile
+    assert "cluster_name+-app-1" in _a.varsFile
+}
+
+# ONE node uploads the kubeconfig, and it is node 1. All three roles stated.
+test_extra_node_joins_with_all_roles_and_no_upload = lambda {
+    _v = l.extraNodeChild("app-1", "default", _haOrder, cat.getSize("app-ha"), 3, "app-1-node-command").spec.ansible.varsFile
+    assert "rancher_upload_kubeconfig+-false" in _v
+    assert "rancher_upload_kubeconfig+-true" not in _v
+    assert "rancher_node_etcd+-true" in _v
+    assert "rancher_node_controlplane+-true" in _v
+    assert "rancher_node_worker+-true" in _v
+    assert len([x for x in _v if x.startswith("rancher_kubeconfig_path")]) == 0
+}
+
+# The registration command arrives as env from the Secret RancherCluster
+# publishes, and the run has to live in that Secret's namespace.
+test_extra_node_reads_the_command_where_it_is_published = lambda {
+    _a = l.extraNodeChild("app-1", "default", _haOrder, cat.getSize("app-ha"), 2, "app-1-node-command").spec.ansible
+    assert _a.extraEnvSecretName == "app-1-node-command"
+    assert _a.pipelineNamespace == "tekton-ci"
+    _o = {k: v for k, v in _haOrder if k != "rancher"} | {
+        rancher = {
+            nodeRegistration = {secretNamespace = "rancher-join"}
+        }
+    }
+    assert l.extraNodeChild("app-1", "default", _o, cat.getSize("app-ha"), 2, "s").spec.ansible.pipelineNamespace == "rancher-join"
+    # ...and it matches what the RancherCluster child publishes.
+    assert l.rancherChild("app-1", "default", _o).spec.nodeRegistration.secretNamespace == "rancher-join"
+}
+
+# A shared extraVars list reaches both stages; it lands once.
+test_extra_node_dedups_shared_vars = lambda {
+    _o = {provider = "proxmox", distribution = "rancher-k3s", size = "medium-ha", ansible = {extraVars = ["a+-1"], extraCollections = ["c.tgz"]}}
+    _a = l.extraNodeChild("k", "default", _o, cat.getSize("medium-ha"), 2, "s").spec.ansible
+    assert len([x for x in _a.varsFile if x == "a+-1"]) == 1
+    assert _a.extraCollections == ["c.tgz"]
+}
+
+# Proxmox: same cloudInit as node 1 (dhcp -- a static address is refused above).
+test_extra_proxmox_node_takes_dhcp = lambda {
+    _o = {provider = "proxmox", distribution = "rancher-k3s", size = "medium-ha"}
+    _n = l.extraNodeChild("k", "default", _o, cat.getSize("medium-ha"), 2, "s")
+    assert _n.kind == "NativeProxmoxVM"
+    assert _n.spec.cloudInit.ipv4Address == "dhcp"
+    assert _n.spec.vm.name == "k-2"
+    assert _n.spec.vm.memory == "8192"
+}
+
+# setHostname false still means false -- the VM composition fills vm_hostname
+# from vm.name itself, which is the node's own name.
+test_extra_node_respects_set_hostname = lambda {
+    _o = {provider = "vsphere", distribution = "rancher-rke2", size = "app-ha", ansible = {setHostname = False}}
+    _v = l.extraNodeChild("k", "default", _o, cat.getSize("app-ha"), 2, "s").spec.ansible.varsFile
+    assert len([x for x in _v if x.startswith("vm_hostname")]) == 0
+}
+
+# Node 1's VM is untouched by any of this.
+test_node_one_vm_is_unchanged_by_a_multi_node_size = lambda {
+    _v = l.vmChild("app-1", "default", _haOrder, cat.getSize("app-ha"))
+    assert _v.metadata.name == "app-1-vm"
+    assert _v.spec.vm.name == "app-1"
+    assert "extraEnvSecretName" not in _v.spec.ansible
+    assert _v.spec.ansible.playbooks == ["sthings.baseos.setup", "sthings.baseos.dns_zones"]
+}
+
+# The extra nodes' guards resolve their group like node 1's.
+test_extra_node_usage_resolves_its_group = lambda {
+    _u = l.usage(l.vmKind("vsphere"), l.extraNodeName("app-1", 2), "RancherCluster", "app-1-rancher", "rancher-uses-vm-2", True, "app-1")
+    assert _u.metadata.name == "app-1-rancher-uses-vm-2"
+    assert _u.spec.of.apiVersion == "resources.stuttgart-things.com/v1alpha1"
+    assert _u.spec.of.kind == "NativeVsphereVM"
+    assert _u.spec.of.resourceRef.name == "app-1-vm-2"
+}
