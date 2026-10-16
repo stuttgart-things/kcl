@@ -77,6 +77,10 @@ _supported = cat.assertSizeSupported(_spec?.distribution or "k3s", _spec?.size o
 # here" and passes, so this cannot fail a render that used to work.
 _distroOk = cat.assertServerDistro(_spec?.distribution or "k3s", str(_env?.distro or ""))
 
+# Multi-node (0.26.0): the catalog says the distribution CAN take masters > 1;
+# this says the order's shape can -- custom nodes, no harvester, no static IP.
+_multiOk = l.assertMultiNode(_spec, _size)
+
 # WHO creates the cluster. On the rancher path Rancher does, and the play this
 # module runs is a JOIN — so the distribution and kubeconfig stages are replaced
 # by a single join stage, and the VM waits for Rancher's registration command
@@ -282,6 +286,39 @@ _distChild = _reemit(_distRun, "distribution") if (len(_distObs) > 0 and (_vmIP 
 _kcChild = _reemit(_kcRun, "kubeconfig") if (len(_kcObs) > 0 and (_kcIP == "" or _sealed(_kcRun, "kubeconfig"))) else l.kubeconfigRun(_name, _ns, _specKc, _kcIP)
 _joinChild = _reemit(_joinRun, "join") if (len(_joinObs) > 0 and (_vmIP == "" or _sealed(_joinRun, "join"))) else l.joinRun(_name, _ns, _spec, _vmIP, _nodeCommandSecret)
 
+# --- nodes 2..N (0.26.0, rancher custom-node path only) ---------------------
+# Empty for every single-node order, which is what keeps those renders
+# byte-identical: nothing below emits, and the gates fold to their old values.
+_nodeCount = l.nodeCount(_spec, _size)
+_extraIdx = l.extraNodeIndices(_nodeCount)
+_extraObs = {str(i): (_byName(l.extraNodeName(_name, i)) or [{}])[0] for i in _extraIdx}
+_extraOk = lambda i: int -> bool {
+    ((_extraObs[str(i)]?.status?.share or {})?.ansibleSucceeded or "") == "True"
+}
+_extraIP = lambda i: int -> str {
+    _ips = (_extraObs[str(i)]?.status?.share or {})?.ip or []
+    _ips[0] if _ips else ""
+}
+_extraSeen = len([1 for i in _extraIdx if _extraObs[str(i)]]) > 0
+
+# After node 1 JOINED (succeeded, the same gate ClusterAccess uses), sticky like
+# every other gate: once one extra node exists, all of them keep being emitted.
+_extraOpen = len(_extraIdx) > 0 and (_joinOk or _extraSeen)
+
+# The registration Secret an extra node reads. RancherCluster publishes it; the
+# join run and the first extra VM carry the same name. Read from all three so a
+# RancherCluster whose status blips cannot rebuild a not-yet-booted node
+# without it.
+_extraEnvSecret = _nodeCommandSecret or (_joinRun?.spec?.extraEnvSecretName or "") or ((((_extraObs[str(_extraIdx[0])] if _extraIdx else {})?.spec or {})?.ansible or {})?.extraEnvSecretName or "")
+
+_extraJoined = len([1 for i in _extraIdx if _extraOk(i)])
+
+# The aggregate gate: the stack is ready only when every node joined. No
+# "proceed with what came up" -- a cluster smaller than its size would look
+# finished (crossplane-configurations#170, point 2); status.stages.nodes names
+# the node that is missing instead.
+_nodesDone = _extraJoined == len(_extraIdx)
+
 # WHAT "the machine" is for the guards below: the VM this stack built, or -- on
 # a machine pool -- the RancherCluster, whose machine pool IS the node. Same
 # reasoning, different owner: everything applied through the cluster must go
@@ -361,6 +398,15 @@ _usageGroups = [
     [l.usage(_machKind, _machName, "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-" + _machLabel, True, _name)] if _mgmtOpen else []
     [l.usage("ClusterAccess", "{}-access".format(_name), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-access", True, _name)] if (_mgmtOpen and _accessOpen) else []
     [l.usage("ClusterStack", _name, "ManagementPlane", "{}-management-plane".format(_name), "stack-uses-mgmt", False, _name)] if _mgmtOpen else []
+    # Nodes 2..N get node 1's guards, for node 1's reasons and one more: they
+    # are etcd members. Two of three gone and node 1's API server loses quorum,
+    # so everything still applied through it -- Platform, ManagementPlane, the
+    # RancherCluster's Objects -- hangs exactly as if node 1 itself were gone.
+    # Appended, so node 1's labels and the order above stay as they were.
+    [l.usage(_vmKind, l.extraNodeName(_name, i), "RancherCluster", "{}-rancher".format(_name), "rancher-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if _extraOpen else []
+    [l.usage(_vmKind, l.extraNodeName(_name, i), "ClusterAccess", "{}-access".format(_name), "access-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if (_extraOpen and _accessOpen) else []
+    [l.usage(_vmKind, l.extraNodeName(_name, i), "Platform", "{}-platform".format(_name), "platform-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if (_extraOpen and _platOpen) else []
+    [l.usage(_vmKind, l.extraNodeName(_name, i), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if (_extraOpen and _mgmtOpen) else []
 ]
 _usages = sum(_usageGroups, [])
 
@@ -372,12 +418,12 @@ _usages = sum(_usageGroups, [])
 _platDone = _platReady or (not _platformEnabled and _accessReady)
 _mgmtDone = _mgmtReady or not _mgmtEnabled
 
-_stage = "ready" if (_platDone and _mgmtDone) else ("platform" if (_platOpen and not _platDone) else ("management-plane" if _mgmtOpen else ("access" if _accessOpen else ("join" if _joinOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else ("vm" if _vmOpen else ("node-ip" if (_machinePool and _nodeIP == "") else "rancher")))))))))
+_stage = "ready" if (_platDone and _mgmtDone and _nodesDone) else ("nodes" if (_platDone and _mgmtDone) else ("platform" if (_platOpen and not _platDone) else ("management-plane" if _mgmtOpen else ("access" if _accessOpen else ("join" if _joinOpen else ("kubeconfig" if _kcOpen else ("distribution" if _distOpen else ("baseos" if (_vmReady and _vmIP != "") else ("vm" if _vmOpen else ("node-ip" if (_machinePool and _nodeIP == "") else "rancher"))))))))))
 
 _dxr = _params?.dxr or {}
 _dxrPatched = _dxr | {
     status = (_dxr?.status or {}) | {
-        ready = _platReady if _platformEnabled else _accessReady
+        ready = (_platReady if _platformEnabled else _accessReady) and _nodesDone
         stage = _stage
         share = {
             clusterName = _cluster
@@ -405,6 +451,16 @@ _dxrPatched = _dxr | {
             elif _isRancher:
                 rancher = {nodeCommandSecret = _nodeCommandSecret, emitted = True}
                 join = {succeeded = _joinOk, emitted = _joinOpen}
+                if _extraIdx:
+                    # Node 1 counts as joined with its join stage. `pending`
+                    # names who the aggregate gate is waiting for.
+                    nodes = {
+                        total = _nodeCount
+                        ready = (1 if _joinOk else 0) + _extraJoined
+                        emitted = _extraOpen
+                        pending = ([] if _joinOk else ["{}-vm".format(_name)]) + [l.extraNodeName(_name, i) for i in _extraIdx if not _extraOk(i)]
+                        members = [{name = "{}-vm".format(_name), ip = _vmIP, joined = _joinOk}] + [{name = l.extraNodeName(_name, i), ip = _extraIP(i), joined = _extraOk(i)} for i in _extraIdx]
+                    }
             if _kcVaultOpen:
                 kubeconfigVault = {ready = _kcVaultReady, emitted = True}
             access = {ready = _accessReady, emitted = _accessOpen}
@@ -433,6 +489,7 @@ _groups = [
     [_distChild] if _distOpen else []
     [_kcChild] if _kcOpen else []
     [_joinChild] if _joinOpen else []
+    [l.extraNodeChild(_name, _ns, _spec, _size, i, _extraEnvSecret) for i in _extraIdx] if _extraOpen else []
     [l.clusterAccess(_name, _ns, _spec)] if _accessOpen else []
     [l.platformChild(_name, _ns, _specEff, _accessShare?.apiEndpoint or "", _env)] if _platOpen else []
     # Tied to the stack, not the Platform: `platformEnabled: false` (phase 1 of
