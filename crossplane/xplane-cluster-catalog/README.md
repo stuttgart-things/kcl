@@ -26,12 +26,26 @@ Here it is `cniOwnership`, and `platformCniEnabled(name)` derives the Platform s
 | `medium` | 4 | 8192 | 64 | 1 |
 | `large` | 8 | 16384 | 100 | 1 |
 | `medium-ha` | 4 | 8192 | 64 | **3** |
+| `app-ha` | 4 | 12288 | 100 | **3** |
 
 Values are a rounding of what the fleet actually runs, not new invention: `small` is the vspherevm XRD default, `large` matches `kind-test1` (sized for a kind cluster plus crossplane, flux and the app catalog on top).
 
 All values are **strings** — both VM XRDs take strings, and emitting ints fails schema validation on the composed resource. A unit test enforces it.
 
-`medium-ha` is present so the shape is reviewable, but no current distribution accepts it: `assertSizeSupported()` rejects `masters > 1` unless the distribution declares `multiNode`. That is gated on crossplane-configurations#170 (static addressing + an aggregate ready gate) and #171 (the API endpoint is a single node IP today, so three masters would be HA in name only).
+### Multi-node sizes (0.11.0)
+
+`medium-ha` and `app-ha` carry `masters = 3`. They are buildable through the **rancher** entries only (`rancher-k3s`, `rancher-rke2` declare `multiNode = True`); every other distribution rejects them, because `assertSizeSupported()` refuses `masters > 1` unless the distribution declares `multiNode`. A unit test also asserts that only rancher entries may declare it — the consumer (`xplane-cluster` >= 0.26.0) composes extra nodes on the Rancher custom-node path only, so an ansible entry flipped to `multiNode` would build one VM for a size that asks for three.
+
+What multi-node means there:
+
+- **Every node carries all three roles** (etcd, control-plane, worker), so `k8sServiceHost: 127.0.0.1` in `cniDefaults` holds on each node: each runs its own API server. Worker-only nodes are future work — they need an API address every node can reach first.
+- **Node 1 is the single-node path, unchanged**; it uploads the kubeconfig. Nodes 2..N join with `rancher_upload_kubeconfig: false`.
+- **The API endpoint is node 1's address** ([crossplane-configurations#171](https://github.com/stuttgart-things/crossplane-configurations/issues/171)) — three etcd members, one address in the kubeconfig.
+- **No resize** ([#172](https://github.com/stuttgart-things/crossplane-configurations/issues/172)): the `cluster` XRD makes `size` immutable.
+
+`app-ha` (4 / 12288 / 100) is not called `large-ha` on purpose: a `<t-shirt>-ha` name reads as "that t-shirt, three times", and this is neither `medium` nor `large`.
+
+There is **no three-node reference run yet** — the first order (the LabDA rke2 app cluster) is it; record it in `distributions/rancher_rke2.k`.
 
 ## Distributions
 
@@ -43,7 +57,7 @@ All values are **strings** — both VM XRDs take strings, and emitting ints fail
 | CNI ownership | `self` — the role installs cilium | `platform` — built deliberately without one | `self` — `rke2_cni: none`, the role installs cilium | `platform` — see below |
 | inventory groups | `initial_master_node`, `additional_master_nodes`, `workers` | `all` | `initial_master_node`, `additional_master_nodes`, `workers` | `all` |
 | cluster-name vars | — (`cluster_name` only) | `kind_cluster_name` | — (`cluster_name` only) | — (`cluster_name` only) |
-| multi-node | no | no | no | no |
+| multi-node | no | no | no | **yes** — all-role nodes, Rancher custom-node path (0.11.0) |
 
 Every var in the tables is load-bearing, with the incident history in the comments. Three worth repeating:
 
@@ -156,6 +170,7 @@ cat.getSize("medium")                       # -> Size, fails loudly on unknown
 cat.getDistribution("k3s")                  # -> Distribution, ditto
 cat.platformCniEnabled("k3s")               # -> False
 cat.assertSizeSupported("k3s", "medium-ha") # -> fails: no verified multi-node path
+cat.assertSizeSupported("rancher-rke2", "app-ha") # -> True (all-role nodes)
 cat.kubeconfigStage                         # -> Stage
 cat.sizeNames, cat.distributionNames        # sorted names, for error messages
 ```
@@ -163,7 +178,7 @@ cat.sizeNames, cat.distributionNames        # sorted names, for error messages
 ## Test
 
 ```bash
-kcl test .     # 31 tests, no Crossplane and no cluster required
+kcl test .     # 41 tests, no Crossplane and no cluster required
 ```
 
 The tests are the point: these rules — CNI ownership, the mandatory cilium var, the inventory groups, the separate upload stage — are exactly what should fail in CI rather than on a live cluster.
