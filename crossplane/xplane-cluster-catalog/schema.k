@@ -32,9 +32,11 @@ schema Size:
     """GiB. -> vm.disk on both providers."""
 
     masters: int = 1
-    """Control-plane node count. 1 = singlenode. >1 requires static addressing
-    and an aggregate ready gate (crossplane-configurations#170), so a consumer
-    that cannot do those must reject it rather than silently building one node."""
+    """Control-plane node count. 1 = singlenode. >1 needs a consumer that builds
+    N machines and gates readiness on all of them (crossplane-configurations
+    #170) -- xplane-cluster does that on the Rancher custom-node path, where
+    every node carries all roles. A distribution without `multiNode` rejects it
+    (assertSizeSupported) rather than silently building one node."""
 
     workers: int = 0
     """Worker node count."""

@@ -104,17 +104,48 @@ test_cluster_name_is_never_restated_as_an_alias = lambda {
 
 # --- Multi-node gating -----------------------------------------------------
 test_multi_node_sizes_are_rejected_by_single_node_distributions = lambda {
-    # Both current distributions are single-node only, so every size with
-    # masters > 1 must be unbuildable through them. assertSizeSupported would
-    # fail the render; here we assert the data it decides on.
+    # The ansible-installed distributions are single-node only, so every size
+    # with masters > 1 must be unbuildable through them. assertSizeSupported
+    # would fail the render; here we assert the data it decides on.
     assert not c.getDistribution("k3s").multiNode
     assert not c.getDistribution("kind").multiNode
+    assert not c.getDistribution("rke2").multiNode
     assert c.getSize("medium-ha").masters == 3
 }
 
 test_single_node_sizes_are_supported = lambda {
     assert c.assertSizeSupported("k3s", "medium")
     assert c.assertSizeSupported("kind", "large")
+}
+
+# Multi-node is the RANCHER custom-node path only (crossplane-configurations
+# #170): all nodes carry all roles and join the cluster Rancher created. Both
+# server flavours, since the distinction is the server's machineGlobalConfig,
+# not the node count.
+test_rancher_distributions_accept_multi_node_sizes = lambda {
+    assert c.getDistribution("rancher-rke2").multiNode
+    assert c.getDistribution("rancher-k3s").multiNode
+    assert c.assertSizeSupported("rancher-rke2", "medium-ha")
+    assert c.assertSizeSupported("rancher-k3s", "medium-ha")
+    assert c.assertSizeSupported("rancher-rke2", "app-ha")
+}
+
+# Every multi-node distribution is a rancher one. An ansible entry flipped to
+# multiNode would pass assertSizeSupported, and the consumer would then build
+# ONE VM for a size that asks for three -- xplane-cluster composes extra nodes
+# on the rancher path only.
+test_only_rancher_distributions_are_multi_node = lambda {
+    assert len([n for n, d in c.distributions if d.multiNode and d.provisioner != "rancher"]) == 0
+}
+
+# The LabDA app-cluster shape: 4 vCPU / 12 GiB / 100 GiB, three all-role nodes.
+test_app_ha_size = lambda {
+    _s = c.getSize("app-ha")
+    assert _s.cpu == "4"
+    assert _s.memory == "12288"
+    assert _s.disk == "100"
+    assert _s.masters == 3
+    assert _s.workers == 0
 }
 
 # --- Shared stage ----------------------------------------------------------
@@ -172,7 +203,7 @@ test_rancher_rke2_is_registered = lambda {
     _d = c.getDistribution("rancher-rke2")
     assert _d.provisioner == "rancher"
     assert _d.playbooks == ["sthings.rke.rancher_register"]
-    assert _d.multiNode == False
+    assert _d.multiNode == True
 }
 
 # The admin kubeconfig path is DETECTED, not pinned. A custom node runs the

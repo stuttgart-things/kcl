@@ -23,14 +23,30 @@ sizeTable: {str:s.Size} = {
         memory = "16384"
         disk = "100"
     }
-    # Three control-plane nodes. Gated on crossplane-configurations#170 (static
-    # addressing + aggregate ready gate) AND #171 (the API endpoint is a single
-    # node IP today, so 3 masters would be HA in name only). Present so the
-    # shape is reviewable; a consumer without those must reject masters > 1.
+    # Three control-plane nodes, each etcd + control-plane + worker.
+    #
+    # Buildable since catalog 0.11.0 through the RANCHER custom-node path only
+    # (rancher-k3s, rancher-rke2: multiNode = True) -- xplane-cluster >= 0.26.0
+    # composes one VM per master and joins nodes 2..N after the first one.
+    # Every other distribution still rejects it (assertSizeSupported). Limits
+    # that remain: the API endpoint is the first node's IP
+    # (crossplane-configurations#171), and a size cannot change after create
+    # (#172).
     "medium-ha" = s.Size {
         cpu = "4"
         memory = "8192"
         disk = "64"
+        masters = 3
+    }
+    # The app-cluster shape: three all-role nodes with room for a workload
+    # platform on top (Argo CD AppSets, openebs, observability). NOT called
+    # large-ha: a `<t-shirt>-ha` name reads as "that t-shirt, three times",
+    # and this is neither medium (8192/64) nor large (8/16384). First order:
+    # the LabDA rke2 app cluster (crossplane-configurations#170, #508).
+    "app-ha" = s.Size {
+        cpu = "4"
+        memory = "12288"
+        disk = "100"
         masters = 3
     }
 }

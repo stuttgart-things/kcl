@@ -60,10 +60,26 @@ rancher_rke2: s.Distribution = s.Distribution {
     # enough — unlike deploy_configure_rke, which branches on master groups.
     inventoryGroups = ["all"]
     cniOwnership = "platform"
-    # One node. Multi-node needs per-node role flags, an upload from exactly one
-    # control-plane node, and an API address that is not 127.0.0.1 — decision
-    # 1.2/1.3 in crossplane-configurations#438.
-    multiNode = False
+    # Multi-node since catalog 0.11.0 (crossplane-configurations#170), in the
+    # narrowest shape that answers decision 1.2/1.3 of #438:
+    #
+    #   - EVERY node carries all three roles (etcd, control-plane, worker), so
+    #     the per-node role flags are all true and need no per-node decision.
+    #   - the kubeconfig upload runs on exactly ONE node -- the first, whose
+    #     join is today's single-node join, unchanged. Nodes 2..N join with
+    #     rancher_upload_kubeconfig false (xplane-cluster >= 0.26.0).
+    #   - the API address stays 127.0.0.1 for cilium (cniDefaults below), and
+    #     that holds on every node for the same reason: each one runs its own
+    #     API server.
+    #
+    # Worker-only nodes are future work: they run no API server, so cilium
+    # needs an address every node can reach (a VIP or DNS, #171) first.
+    #
+    # NO MULTI-NODE REFERENCE RUN YET, which this catalog normally asks for
+    # before a flag like this. Opened on the single-node reference runs above
+    # plus the join play's own role flags (all default true), so the first
+    # three-node build (the LabDA app cluster) is that run -- record it here.
+    multiNode = True
     provisioner = "rancher"
     # What the EnvironmentConfig of a matching rancher environment must say.
     serverDistro = "rke2"
@@ -91,9 +107,11 @@ rancher_rke2: s.Distribution = s.Distribution {
     cniDefaults = {
         cilium = {
             kubeProxyReplacement = True
-            # Single node: cilium reaches the API server on the node itself,
-            # and the value survives a DHCP lease change. A multi-node cluster
-            # needs an address every node can reach (VIP or DNS).
+            # Cilium reaches the API server on the node itself, and the value
+            # survives a DHCP lease change. Holds on a multi-node cluster too,
+            # because every node is a control-plane node and runs an API
+            # server. A worker-only node does not: it needs an address every
+            # node can reach (VIP or DNS, crossplane-configurations#171).
             k8sServiceHost = "127.0.0.1"
             k8sServicePort = 6443
         }

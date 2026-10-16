@@ -4,7 +4,7 @@ it with the registration command Rancher publishes, and the join play uploads
 that node's admin kubeconfig to Vault.
 
 The twin of rancher_rke2. Everything is the same — one join stage, the CNI from
-the Platform, one node — EXCEPT `machineGlobalConfig`, whose keys are the
+the Platform, all-role nodes — EXCEPT `machineGlobalConfig`, whose keys are the
 server's, and k3s and rke2 do not share them.
 
 REFERENCE RUN (the rule this catalog keeps: no entry without one):
@@ -46,7 +46,10 @@ rancher_k3s: s.Distribution = s.Distribution {
     }
     inventoryGroups = ["all"]
     cniOwnership = "platform"
-    multiNode = False
+    # Multi-node exactly as rancher_rke2 (see the comment there): all nodes
+    # carry all roles, the first one uploads the kubeconfig, nodes 2..N only
+    # join. k3s servers run an API server each, so 127.0.0.1 holds below.
+    multiNode = True
     provisioner = "rancher"
     # What the EnvironmentConfig of a matching rancher environment must say.
     serverDistro = "k3s"
@@ -74,8 +77,9 @@ rancher_k3s: s.Distribution = s.Distribution {
         disable = ["traefik", "servicelb"]
     }
 
-    # Identical to rancher_rke2: single node, so cilium reaches the API server
-    # on the node itself, and the Cni owns the Gateway API CRDs.
+    # Identical to rancher_rke2: every node is a server and runs an API server,
+    # so cilium reaches it on the node itself, and the Cni owns the Gateway API
+    # CRDs.
     cniDefaults = {
         cilium = {
             kubeProxyReplacement = True
