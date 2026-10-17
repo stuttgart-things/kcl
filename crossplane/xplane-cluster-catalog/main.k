@@ -41,9 +41,20 @@ distributionNames = sorted(distributions)
 sizeNames = sorted(sizes)
 profileNames = sorted(profiles)
 
+# The per-node t-shirts an order should pick from, and the deprecated aliases
+# that still resolve (0.12.0). A form or an XRD description lists tshirtNames.
+tshirtNames = sorted([n for n, z in sizes if not z.aliasOf])
+deprecatedSizeNames = sorted([n for n, z in sizes if z.aliasOf])
+
+# How many all-role nodes an order may ask for: odd, so etcd keeps quorum, and
+# small enough that one first-node API address (#171) is still an honest
+# design. 1 is the default.
+nodeCounts = [1, 3, 5]
+
 _knownDist = ", ".join(distributionNames)
 _knownSize = ", ".join(sizeNames)
 _knownProfile = ", ".join(profileNames)
+_knownMultiNode = ", ".join(sorted([n for n, d in distributions if d.multiNode]))
 
 # Look up by name, failing loudly. KCL does NOT interpolate ${} inside assert
 # messages — it prints the placeholder literally — so concatenate.
@@ -69,6 +80,30 @@ assertServerDistro = lambda name: str, envDistro: str -> bool {
 getSize = lambda name: str -> s.Size {
     assert name in sizes, "unknown size '" + name + "' — known: " + _knownSize
     sizes[name]
+}
+
+# The SHAPE of a cluster: one node's size times `nodes` (0.12.0). Returns a Size
+# whose masters is the node count, so a consumer keeps reading cpu/memory/disk
+# per node and masters as the count -- exactly what it read from the old
+# multi-node sizes, which is what makes `medium-mem` + 3 and `app-ha` render
+# the same.
+#
+# nodes 0 means "the order did not say": a t-shirt then builds one node, and a
+# deprecated alias its own masters. An alias WITH nodes is accepted only when
+# the two agree -- `app-ha` + `nodes: 3` is redundant, `app-ha` + `nodes: 1`
+# is a contradiction, and picking either silently would build a cluster nobody
+# ordered.
+getShape = lambda size: str, nodes: int -> s.Size {
+    _s = getSize(size)
+    assert nodes == 0 or nodes in nodeCounts, "nodes must be 1, 3 or 5 — got " + str(nodes) + " (an even count cannot hold etcd quorum)"
+    assert _s.aliasOf == "" or nodes == 0 or nodes == _s.masters, "size '" + size + "' is a deprecated alias for size '" + _s.aliasOf + "' with nodes " + str(_s.masters) + " — nodes " + str(nodes) + " contradicts it; write size: " + _s.aliasOf + " and nodes: " + str(nodes)
+    s.Size {
+        cpu = _s.cpu
+        memory = _s.memory
+        disk = _s.disk
+        masters = nodes if nodes > 0 else _s.masters
+        workers = _s.workers
+    }
 }
 
 # The kubeconfig-upload stage, shared by every distribution.
@@ -99,14 +134,19 @@ platformCniEnabled = lambda name: str -> bool {
     getDistribution(name).cniOwnership == "platform"
 }
 
-# Reject a size the distribution cannot actually build. A consumer calling this
-# gets a readable error instead of silently provisioning one node when three
-# were asked for.
-assertSizeSupported = lambda distribution: str, size: str -> bool {
+# Reject a shape the distribution cannot actually build. A consumer calling
+# this gets a readable error instead of silently provisioning one node when
+# three were asked for. nodes 0 = not set by the order (see getShape).
+assertShapeSupported = lambda distribution: str, size: str, nodes: int -> bool {
     _d = getDistribution(distribution)
-    _s = getSize(size)
-    assert _s.masters == 1 or _d.multiNode, "distribution '" + distribution + "' has no verified multi-node path in this catalog — size '" + size + "' asks for " + str(_s.masters) + " masters (see crossplane-configurations#170)"
+    _s = getShape(size, nodes)
+    assert _s.masters == 1 or _d.multiNode, "distribution '" + distribution + "' has no verified multi-node path in this catalog — the order asks for " + str(_s.masters) + " nodes (size '" + size + "'); only " + _knownMultiNode + " build more than one (see crossplane-configurations#170)"
     True
+}
+
+# The 0.11.x form: the size alone, as if the order set no `nodes`.
+assertSizeSupported = lambda distribution: str, size: str -> bool {
+    assertShapeSupported(distribution, size, 0)
 }
 
 getProfile = lambda name: str -> s.Profile {

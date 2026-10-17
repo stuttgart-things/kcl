@@ -20,30 +20,42 @@ Here it is `cniOwnership`, and `platformCniEnabled(name)` derives the Platform s
 
 ## Sizes
 
-| size | cpu | memory | disk | masters |
-|---|---|---|---|---|
-| `small` | 2 | 4096 | 40 | 1 |
-| `medium` | 4 | 8192 | 64 | 1 |
-| `large` | 8 | 16384 | 100 | 1 |
-| `medium-ha` | 4 | 8192 | 64 | **3** |
-| `app-ha` | 4 | 12288 | 100 | **3** |
+Since 0.12.0 a `size` is the shape of **one node**. How many nodes a cluster gets is a separate number, the order's `nodes` (1, 3 or 5; default 1), combined through `getShape(size, nodes)`.
 
-Values are a rounding of what the fleet actually runs, not new invention: `small` is the vspherevm XRD default, `large` matches `kind-test1` (sized for a kind cluster plus crossplane, flux and the app catalog on top).
+| size | vCPU | memory (MiB) | disk (GiB) |
+|---|---|---|---|
+| `small` | 2 | 4096 | 40 |
+| `medium` | 4 | 8192 | 64 |
+| `medium-mem` | 4 | 12288 | 100 |
+| `large` | 8 | 16384 | 100 |
+
+Values are a rounding of what the fleet actually runs, not new invention: `small` is the vspherevm XRD default, `large` matches `kind-test1` (sized for a kind cluster plus crossplane, flux and the app catalog on top). `medium-mem` is the per-node shape of the LabDA app cluster: medium's cores, more memory and disk for a workload platform on top.
 
 All values are **strings** — both VM XRDs take strings, and emitting ints fails schema validation on the composed resource. A unit test enforces it.
 
-### Multi-node sizes (0.11.0)
+### Deprecated aliases
 
-`medium-ha` and `app-ha` carry `masters = 3`. They are buildable through the **rancher** entries only (`rancher-k3s`, `rancher-rke2` declare `multiNode = True`); every other distribution rejects them, because `assertSizeSupported()` refuses `masters > 1` unless the distribution declares `multiNode`. A unit test also asserts that only rancher entries may declare it — the consumer (`xplane-cluster` >= 0.26.0) composes extra nodes on the Rancher custom-node path only, so an ansible entry flipped to `multiNode` would build one VM for a size that asks for three.
+| alias | equals | vCPU | memory | disk | nodes |
+|---|---|---|---|---|---|
+| `medium-ha` | `medium` × 3 | 4 | 8192 | 64 | 3 |
+| `app-ha` | `medium-mem` × 3 | 4 | 12288 | 100 | 3 |
+
+Until 0.11.0 a size carried the node count (`masters`) as well. The two multi-node names stay as **deprecated aliases** because `size` is immutable on the `cluster` XRD ([#172](https://github.com/stuttgart-things/crossplane-configurations/issues/172)) and a live order uses `app-ha` (labda-apps-test1). Each alias carries `aliasOf`, and a unit test asserts it is exactly its t-shirt times `masters`, so `size: medium-mem, nodes: 3` resolves to the same shape as `size: app-ha`. New orders write `size` + `nodes`; do not add aliases.
+
+An alias combined with `nodes` is accepted only when the two agree (`app-ha` + `nodes: 3`); `app-ha` + `nodes: 1` fails with a message naming the replacement.
+
+### Node count (`nodes`)
+
+`getShape(size, nodes)` returns a `Size` whose `masters` is the node count (`nodes` 0 = the order did not set it: one node for a t-shirt, the alias's own count for an alias). Allowed counts are `nodeCounts = [1, 3, 5]` — odd, so etcd keeps quorum.
+
+More than one node is buildable through the **rancher** entries only (`rancher-k3s`, `rancher-rke2` declare `multiNode = True`); every other distribution rejects it, because `assertShapeSupported()` refuses `masters > 1` unless the distribution declares `multiNode`. A unit test also asserts that only rancher entries may declare it — the consumer (`xplane-cluster` >= 0.26.0) composes extra nodes on the Rancher custom-node path only, so an ansible entry flipped to `multiNode` would build one VM for an order that asks for three.
 
 What multi-node means there:
 
 - **Every node carries all three roles** (etcd, control-plane, worker), so `k8sServiceHost: 127.0.0.1` in `cniDefaults` holds on each node: each runs its own API server. Worker-only nodes are future work — they need an API address every node can reach first.
 - **Node 1 is the single-node path, unchanged**; it uploads the kubeconfig. Nodes 2..N join with `rancher_upload_kubeconfig: false`.
 - **The API endpoint is node 1's address** ([crossplane-configurations#171](https://github.com/stuttgart-things/crossplane-configurations/issues/171)) — three etcd members, one address in the kubeconfig.
-- **No resize** ([#172](https://github.com/stuttgart-things/crossplane-configurations/issues/172)): the `cluster` XRD makes `size` immutable.
-
-`app-ha` (4 / 12288 / 100) is not called `large-ha` on purpose: a `<t-shirt>-ha` name reads as "that t-shirt, three times", and this is neither `medium` nor `large`.
+- **No resize** ([#172](https://github.com/stuttgart-things/crossplane-configurations/issues/172)): the `cluster` XRD makes `size` and `nodes` immutable.
 
 There is **no three-node reference run yet** — the first order (the LabDA rke2 app cluster) is it; record it in `distributions/rancher_rke2.k`.
 
@@ -166,19 +178,24 @@ URLs, no Vault addresses.
 ```python
 import xplane_cluster_catalog as cat
 
-cat.getSize("medium")                       # -> Size, fails loudly on unknown
-cat.getDistribution("k3s")                  # -> Distribution, ditto
+cat.getSize("medium")                       # -> Size of ONE node, fails loudly on unknown
+cat.getShape("medium-mem", 3)               # -> Size with masters 3 (nodes 0 = not set)
+cat.getShape("app-ha", 1)                   # -> fails: alias contradicts nodes
+cat.getDistribution("k3s")                  # -> Distribution, fails loudly on unknown
 cat.platformCniEnabled("k3s")               # -> False
-cat.assertSizeSupported("k3s", "medium-ha") # -> fails: no verified multi-node path
-cat.assertSizeSupported("rancher-rke2", "app-ha") # -> True (all-role nodes)
+cat.assertShapeSupported("k3s", "medium", 3)            # -> fails: no verified multi-node path
+cat.assertShapeSupported("rancher-rke2", "medium-mem", 3) # -> True (all-role nodes)
+cat.assertSizeSupported("rancher-rke2", "app-ha")       # -> 0.11.x form, = assertShapeSupported(.., 0)
 cat.kubeconfigStage                         # -> Stage
+cat.tshirtNames, cat.deprecatedSizeNames    # per-node sizes / deprecated aliases
+cat.nodeCounts                              # [1, 3, 5]
 cat.sizeNames, cat.distributionNames        # sorted names, for error messages
 ```
 
 ## Test
 
 ```bash
-kcl test .     # 41 tests, no Crossplane and no cluster required
+kcl test .     # 49 tests, no Crossplane and no cluster required
 ```
 
 The tests are the point: these rules — CNI ownership, the mandatory cilium var, the inventory groups, the separate upload stage — are exactly what should fail in CI rather than on a live cluster.

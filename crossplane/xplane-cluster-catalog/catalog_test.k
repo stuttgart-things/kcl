@@ -139,6 +139,7 @@ test_only_rancher_distributions_are_multi_node = lambda {
 }
 
 # The LabDA app-cluster shape: 4 vCPU / 12 GiB / 100 GiB, three all-role nodes.
+# Deprecated since 0.12.0 (medium-mem + nodes 3), kept for the live order.
 test_app_ha_size = lambda {
     _s = c.getSize("app-ha")
     assert _s.cpu == "4"
@@ -146,6 +147,79 @@ test_app_ha_size = lambda {
     assert _s.disk == "100"
     assert _s.masters == 3
     assert _s.workers == 0
+}
+
+# --- size x nodes (0.12.0) --------------------------------------------------
+# A size is ONE node; the count is the order's `nodes`.
+_shape = lambda z: any -> {str:any} {
+    {cpu = z.cpu, memory = z.memory, disk = z.disk, masters = z.masters, workers = z.workers}
+}
+
+test_medium_mem_size = lambda {
+    _s = c.getSize("medium-mem")
+    assert _s.cpu == "4"
+    assert _s.memory == "12288"
+    assert _s.disk == "100"
+    assert _s.masters == 1
+    assert _s.aliasOf == ""
+}
+
+test_tshirts_and_deprecated_names = lambda {
+    assert c.tshirtNames == ["large", "medium", "medium-mem", "small"]
+    assert c.deprecatedSizeNames == ["app-ha", "medium-ha"]
+    assert c.nodeCounts == [1, 3, 5]
+}
+
+# Every t-shirt is one node; the count never hides in a size again.
+test_every_tshirt_is_one_node = lambda {
+    assert len([n for n in c.tshirtNames if c.getSize(n).masters != 1 or c.getSize(n).workers != 0]) == 0
+}
+
+# An alias is EXACTLY its t-shirt times masters: same cpu, memory, disk. This is
+# what lets a live `app-ha` order and a new `medium-mem` + 3 order render the
+# same children.
+test_aliases_are_their_tshirt_times_masters = lambda {
+    assert all n in c.deprecatedSizeNames {
+        c.sizes[n].aliasOf in c.tshirtNames and c.sizes[n].masters > 1 and c.sizes[n].cpu == c.sizes[c.sizes[n].aliasOf].cpu and c.sizes[n].memory == c.sizes[c.sizes[n].aliasOf].memory and c.sizes[n].disk == c.sizes[c.sizes[n].aliasOf].disk
+    }
+    assert c.getSize("medium-ha").aliasOf == "medium"
+    assert c.getSize("app-ha").aliasOf == "medium-mem"
+}
+
+# The required equivalences: (a) medium-mem x 3 == app-ha, (b) medium x 3 ==
+# medium-ha -- with and without a consistent `nodes` on the alias.
+test_shape_equivalence_with_the_aliases = lambda {
+    assert _shape(c.getShape("medium-mem", 3)) == _shape(c.getShape("app-ha", 0))
+    assert _shape(c.getShape("medium-mem", 3)) == _shape(c.getShape("app-ha", 3))
+    assert _shape(c.getShape("medium", 3)) == _shape(c.getShape("medium-ha", 0))
+    assert _shape(c.getShape("medium", 3)) == _shape(c.getShape("medium-ha", 3))
+}
+
+# (c) an order without `nodes` gets exactly what getSize gave in 0.11.0, and
+# `nodes: 1` is the same thing written out.
+test_shape_without_nodes_is_the_size = lambda {
+    assert all n in c.sizeNames {
+        _shape(c.getShape(n, 0)) == _shape(c.getSize(n))
+    }
+    assert all n in c.tshirtNames {
+        _shape(c.getShape(n, 1)) == _shape(c.getSize(n))
+    }
+}
+
+test_shape_nodes_sets_the_count = lambda {
+    _s = c.getShape("large", 5)
+    assert _s.masters == 5
+    assert _s.cpu == "8"
+    assert _s.memory == "16384"
+    assert _s.disk == "100"
+}
+
+test_shape_supported = lambda {
+    assert c.assertShapeSupported("rancher-rke2", "medium-mem", 3)
+    assert c.assertShapeSupported("rancher-k3s", "small", 5)
+    assert c.assertShapeSupported("rancher-rke2", "app-ha", 3)
+    assert c.assertShapeSupported("k3s", "medium", 1)
+    assert c.assertShapeSupported("kind", "large", 0)
 }
 
 # --- Shared stage ----------------------------------------------------------

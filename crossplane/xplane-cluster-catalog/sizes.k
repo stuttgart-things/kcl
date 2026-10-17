@@ -5,6 +5,9 @@
 # nativeproxmoxvm-u26-eva (6/6144/40) rounded to 4/8192, `large` matches
 # nativevspherevm-kind-test1 (8/16384/100), which is sized for a kind cluster
 # plus crossplane + flux + the app catalog on top.
+#
+# A size is the shape of ONE node (catalog 0.12.0). How many nodes a cluster
+# gets is the order's `nodes` -- see getShape in main.k.
 import schema as s
 
 sizeTable: {str:s.Size} = {
@@ -23,30 +26,37 @@ sizeTable: {str:s.Size} = {
         memory = "16384"
         disk = "100"
     }
-    # Three control-plane nodes, each etcd + control-plane + worker.
-    #
-    # Buildable since catalog 0.11.0 through the RANCHER custom-node path only
-    # (rancher-k3s, rancher-rke2: multiNode = True) -- xplane-cluster >= 0.26.0
-    # composes one VM per master and joins nodes 2..N after the first one.
-    # Every other distribution still rejects it (assertSizeSupported). Limits
-    # that remain: the API endpoint is the first node's IP
-    # (crossplane-configurations#171), and a size cannot change after create
-    # (#172).
+    # Between medium and large: medium's cores with half again the memory and
+    # the disk of large -- room for a workload platform on top (Argo CD
+    # AppSets, openebs, observability). The per-node shape of the LabDA app
+    # cluster (crossplane-configurations#170, #508); `nodes: 3` makes it that
+    # cluster. Named after what differs from medium (memory), not after a
+    # node count: a size is ONE node since catalog 0.12.0.
+    "medium-mem" = s.Size {
+        cpu = "4"
+        memory = "12288"
+        disk = "100"
+    }
+    # --- Deprecated aliases (catalog 0.12.0) ----------------------------------
+    # Until 0.11.0 a size carried the node count too. Since 0.12.0 a size is the
+    # shape of ONE node and the count is the order's `nodes` (getShape). These
+    # two stay because `size` is immutable on the cluster XRD (#172) and a live
+    # order uses one (labda-apps-test1, app-ha) -- removing them would fail its
+    # next render. Each is EXACTLY its t-shirt times `masters`, which a test
+    # asserts, so `size: medium-mem, nodes: 3` renders the same children as
+    # `size: app-ha`. Do not add new aliases; write `size` + `nodes`.
     "medium-ha" = s.Size {
         cpu = "4"
         memory = "8192"
         disk = "64"
         masters = 3
+        aliasOf = "medium"
     }
-    # The app-cluster shape: three all-role nodes with room for a workload
-    # platform on top (Argo CD AppSets, openebs, observability). NOT called
-    # large-ha: a `<t-shirt>-ha` name reads as "that t-shirt, three times",
-    # and this is neither medium (8192/64) nor large (8/16384). First order:
-    # the LabDA rke2 app cluster (crossplane-configurations#170, #508).
     "app-ha" = s.Size {
         cpu = "4"
         memory = "12288"
         disk = "100"
         masters = 3
+        aliasOf = "medium-mem"
     }
 }
