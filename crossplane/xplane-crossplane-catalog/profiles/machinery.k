@@ -451,7 +451,20 @@ machinery: s.Profile = {
             #            Knoten etcd+cp+worker), crossplane-configurations#535.
             #            Einzelknoten-Orders rendern byte-identisch. dependsOn:
             #            vspherevm >=v0.10.0, proxmoxvm >=v0.14.0.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.15.0"
+            #   v0.16.0  xplane-cluster 0.27.0 (Katalog 0.12.0): `size` ist EIN
+            #            Knoten (small, medium, medium-mem, large), die Anzahl
+            #            steht in `spec.nodes` (1/3/5, immutable per CEL --
+            #            zwei has() und ein int-Vergleich, konstante Kosten,
+            #            vgl. v0.11.4). medium-ha/app-ha bleiben als deprecated
+            #            Aliase (= medium/medium-mem mit nodes 3) und rendern
+            #            byte-identisch; labda-apps-test1 laeuft auf app-ha.
+            #            Bestehende Goldens und Einzelknoten-Orders
+            #            unveraendert. ANGEHOBENER FLOOR: dependsOn
+            #            rancher-cluster >=v0.12.0 (clusterSpec aus dem
+            #            EnvironmentConfig, crossplane-configurations#536) --
+            #            auf machinery laeuft v0.12.0 bereits, der Resolver
+            #            hat also nichts nachzuziehen.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.0"
             pulls = [
                 "platform"
                 "remote-cluster"
