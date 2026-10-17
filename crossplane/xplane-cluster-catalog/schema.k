@@ -36,10 +36,22 @@ schema Size:
     N machines and gates readiness on all of them (crossplane-configurations
     #170) -- xplane-cluster does that on the Rancher custom-node path, where
     every node carries all roles. A distribution without `multiNode` rejects it
-    (assertSizeSupported) rather than silently building one node."""
+    (assertShapeSupported) rather than silently building one node.
+
+    Since 0.12.0 a size table entry leaves this at 1 -- a size is ONE node, and
+    the count comes from the order's `nodes` through getShape(), which returns
+    a Size with masters = nodes. Only the deprecated aliases (medium-ha,
+    app-ha) still carry 3 in the table."""
 
     workers: int = 0
     """Worker node count."""
+
+    aliasOf: str = ""
+    """Set on a DEPRECATED alias only: the per-node t-shirt this entry is
+    `masters` times. medium-ha = medium x 3, app-ha = medium-mem x 3. Kept so a
+    live order keeps rendering (size is immutable on the XRD, #172); new orders
+    write `size: <t-shirt>` plus `nodes`. getShape() refuses an alias combined
+    with a contradicting `nodes`."""
 
     check:
         int(cpu) > 0, "cpu must be a positive integer string"
@@ -48,6 +60,7 @@ schema Size:
         masters > 0, "masters must be > 0"
         workers >= 0, "workers must be >= 0"
         masters == 1 or masters % 2 == 1, "masters must be odd — an even control-plane count cannot hold etcd quorum"
+        aliasOf == "" or masters > 1, "an alias exists only for the old multi-node names — a one-node alias is just its t-shirt"
 
 schema Distribution:
     """
