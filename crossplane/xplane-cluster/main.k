@@ -58,9 +58,14 @@ _specEff = _spec | ({secretStores = l.dedup((_spec?.secretStores or []) + _appPl
 
 # Fails loudly with the list of known names rather than silently building a
 # default — an unknown size or distribution is a typo, not an intent.
-_size = cat.getSize(_spec?.size or "medium")
+#
+# 0.27.0: `size` is ONE node and `spec.nodes` the count (catalog 0.12.0).
+# _size is the catalog's shape -- per-node cpu/memory/disk with masters = the
+# node count -- so everything below reads it exactly as it read the old
+# multi-node sizes, and `medium-mem` + `nodes: 3` renders what `app-ha` did.
+_size = l.orderShape(_spec)
 _dist = cat.getDistribution(_spec?.distribution or "k3s")
-_supported = cat.assertSizeSupported(_spec?.distribution or "k3s", _spec?.size or "medium")
+_supported = cat.assertShapeSupported(_spec?.distribution or "k3s", _spec?.size or "medium", l.orderNodes(_spec))
 
 # ... and that the entry matches the server the RANCHER environment provisions.
 # The entry is picked here, the server is picked by the RancherCluster's own
@@ -77,7 +82,7 @@ _supported = cat.assertSizeSupported(_spec?.distribution or "k3s", _spec?.size o
 # here" and passes, so this cannot fail a render that used to work.
 _distroOk = cat.assertServerDistro(_spec?.distribution or "k3s", str(_env?.distro or ""))
 
-# Multi-node (0.26.0): the catalog says the distribution CAN take masters > 1;
+# Multi-node (0.26.0): the catalog says the distribution CAN take nodes > 1;
 # this says the order's shape can -- custom nodes, no harvester, no static IP.
 _multiOk = l.assertMultiNode(_spec, _size)
 

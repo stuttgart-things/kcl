@@ -423,9 +423,9 @@ joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret
 }
 
 # --- multi-node: nodes 2..N on the rancher custom-node path (0.26.0) --------
-# A size with masters > 1 (medium-ha, app-ha) builds that many VMs, each one an
-# etcd + control-plane + worker node of the cluster Rancher created
-# (crossplane-configurations#170). Only here: the ansible path installs with
+# An order with nodes > 1 -- or a deprecated alias, medium-ha / app-ha --
+# builds that many VMs, each one an etcd + control-plane + worker node of the
+# cluster Rancher created (crossplane-configurations#170). Only here: the ansible path installs with
 # deploy_configure_rke and stays single-node (its catalog entries reject the
 # size), and a machine pool is sized by Rancher (asserted below).
 #
@@ -456,26 +456,42 @@ joinRun = lambda name: str, ns: str, spec: {str:any}, ip: str, nodeCommandSecret
 # admin kubeconfig, i.e. a running API server -- means node 1 IS the init node,
 # so the kubeconfig node 1 published points at the etcd that bootstrapped.
 
-# The size's masters on the custom-node path, else 1.
+# The order's `nodes` as written; 0 = not set (0.27.0). The catalog decides
+# what unset means: one node for a t-shirt, three for a deprecated alias
+# (medium-ha, app-ha). Kept apart from the size, and not defaulted to 1 here
+# or in the XRD: a default would turn a live `app-ha` order into `app-ha` +
+# `nodes: 1`, which the catalog refuses as a contradiction.
+orderNodes = lambda spec: {str:any} -> int {
+    int(spec?.nodes or 0)
+}
+
+# The order's shape: one node's cpu/memory/disk, masters = the node count.
+# Fails loudly on an unknown size, a count other than 1/3/5 and an alias that
+# contradicts `nodes`.
+orderShape = lambda spec: {str:any} -> any {
+    cat.getShape(spec?.size or "medium", orderNodes(spec))
+}
+
+# The shape's node count on the custom-node path, else 1.
 nodeCount = lambda spec: {str:any}, size: any -> int {
     _masters = (size?.masters or 1) if size else 1
     _masters if (isRancherProvisioner(spec) and not isMachinePool(spec)) else 1
 }
 
-# Fails the render on shapes that would build fewer or broken nodes. Size is
-# immutable on the XRD, so this can only ever refuse a NEW order.
+# Fails the render on shapes that would build fewer or broken nodes. Size and
+# nodes are immutable on the XRD, so this can only ever refuse a NEW order.
 assertMultiNode = lambda spec: {str:any}, size: any -> bool {
     _masters = (size?.masters or 1) if size else 1
     _provider = spec?.provider or "proxmox"
     _ip = (spec?.vm or {})?.ipv4Address or "dhcp"
     # Rancher sizes a machine pool by its own quantity, which is 1 here.
-    assert _masters == 1 or not isMachinePool(spec), "size asks for " + str(_masters) + " masters, but a Rancher machine pool (provider harvester) is sized by Rancher with quantity 1 -- multi-node is the custom-node path only (rancher.infrastructure: generic, provider proxmox or vsphere)"
+    assert _masters == 1 or not isMachinePool(spec), "the order asks for " + str(_masters) + " nodes, but a Rancher machine pool (provider harvester) is sized by Rancher with quantity 1 -- multi-node is the custom-node path only (rancher.infrastructure: generic, provider proxmox or vsphere)"
 
     # HarvesterVM has no spec.ansible.extraEnvSecretName, so an extra node could
     # not read the registration command.
-    assert _masters == 1 or _provider != "harvester", "size asks for " + str(_masters) + " masters, but provider harvester cannot hand an extra node the registration command (HarvesterVM has no ansible.extraEnvSecretName) -- use proxmox or vsphere"
+    assert _masters == 1 or _provider != "harvester", "the order asks for " + str(_masters) + " nodes, but provider harvester cannot hand an extra node the registration command (HarvesterVM has no ansible.extraEnvSecretName) -- use proxmox or vsphere"
     # One static address cannot be three nodes'.
-    assert _masters == 1 or _ip == "dhcp", "size asks for " + str(_masters) + " masters, but vm.ipv4Address pins ONE static address (" + _ip + ") -- every node would get it; leave it unset (dhcp) on a multi-node order (crossplane-configurations#170)"
+    assert _masters == 1 or _ip == "dhcp", "the order asks for " + str(_masters) + " nodes, but vm.ipv4Address pins ONE static address (" + _ip + ") -- every node would get it; leave it unset (dhcp) on a multi-node order (crossplane-configurations#170)"
     True
 }
 
@@ -670,8 +686,8 @@ rancherChild = lambda name: str, ns: str, spec: {str:any}, appArgocd: {str:any} 
 # EnvironmentConfig for those, which is where a lab's Harvester is described
 # once. Writing a default here would override that for every order.
 #
-# One node, like every rancher entry in the catalog (multiNode false): the size
-# check rejects `medium-ha` before this runs.
+# One node: assertMultiNode rejects nodes > 1 (and the deprecated multi-node
+# aliases) on a machine pool before this runs.
 machinePoolHarvester = lambda spec: {str:any}, size: any, nodeIP: str = "", env: {str:any} = {} -> {str:any} {
     _user = (spec?.rancher or {})?.harvester or {}
     _sized = {

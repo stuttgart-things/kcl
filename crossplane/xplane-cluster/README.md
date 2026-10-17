@@ -22,7 +22,7 @@ ClusterStack                                                provisioner: rancher
 ├─ RancherCluster                      {name}-rancher       Rancher creates the cluster
 ├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm            waits for the node command
 ├─ AnsibleRun                          {name}-join          join + kubeconfig -> Vault
-├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm-2 … -vm-N  multi-node sizes only (0.26.0): base OS + join
+├─ NativeProxmoxVM | NativeVsphereVM   {name}-vm-2 … -vm-N  nodes > 1 only (0.26.0): base OS + join
 │                                                           in one run, after {name}-join succeeded
 ├─ ClusterAccess                       {name}-access        -> the ClusterProviderConfigs
 ├─ Platform                            {name}-platform      cni (from the catalog), …
@@ -162,7 +162,7 @@ gone.
 
 ## Multi-node: N all-role nodes on the Rancher custom-node path (0.26.0)
 
-A size with `masters > 1` — `medium-ha` (4/8192/64) or `app-ha` (4/12288/100), catalog 0.11.0 — builds that many VMs, each one **etcd + control-plane + worker** of the cluster Rancher created ([crossplane-configurations#170](https://github.com/stuttgart-things/crossplane-configurations/issues/170)). Only `rancher-k3s` / `rancher-rke2` accept such a size, and only on custom nodes:
+Since 0.27.0 (catalog 0.12.0) the order says it in two fields: `size` is the shape of **one node** (`small`, `medium`, `medium-mem`, `large`) and `nodes` is the count (1, 3 or 5; unset = 1). `nodes > 1` builds that many VMs, each one **etcd + control-plane + worker** of the cluster Rancher created ([crossplane-configurations#170](https://github.com/stuttgart-things/crossplane-configurations/issues/170)). Only `rancher-k3s` / `rancher-rke2` accept it, and only on custom nodes:
 
 | shape | result |
 |---|---|
@@ -172,7 +172,12 @@ A size with `masters > 1` — `medium-ha` (4/8192/64) or `app-ha` (4/12288/100),
 | rancher, `provider: harvester` + `infrastructure: generic` | refused: `HarvesterVM` has no `ansible.extraEnvSecretName` |
 | proxmox with a static `vm.ipv4Address` | refused: one address cannot be three nodes' |
 
-Refusals only ever hit a new order — `size` is immutable on the XRD.
+| `nodes` other than 1, 3, 5 | refused: an even count cannot hold etcd quorum |
+| deprecated alias + a contradicting `nodes` (`app-ha` + `nodes: 1`) | refused, with the replacement named |
+
+Refusals only ever hit a new order — `size` and `nodes` are immutable on the XRD.
+
+**Deprecated aliases.** `medium-ha` (= `medium` × 3) and `app-ha` (= `medium-mem` × 3) are the 0.26.0 spelling, where the size carried the count. They still resolve — `size` is immutable, and `labda-apps-test1` runs on `app-ha` — to exactly the same shape: `l.orderShape()` hands main.k a catalog `Size` with per-node cpu/memory/disk and `masters` = the node count, so `size: medium-mem, nodes: 3` composes byte-identical children to `size: app-ha` (unit tests here, goldens in crossplane-configurations). An alias with a matching `nodes` is accepted. `nodes` has **no XRD default** on purpose: a default would read back as `nodes: 1` on a live `app-ha` order and turn it into a contradiction.
 
 **Node 1 is the single-node path, unchanged:** `{name}-vm`, its base-OS stage, then `{name}-join`, which registers it and uploads the kubeconfig. Every single-node order renders byte-identical to 0.25.1 (checked across the build states of every example XR and the live orders, see the PR).
 
@@ -187,7 +192,7 @@ Refusals only ever hit a new order — `size` is immutable on the XRD.
 
 **Order.** Rancher picks the init node from the nodes that registered. Joining 2..N only after node 1's join succeeded — which waits for node 1's admin kubeconfig, i.e. a running API server — makes node 1 the init node, so the kubeconfig in Vault points at the etcd that bootstrapped.
 
-**Readiness is an aggregate.** `ClusterAccess` and the `Platform` do **not** wait for nodes 2..N — they talk to node 1, and cilium is what lets the other nodes go Ready at all. The **stack** waits: `status.ready` is true only when every extra node's run succeeded, and `status.stage` reads `nodes` while platform and management plane are done but a node is not. `status.stages.nodes` carries `total`, `ready` (node 1 counts with its join), `emitted`, `pending` (who is missing) and `members` (name, ip, joined). No "proceed with what came up": a cluster smaller than its size would look finished.
+**Readiness is an aggregate.** `ClusterAccess` and the `Platform` do **not** wait for nodes 2..N — they talk to node 1, and cilium is what lets the other nodes go Ready at all. The **stack** waits: `status.ready` is true only when every extra node's run succeeded, and `status.stage` reads `nodes` while platform and management plane are done but a node is not. `status.stages.nodes` carries `total`, `ready` (node 1 counts with its join), `emitted`, `pending` (who is missing) and `members` (name, ip, joined). No "proceed with what came up": a cluster smaller than its order would look finished.
 
 **Teardown.** Every extra node gets node 1's guards — it outlives the RancherCluster, the ClusterAccess, the Platform and the ManagementPlane (`rancher-uses-vm-<i>`, `access-uses-vm-<i>`, `platform-uses-vm-<i>`, `mgmt-uses-vm-<i>`). One more reason than node 1 has: two of three etcd members gone and node 1's API server loses quorum, so anything still applied through it hangs. Node 1's Usages keep their labels.
 
@@ -475,7 +480,7 @@ They are applied to **both** ansible stages, deliberately. `upload_kubeconfig_va
 |---|---|
 | `logic.k` | pure resource construction — explicit args in, dict out, unit-tested |
 | `main.k` | wiring: reads `option("params")`, decides which gates are open, patches status |
-| `logic_test.k` | 124 tests, no Crossplane and no cluster required |
+| `logic_test.k` | 156 tests, no Crossplane and no cluster required |
 
 `main.k` is deliberately thin and untested-by-unit: it is exercised by the Configuration's `crossplane render` with synthetic `--observed-resources`, which is the only way to test gate transitions honestly.
 

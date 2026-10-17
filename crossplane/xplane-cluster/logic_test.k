@@ -1976,3 +1976,63 @@ test_extra_node_usage_resolves_its_group = lambda {
     assert _u.spec.of.kind == "NativeVsphereVM"
     assert _u.spec.of.resourceRef.name == "app-1-vm-2"
 }
+
+# --- size x nodes (0.27.0, catalog 0.12.0) ----------------------------------
+# `size` is one node, `nodes` the count. The order in the new notation and the
+# order on the deprecated alias must compose the same children -- the goldens
+# in crossplane-configurations prove it on the full render, these on the
+# pieces that read the shape.
+_haNew = {k: v for k, v in _haOrder if k != "size"} | {size = "medium-mem", nodes = 3}
+_mhaOld = {provider = "proxmox", distribution = "rancher-k3s", size = "medium-ha"}
+_mhaNew = {provider = "proxmox", distribution = "rancher-k3s", size = "medium", nodes = 3}
+
+test_order_nodes_unset_is_zero = lambda {
+    assert l.orderNodes({}) == 0
+    assert l.orderNodes({size = "app-ha"}) == 0
+    assert l.orderNodes({nodes = 3}) == 3
+}
+
+# (c) No `nodes`: exactly the 0.26.0 size, for every size in the catalog.
+test_order_shape_without_nodes_is_the_size = lambda {
+    assert all n in cat.sizeNames {
+        l.orderShape({size = n}).masters == cat.getSize(n).masters and l.orderShape({size = n}).cpu == cat.getSize(n).cpu and l.orderShape({size = n}).memory == cat.getSize(n).memory and l.orderShape({size = n}).disk == cat.getSize(n).disk
+    }
+    # The XRD's default size, when even `size` is missing.
+    assert l.orderShape({}).memory == "8192"
+    assert l.orderShape({}).masters == 1
+}
+
+test_order_shape_takes_the_node_count = lambda {
+    assert l.orderShape(_haNew).masters == 3
+    assert l.orderShape(_haNew).memory == "12288"
+    assert l.orderShape({size = "small", nodes = 5}).masters == 5
+    assert l.nodeCount(_haNew, l.orderShape(_haNew)) == 3
+    assert l.nodeCount(_mhaNew, l.orderShape(_mhaNew)) == 3
+
+    # The ansible path stays single-node (the catalog refuses nodes > 1 there
+    # before nodeCount is ever asked).
+    assert l.nodeCount({provider = "proxmox", distribution = "k3s", nodes = 1}, l.orderShape({nodes = 1})) == 1
+}
+
+# (a) medium-mem x 3 == app-ha, piece by piece: node 1's VM, every extra node,
+# and the multi-node checks.
+test_medium_mem_times_three_composes_like_app_ha = lambda {
+    assert l.vmChild("app-1", "default", _haNew, l.orderShape(_haNew)) == l.vmChild("app-1", "default", _haOrder, l.orderShape(_haOrder))
+    assert l.extraNodeChild("app-1", "default", _haNew, l.orderShape(_haNew), 2, "s") == l.extraNodeChild("app-1", "default", _haOrder, l.orderShape(_haOrder), 2, "s")
+    assert l.extraNodeChild("app-1", "default", _haNew, l.orderShape(_haNew), 3, "s") == l.extraNodeChild("app-1", "default", _haOrder, l.orderShape(_haOrder), 3, "s")
+    assert l.assertMultiNode(_haNew, l.orderShape(_haNew))
+    assert l.extraNodeIndices(l.nodeCount(_haNew, l.orderShape(_haNew))) == l.extraNodeIndices(l.nodeCount(_haOrder, l.orderShape(_haOrder)))
+}
+
+# (b) medium x 3 == medium-ha.
+test_medium_times_three_composes_like_medium_ha = lambda {
+    assert l.vmChild("k", "default", _mhaNew, l.orderShape(_mhaNew)) == l.vmChild("k", "default", _mhaOld, l.orderShape(_mhaOld))
+    assert l.extraNodeChild("k", "default", _mhaNew, l.orderShape(_mhaNew), 2, "s") == l.extraNodeChild("k", "default", _mhaOld, l.orderShape(_mhaOld), 2, "s")
+    assert l.extraNodeIndices(l.nodeCount(_mhaNew, l.orderShape(_mhaNew))) == [2, 3]
+}
+
+# An alias with a CONSISTENT nodes is the alias.
+test_alias_with_matching_nodes_is_the_alias = lambda {
+    _o = _haOrder | {nodes = 3}
+    assert l.extraNodeChild("app-1", "default", _o, l.orderShape(_o), 2, "s") == l.extraNodeChild("app-1", "default", _haOrder, l.orderShape(_haOrder), 2, "s")
+}
