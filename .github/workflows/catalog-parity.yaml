@@ -48,7 +48,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       # No --strict: "behind newest" is a WARNING by design. Pinning is the
       # point of a catalog, and being behind is often correct. What is not
