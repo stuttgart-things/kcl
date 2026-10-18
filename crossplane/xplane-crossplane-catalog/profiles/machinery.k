@@ -464,7 +464,12 @@ machinery: s.Profile = {
             #            EnvironmentConfig, crossplane-configurations#536) --
             #            auf machinery laeuft v0.12.0 bereits, der Resolver
             #            hat also nichts nachzuziehen.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.0"
+            #   v0.16.1  xplane-cluster 0.27.1 (Katalog 0.13.0): neues Profil
+            #            storage-longhorn (Longhorn als Default-Klasse, openebs
+            #            aus, storage-class longhorn fuer observability und
+            #            homerun2). Keine Logik-Aenderung, alle Goldens
+            #            unveraendert; dependsOn unveraendert.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.1"
             pulls = [
                 "platform"
                 "remote-cluster"
