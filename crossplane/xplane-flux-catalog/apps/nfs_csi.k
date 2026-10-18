@@ -7,7 +7,7 @@ import ..schema as s
 # cluster sits in, not about the cluster, so no source can discover them.
 nfsCsi: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/infra/nfs-csi"
-    defaultVersion = "v1.22.2"
+    defaultVersion = "v1.131.0"
     components = [
         s.Component {
             name = "install"
