@@ -385,7 +385,7 @@ test_ansible_distributions_have_no_rancher_fields = lambda {
 
 # --- profiles ---------------------------------------------------------------
 test_profiles_registered = lambda {
-    assert c.profileNames == ["base", "homerun2", "kargo", "network", "observability", "security", "storage-openebs", "tabletennis"]
+    assert c.profileNames == ["base", "homerun2", "kargo", "network", "observability", "security", "storage-longhorn", "storage-openebs", "tabletennis"]
 }
 
 # Every profile turns its platform ON — a profile that only sets "false" labels
@@ -432,13 +432,26 @@ test_storage_openebs_names_its_class = lambda {
     assert _a["observability-platform.stuttgart-things.com/storage-class"] == "openebs-hostpath"
 }
 
+# Longhorn is the default class only with openebs off -- the longhorn AppSet
+# checks both -- and the platforms that ask for a class get longhorn.
+test_storage_longhorn_takes_the_default_from_openebs = lambda {
+    _p = c.getProfile("storage-longhorn")
+    assert _p.labels["storage-platform"] == "true"
+    assert _p.labels["storage-platform/openebs"] == "false"
+    assert "storage-platform/longhorn" not in _p.labels or _p.labels["storage-platform/longhorn"] != "false"
+    assert "storage-platform/longhorn-ui-route" not in _p.labels
+    assert _p.annotations["storage-platform.stuttgart-things.com/longhorn-default-class"] == "true"
+    assert _p.annotations["observability-platform.stuttgart-things.com/storage-class"] == "longhorn"
+    assert _p.annotations["homerun2-platform.stuttgart-things.com/storage-class"] == "longhorn"
+}
+
 # Only the app platforms declare secrets; the infrastructure profiles read
 # nothing an AppSecretProfile describes.
 test_app_profiles_name_their_secret_declarations = lambda {
     assert c.getProfile("homerun2").appSecrets == ["homerun2"]
     assert c.getProfile("tabletennis").appSecrets == ["schmetterpause", "zaehlwerk", "tabletennis"]
     assert c.getProfile("kargo").appSecrets == ["kargo"]
-    assert all n in ["base", "network", "observability", "security", "storage-openebs"] {
+    assert all n in ["base", "network", "observability", "security", "storage-longhorn", "storage-openebs"] {
         c.getProfile(n).appSecrets == []
     }
 }
