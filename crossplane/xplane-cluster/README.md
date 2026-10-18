@@ -235,6 +235,8 @@ stack now treats them differently:
 **Choices** — which app platforms run. `spec.profiles` names catalog profiles
 (`network`, `security`, `storage-openebs`, `observability`, `base`), so a choice
 is a word, not a label set.
+The storage choice is `storage-openebs` or, since 0.27.1 (catalog 0.13.0),
+`storage-longhorn` -- one of the two, never both.
 
 **Facts** — values this stack already knows because it composes them:
 
