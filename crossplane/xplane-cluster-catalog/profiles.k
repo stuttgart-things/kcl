@@ -42,6 +42,30 @@ profileTable: {str:s.Profile} = {
             "homerun2-platform.stuttgart-things.com/storage-class" = "openebs-hostpath"
         }
     }
+    # platforms/storage with Longhorn as the default StorageClass
+    # (stuttgart-things/stuttgart-things#3715, sthings-app). openebs is switched
+    # OFF, not just left beside it: the longhorn AppSet claims the default class
+    # only when `storage-platform/openebs` is "false", so two classes never both
+    # claim it. nfs-csi off for storage-openebs's reason.
+    #
+    # The nodes need iscsid running and iscsi_tcp loaded (ansible
+    # sthings.baseos.longhorn_node as a baseos stage), or every PVC stays
+    # Pending. Left to the order: the replica count (it depends on the node
+    # count; the AppSet defaults to 1) and the UI route (longhorn-ui-route has
+    # no login).
+    "storage-longhorn" = s.Profile {
+        labels = {
+            "storage-platform" = "true"
+            "storage-platform/openebs" = "false"
+            "storage-platform/nfs-csi-install" = "false"
+            "storage-platform/nfs-csi-storageclasses" = "false"
+        }
+        annotations = {
+            "storage-platform.stuttgart-things.com/longhorn-default-class" = "true"
+            "observability-platform.stuttgart-things.com/storage-class" = "longhorn"
+            "homerun2-platform.stuttgart-things.com/storage-class" = "longhorn"
+        }
+    }
     # platforms/observability: kube-prometheus-stack. Its secrets-config gate,
     # secret-store and webhook key are derived by the stack from clusterSecrets
     # and spec.secretStores; alert-webhook-url is environment and stays on the XR.

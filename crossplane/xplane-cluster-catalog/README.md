@@ -146,11 +146,14 @@ Named Argo CD label sets selecting app platforms (decision 6.2 in
 | `network` | `network-platform`; **off:** `cert-manager-vault-pki`, `cilium-gateway-secondary` | — |
 | `security` | `security-platform` | — |
 | `storage-openebs` | `storage-platform`; **off:** `longhorn`, `nfs-csi-install`, `nfs-csi-storageclasses` | `storage-class: openebs-hostpath` for observability and homerun2 |
+| `storage-longhorn` | `storage-platform`; **off:** `openebs`, `nfs-csi-install`, `nfs-csi-storageclasses` | `longhorn-default-class: true`; `storage-class: longhorn` for observability and homerun2. Nodes need `sthings.baseos.longhorn_node`; replica count and UI route stay on the order |
 | `observability` | `observability-platform` | — |
 | `base` | `base-platform` | — |
 | `kargo` | `cicd-platform`; **off:** `argo-rollouts`, `crossplane`, `dapr`, `kro`, `machinery`, `openebs`, `tekton` — Kargo is the one component the umbrella keeps | — · **appSecrets:** `kargo` |
 | `homerun2` | `homerun2-platform` | — · **appSecrets:** `homerun2` |
 | `tabletennis` | `tabletennis-platform`; **on:** `storage-platform/cloudnative-pg` (schmetterpause's database; needs a storage profile for the umbrella) | — · **appSecrets:** `schmetterpause`, `zaehlwerk`, `tabletennis` |
+
+`storage-openebs` and `storage-longhorn` are alternatives, never both: each switches the other's class off, so an order naming both gets no StorageClass at all.
 
 Whether these labels still match what the AppSets select on is checked daily against stuttgart-things/argocd main by [`tests/lint/profile-gates.py`](../../tests/lint/profile-gates.py): a label no AppSet selects on (a gate renamed upstream) fails, and so does an opt-out gate an exclusive profile such as `kargo` leaves on.
 
