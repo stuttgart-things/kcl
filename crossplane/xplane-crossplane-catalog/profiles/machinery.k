@@ -486,7 +486,11 @@ machinery: s.Profile = {
             #            aus, storage-class longhorn fuer observability und
             #            homerun2). Keine Logik-Aenderung, alle Goldens
             #            unveraendert; dependsOn unveraendert.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.1"
+            #   v0.16.2  xplane-cluster 0.27.2 (Katalog 0.14.0): cicd-Profile
+            #            workflows, harbor, zot (stuttgart-things#3798); die
+            #            Storage-Profile tragen zusaetzlich die cicd-
+            #            StorageClass-Annotation. dependsOn unveraendert.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.2"
             pulls = [
                 "platform"
                 "remote-cluster"
