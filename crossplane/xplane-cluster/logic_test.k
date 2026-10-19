@@ -1301,6 +1301,12 @@ _extraAll = {
             }
         }
     })
+    "app-secret-profile-zot" = _asp("zot", {
+        mount = "cicd"
+        entries = [{suffix = "-zot", keys = {
+            admin_password = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+        }}]
+    })
     "app-secret-profile-kargo" = _asp("kargo", {
         mount = "kargo"
         entries = [{suffix = "", keys = {
@@ -1318,8 +1324,9 @@ _appEnv = {
             schmetterpause = ["read-schmetterpause-clusters"]
             observability = ["read-observability-clusters"]
             kargo = ["read-kargo-clusters"]
+            cicd = ["read-cicd-clusters"]
         }
-        mounts = {homerun2 = "homerun2", schmetterpause = "schmetterpause", kargo = "kargo"}
+        mounts = {homerun2 = "homerun2", schmetterpause = "schmetterpause", kargo = "kargo", cicd = "cicd"}
         shared = {
             "git-pat" = {mount = "homerun2", entry = "_git-pat"}
             "object-store-backup" = {mount = "schmetterpause", entry = "_backup"}
@@ -1461,6 +1468,19 @@ test_kargo_profile_derives_what_appset_kargo_reads = lambda {
     assert _a.labels == {"cicd-platform.stuttgart-things.com/secrets-config" = "true"}
     assert _a.annotations["cicd-platform.stuttgart-things.com/kargo-secret-store"] == "vault-kargo"
     assert _a.annotations["cicd-platform.stuttgart-things.com/kargo-secret-key"] == "c9"
+}
+
+# zot's only entry carries a suffix (shared cicd mount, one entry per app per
+# cluster): the key annotation names <cluster>-zot, the entry its
+# VaultSecretSet writes -- not <cluster>, which nobody writes
+# (labda-cicd-test1, 2026-10-19).
+test_suffixed_main_entry_reaches_the_secret_key = lambda {
+    _o = _appOrder | {clusterName = "c9", profiles = ["security", "storage-openebs", "zot"], secretStores = []}
+    _p = _plan(_o)
+    assert [x.path for x in _p.sets[0].secrets] == ["c9-zot"]
+    _a = l.appSecretArgocd(_p)
+    assert _a.annotations["cicd-platform.stuttgart-things.com/zot-secret-store"] == "vault-cicd"
+    assert _a.annotations["cicd-platform.stuttgart-things.com/zot-secret-key"] == "c9-zot"
 }
 
 test_app_secret_facts_reach_the_rancher_cluster = lambda {
