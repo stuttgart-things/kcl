@@ -255,7 +255,7 @@ test_get_rejects_an_unknown_profile = lambda {
 # statt gelesen.
 test_the_profile_can_build_control_planes = lambda {
     _p = c.get("machinery")
-    _cl = [x for x in _p.packages if x.name.endswith("-cluster")][0]
+    _cl = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-cluster"][0]
     _v = [int(n) for n in _cl.package.split(":v")[1].split(".")]
     assert _v[0] > 0 or _v[1] >= 4, "cluster muss >= v0.4.0 sein (spec.managementPlaneEnabled)"
     assert "management-plane" in _cl.pulls
@@ -269,7 +269,7 @@ test_the_profile_can_build_control_planes = lambda {
 # nicht bauen, fuer die er aufgestellt wird (crossplane-configurations#258).
 test_the_profile_can_build_in_labda = lambda {
     _p = c.get("machinery")
-    _cl = [x for x in _p.packages if x.name.endswith("-cluster")][0]
+    _cl = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-cluster"][0]
     _v = [int(n) for n in _cl.package.split(":v")[1].split(".")]
     assert _v[0] > 0 or _v[1] > 6 or (_v[1] == 6 and _v[2] >= 1), "cluster muss >= v0.6.1 sein (vault-labda, harvester)"
 }
@@ -342,6 +342,20 @@ test_machinery_pins_cni_at_the_sticky_gate_fix = lambda {
     _v = [int(n) for n in _cni[0].package.split(":v")[1].split(".")]
     assert _v[0] > 0 or _v[1] > 1 or (_v[1] == 1 and _v[2] >= 5), "cni must be >= v0.1.5 (kcl#319)"
     assert "cni" in c.transitive(_p), "platform still pulls cni; pinning does not change that"
+}
+
+# rancher-cluster is pulled by cluster AND pinned, for the reason cni is: the
+# resolver never raises an installed dependency, and cluster >=v0.16.0 needs
+# rancher-cluster >=v0.12.0 -- below it the cluster revision is unhealthy and
+# crossplane-configs hangs (cicd-machinery-test5, 2026-10-19).
+test_machinery_pins_rancher_cluster_at_the_cluster_floor = lambda {
+    _p = c.get("machinery")
+    _rc = [x for x in _p.packages if x.name == "stuttgart-things-crossplane-configurations-rancher-cluster"]
+    assert len(_rc) == 1, "rancher-cluster must be pinned, not only pulled"
+    assert _rc[0].name == c.derivedName(_rc[0].package), "the resolver's name, or two CRs share one source"
+    _v = [int(n) for n in _rc[0].package.split(":v")[1].split(".")]
+    assert _v[0] > 0 or _v[1] >= 12, "rancher-cluster must be >= v0.12.0 (cluster v0.16.0 dependsOn)"
+    assert "rancher-cluster" in c.transitive(_p), "cluster still pulls rancher-cluster; pinning does not change that"
 }
 
 # The VM configurations carry spec.ansible.inventoryGroups from these versions

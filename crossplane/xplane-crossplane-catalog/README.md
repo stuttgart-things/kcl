@@ -124,6 +124,10 @@ rejects either field on anything but a Provider.
 a dependency once and never raises it, so the fix for
 [kcl#319](https://github.com/stuttgart-things/kcl/issues/319) (an installed CNI
 stays installed, cni v0.1.5) would otherwise reach no management cluster.
+`rancher-cluster` (pulled by `cluster`) is pinned for the same reason: every
+time `cluster` raised its `rancher-cluster` floor, a management cluster with an
+older one kept it and the new `cluster` revision went unhealthy (last:
+cluster v0.16.1 on cicd-machinery-test5, 2026-10-19).
 
 They are recorded in each package's `pulls`, which is documentation rather than
 an exclusion list — with derived names an entry may legitimately be both

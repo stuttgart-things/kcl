@@ -375,6 +375,23 @@ machinery: s.Profile = {
         }
         s.Package {
             kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-rancher-cluster"
+            # PULLED by cluster and pinned here for the same reason as cni:
+            # cluster raised its rancher-cluster floor three times (v0.10.0
+            # >=v0.8.1, v0.12.1 >=v0.10.0, v0.16.0 >=v0.12.0), and each time a
+            # management cluster that already had an older one stayed there --
+            # the new cluster revision goes unhealthy and everything behind the
+            # crossplane-configs Kustomization stops. machinery was patched by
+            # hand on 2026-10-17; cicd-machinery-test5 hung on cluster v0.16.1
+            # until 2026-10-19. From here on Flux raises it.
+            #
+            # v0.12.0: clusterSpec from the EnvironmentConfig
+            # (crossplane-configurations#536), the floor of cluster >=v0.16.0.
+            # Raise it together with cluster's dependsOn, never after.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/rancher-cluster:v0.12.0"
+        }
+        s.Package {
+            kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-cluster"
             # >=v0.4.0 carries spec.managementPlaneEnabled — without it a
             # management cluster built from this profile cannot build further
