@@ -385,7 +385,7 @@ test_ansible_distributions_have_no_rancher_fields = lambda {
 
 # --- profiles ---------------------------------------------------------------
 test_profiles_registered = lambda {
-    assert c.profileNames == ["base", "homerun2", "kargo", "network", "observability", "security", "storage-longhorn", "storage-openebs", "tabletennis"]
+    assert c.profileNames == ["base", "harbor", "homerun2", "kargo", "network", "observability", "security", "storage-longhorn", "storage-openebs", "tabletennis", "workflows", "zot"]
 }
 
 # Every profile turns its platform ON — a profile that only sets "false" labels
@@ -451,6 +451,9 @@ test_app_profiles_name_their_secret_declarations = lambda {
     assert c.getProfile("homerun2").appSecrets == ["homerun2"]
     assert c.getProfile("tabletennis").appSecrets == ["schmetterpause", "zaehlwerk", "tabletennis"]
     assert c.getProfile("kargo").appSecrets == ["kargo"]
+    assert c.getProfile("workflows").appSecrets == ["dapr-workflows"]
+    assert c.getProfile("harbor").appSecrets == ["harbor"]
+    assert c.getProfile("zot").appSecrets == ["zot"]
     assert all n in ["base", "network", "observability", "security", "storage-longhorn", "storage-openebs"] {
         c.getProfile(n).appSecrets == []
     }
@@ -469,4 +472,34 @@ test_tabletennis_brings_the_barman_plugin = lambda {
 
 test_tabletennis_turns_on_cloudnative_pg = lambda {
     assert c.getProfile("tabletennis").labels["storage-platform/cloudnative-pg"] == "true"
+}
+
+# The cicd component profiles set only "true" -- never "false" -- so any two of
+# them (and kargo) combine the same in any order: a "false" in one would undo
+# another's "true" under last-wins merging. What stays off is the order's call.
+test_cicd_component_profiles_only_switch_on = lambda {
+    _false = [n + ": " + k for n in ["workflows", "harbor", "zot"] for k, v in c.getProfile(n).labels if v != "true"]
+    assert len(_false) == 0, "cicd component profiles must only switch on: ${_false}"
+    assert all n in ["workflows", "harbor", "zot"] {
+        c.getProfile(n).labels["cicd-platform"] == "true"
+    }
+}
+
+# The workers need dapr (sidecars, state store) and kro (their trigger RGDs).
+test_workflows_brings_its_runtime = lambda {
+    _l = c.getProfile("workflows").labels
+    assert all k in ["dapr", "kro", "dapr-workflows", "template-execution", "cluster-build-watch"] {
+        _l["cicd-platform/" + k] == "true"
+    }
+}
+
+# harbor and zot are one choice each, never both from one profile.
+test_registries_are_separate_profiles = lambda {
+    assert "cicd-platform/zot" not in c.getProfile("harbor").labels
+    assert "cicd-platform/harbor" not in c.getProfile("zot").labels
+}
+
+test_storage_profiles_name_the_cicd_class = lambda {
+    assert c.getProfile("storage-openebs").annotations["cicd-platform.stuttgart-things.com/storage-class"] == "openebs-hostpath"
+    assert c.getProfile("storage-longhorn").annotations["cicd-platform.stuttgart-things.com/storage-class"] == "longhorn"
 }

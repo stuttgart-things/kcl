@@ -16,7 +16,7 @@ The platform AppSets are OPT-OUT: `<umbrella>: "true"` plus
 cluster that does not carry the key. So a component the profile does not name
 is ON. Two failures follow from that, and both are silent on the cluster:
 
-1. A label no AppSet selects on (ERROR). A profile's "false" for a gate that was
+1. A label no AppSet selects on or reads (ERROR). A profile's "false" for a gate that was
    renamed upstream switches off nothing, and the component it meant is back
    under its new name. Holds for every profile; no intent needed.
 
@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import re
 import subprocess
 import sys
 import tarfile
@@ -119,6 +120,13 @@ def gates(tree: Path) -> tuple[set, dict]:
                             and "/" in key:
                         umbrella, _, comp = key.partition("/")
                         optout.setdefault(umbrella, set()).add(comp)
+        # A label an AppSet READS in its template instead of selecting on -- a
+        # switch inside one Application (cicd-platform/template-execution,
+        # homerun2-platform/<extra>) -- is live too, not a renamed gate. Same
+        # pattern stuttgart-things' check-backstage-templates.py reads.
+        selected |= set(re.findall(
+            r'index (?:\$l|\.metadata\.labels) "([a-z0-9-]+-platform/[a-z0-9-]+)"',
+            f.read_text()))
     return selected, optout
 
 
