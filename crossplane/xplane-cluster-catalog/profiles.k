@@ -40,6 +40,7 @@ profileTable: {str:s.Profile} = {
         annotations = {
             "observability-platform.stuttgart-things.com/storage-class" = "openebs-hostpath"
             "homerun2-platform.stuttgart-things.com/storage-class" = "openebs-hostpath"
+            "cicd-platform.stuttgart-things.com/storage-class" = "openebs-hostpath"
         }
     }
     # platforms/storage with Longhorn as the default StorageClass
@@ -64,6 +65,7 @@ profileTable: {str:s.Profile} = {
             "storage-platform.stuttgart-things.com/longhorn-default-class" = "true"
             "observability-platform.stuttgart-things.com/storage-class" = "longhorn"
             "homerun2-platform.stuttgart-things.com/storage-class" = "longhorn"
+            "cicd-platform.stuttgart-things.com/storage-class" = "longhorn"
         }
     }
     # platforms/observability: kube-prometheus-stack. Its secrets-config gate,
@@ -111,6 +113,40 @@ profileTable: {str:s.Profile} = {
     # homerun2-platform.stuttgart-things.com/secrets-config, which the stack
     # derives once the AppSecretProfile resolves; the storage class comes from a
     # storage profile.
+    # The cicd platform's opt-in components (#3798). Each sets the umbrella and
+    # ITS OWN gates to "true" and nothing to "false": profiles merge last-wins,
+    # so a "false" here would switch off what another profile in the same
+    # order turned on, depending on the order. Which of the umbrella's OPT-OUT
+    # components stay off is the ORDER's to say -- create-cluster-stack writes
+    # every cicd-platform gate explicitly into spec.rancher.argocd.labels,
+    # which wins over every profile. A hand-written order must do the same.
+    workflows = s.Profile {
+        labels = {
+            "cicd-platform" = "true"
+            "cicd-platform/dapr" = "true"
+            "cicd-platform/kro" = "true"
+            "cicd-platform/dapr-workflows" = "true"
+            "cicd-platform/template-execution" = "true"
+            "cicd-platform/cluster-build-watch" = "true"
+        }
+        appSecrets = ["dapr-workflows"]
+    }
+    # harbor and zot are alternatives (one registry per cluster): the form
+    # offers them as one choice.
+    harbor = s.Profile {
+        labels = {
+            "cicd-platform" = "true"
+            "cicd-platform/harbor" = "true"
+        }
+        appSecrets = ["harbor"]
+    }
+    zot = s.Profile {
+        labels = {
+            "cicd-platform" = "true"
+            "cicd-platform/zot" = "true"
+        }
+        appSecrets = ["zot"]
+    }
     homerun2 = s.Profile {
         labels = {"homerun2-platform" = "true"}
         appSecrets = ["homerun2"]

@@ -145,13 +145,18 @@ Named Argo CD label sets selecting app platforms (decision 6.2 in
 |---|---|---|
 | `network` | `network-platform`; **off:** `cert-manager-vault-pki`, `cilium-gateway-secondary` | — |
 | `security` | `security-platform` | — |
-| `storage-openebs` | `storage-platform`; **off:** `longhorn`, `nfs-csi-install`, `nfs-csi-storageclasses` | `storage-class: openebs-hostpath` for observability and homerun2 |
-| `storage-longhorn` | `storage-platform`; **off:** `openebs`, `nfs-csi-install`, `nfs-csi-storageclasses` | `longhorn-default-class: true`; `storage-class: longhorn` for observability and homerun2. Nodes need `sthings.baseos.longhorn_node`; replica count and UI route stay on the order |
+| `storage-openebs` | `storage-platform`; **off:** `longhorn`, `nfs-csi-install`, `nfs-csi-storageclasses` | `storage-class: openebs-hostpath` for observability, homerun2 and cicd |
+| `storage-longhorn` | `storage-platform`; **off:** `openebs`, `nfs-csi-install`, `nfs-csi-storageclasses` | `longhorn-default-class: true`; `storage-class: longhorn` for observability, homerun2 and cicd. Nodes need `sthings.baseos.longhorn_node`; replica count and UI route stay on the order |
 | `observability` | `observability-platform` | — |
 | `base` | `base-platform` | — |
 | `kargo` | `cicd-platform`; **off:** `argo-rollouts`, `crossplane`, `dapr`, `kro`, `machinery`, `openebs`, `tekton` — Kargo is the one component the umbrella keeps | — · **appSecrets:** `kargo` |
+| `workflows` | `cicd-platform`; **on:** `dapr`, `kro`, `dapr-workflows`, `template-execution`, `cluster-build-watch` — the dapr workflow workers (#3796) | — · **appSecrets:** `dapr-workflows` |
+| `harbor` | `cicd-platform`; **on:** `harbor` | — · **appSecrets:** `harbor` |
+| `zot` | `cicd-platform`; **on:** `zot` | — · **appSecrets:** `zot` |
 | `homerun2` | `homerun2-platform` | — · **appSecrets:** `homerun2` |
 | `tabletennis` | `tabletennis-platform`; **on:** `storage-platform/cloudnative-pg` (schmetterpause's database; needs a storage profile for the umbrella) | — · **appSecrets:** `schmetterpause`, `zaehlwerk`, `tabletennis` |
+
+The cicd component profiles (`workflows`, `harbor`, `zot`) only switch ON — never a `"false"`. Profiles merge last-wins, so a `"false"` in one would undo another's `"true"` depending on the order. Which of `cicd-platform`'s opt-out components stay off is the **order's** to state: create-cluster-stack writes every `cicd-platform/*` gate explicitly into `spec.rancher.argocd.labels`, which wins over every profile; a hand-written order must do the same. `harbor` and `zot` are alternatives (one registry per cluster).
 
 `storage-openebs` and `storage-longhorn` are alternatives, never both: each switches the other's class off, so an order naming both gets no StorageClass at all.
 
