@@ -1471,10 +1471,19 @@ appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [st
     _sourcesOf = lambda n: str -> [str] {
         dedup((["app:" + n] if [s for s in _written if s.app == n] else []) + ["shared:" + k.shared for e in (profiles[n]?.entries or []) for _kn, k in e.keys if "shared" in k] + [_sourceKey(r.from.app, r.from?.suffix or "", r.from.key) for _rk, r in (profiles[n]?.reads or {})])
     }
+    # An app's own entry is <cluster><suffix> of its MAIN entry: the one
+    # without a suffix (homerun2, schmetterpause, kargo), or -- when every entry
+    # carries one, as on the shared cicd mount (zot -> -zot, harbor -> -harbor,
+    # dapr-workflows -> -dapr-workflows) -- its first. Without this the
+    # <app>-secret-key annotation named <cluster>, an entry nobody writes.
+    _mainSuffix = lambda app: str -> str {
+        _sfx = [e?.suffix or "" for e in (profiles[app]?.entries or [])]
+        "" if (not _sfx or "" in _sfx) else _sfx[0]
+    }
     _source = lambda key: str -> {str:str} {
         _kind = key.split(":")[0]
         _nm = key[len(_kind) + 1::]
-        {kind = "app", name = _nm, mount = _realMount[_nm], entry = cluster} if _kind == "app" else {kind = "shared", name = _nm, mount = _shared[_nm].mount, entry = _shared[_nm].entry}
+        {kind = "app", name = _nm, mount = _realMount[_nm], entry = cluster + _mainSuffix(_nm)} if _kind == "app" else {kind = "shared", name = _nm, mount = _shared[_nm].mount, entry = _shared[_nm].entry}
     }
     _platforms = {[k for k, v in cat.getProfile(p).labels if k.endswith("-platform") and "/" not in k and v == "true"][0]: {
         stores = dedup([m for a in cat.getProfile(p).appSecrets for m in _readsOf(a)])
