@@ -1471,6 +1471,7 @@ appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [st
     _sourcesOf = lambda n: str -> [str] {
         dedup((["app:" + n] if [s for s in _written if s.app == n] else []) + ["shared:" + k.shared for e in (profiles[n]?.entries or []) for _kn, k in e.keys if "shared" in k] + [_sourceKey(r.from.app, r.from?.suffix or "", r.from.key) for _rk, r in (profiles[n]?.reads or {})])
     }
+
     # An app's own entry is <cluster><suffix> of its MAIN entry: the one
     # without a suffix (homerun2, schmetterpause, kargo), or -- when every entry
     # carries one, as on the shared cicd mount (zot -> -zot, harbor -> -harbor,
