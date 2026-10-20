@@ -1,4 +1,4 @@
 [package]
 name = "xplane-crossplane-catalog"
 edition = "v0.12.3"
-version = "0.26.0"
+version = "0.27.0"

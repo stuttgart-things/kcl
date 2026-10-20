@@ -494,7 +494,12 @@ machinery: s.Profile = {
             #            <app>-secret-key nennt den Haupteintrag mit Suffix
             #            (zot -> <cluster>-zot; vorher fehlte das Suffix und
             #            das ExternalSecret fand nichts). dependsOn unveraendert.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.3"
+            #   v0.16.4  xplane-cluster 0.27.4: Profile unter demselben
+            #            Schirm (kargo, harbor -> cicd-platform) ueberschreiben
+            #            sich nicht mehr gegenseitig die abgeleiteten
+            #            Secret-Annotationen (vorher fehlten kargo-secret-*).
+            #            Goldens und dependsOn unveraendert.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.4"
             pulls = [
                 "platform"
                 "remote-cluster"
