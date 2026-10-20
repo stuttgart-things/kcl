@@ -1363,9 +1363,10 @@ appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [st
     sets      — [{app, mount, secrets}] for the VaultSecretSets, apps with
                 nothing to write left out;
     stores    — real mounts consumers read, in profile order;
-    platforms — umbrella label -> {stores, sources} per catalog profile with
-                appSecrets; sources are the owners (app or shared name) with
-                mount and entry.
+    platforms — umbrella label -> {stores, sources}, the union over every
+                catalog profile with appSecrets under that umbrella (kargo,
+                harbor, zot, workflows all share cicd-platform); sources are
+                the owners (app or shared name) with mount and entry.
     """
     _ve = env?.vault or {}
     _envName = spec?.environmentConfig or "(unset)"
@@ -1486,10 +1487,19 @@ appSecretPlan = lambda cluster: str, spec: {str:any}, env: {str:any}, names: [st
         _nm = key[len(_kind) + 1::]
         {kind = "app", name = _nm, mount = _realMount[_nm], entry = cluster + _mainSuffix(_nm)} if _kind == "app" else {kind = "shared", name = _nm, mount = _shared[_nm].mount, entry = _shared[_nm].entry}
     }
-    _platforms = {[k for k, v in cat.getProfile(p).labels if k.endswith("-platform") and "/" not in k and v == "true"][0]: {
-        stores = dedup([m for a in cat.getProfile(p).appSecrets for m in _readsOf(a)])
-        sources = [_source(x) for x in dedup([x for a in cat.getProfile(p).appSecrets for x in _sourcesOf(a)])]
-    } for p in (spec?.profiles or []) if cat.getProfile(p).appSecrets}
+
+    # Grouped by umbrella: several profiles with appSecrets can share one
+    # (kargo, harbor, zot, workflows are all cicd-platform). Keyed per profile,
+    # the later one replaced the earlier and e.g. kargo-secret-store/-key
+    # vanished next to harbor; the umbrella reads the union of its profiles.
+    _umbrellaOf = lambda p: str -> str {
+        [k for k, v in cat.getProfile(p).labels if k.endswith("-platform") and "/" not in k and v == "true"][0]
+    }
+    _appsByUmbrella = {_umbrellaOf(p): [a for q in (spec?.profiles or []) if cat.getProfile(q).appSecrets and _umbrellaOf(q) == _umbrellaOf(p) for a in cat.getProfile(q).appSecrets] for p in (spec?.profiles or []) if cat.getProfile(p).appSecrets}
+    _platforms = {u: {
+        stores = dedup([m for a in _apps for m in _readsOf(a)])
+        sources = [_source(x) for x in dedup([x for a in _apps for x in _sourcesOf(a)])]
+    } for u, _apps in _appsByUmbrella}
     {
         sets = [s | {providerConfigName = _writer} for s in _written]
         stores = dedup([m for n in names for m in _readsOf(n)])
