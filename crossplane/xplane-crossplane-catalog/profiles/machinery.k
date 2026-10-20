@@ -490,7 +490,11 @@ machinery: s.Profile = {
             #            workflows, harbor, zot (stuttgart-things#3798); die
             #            Storage-Profile tragen zusaetzlich die cicd-
             #            StorageClass-Annotation. dependsOn unveraendert.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.2"
+            #   v0.16.3  xplane-cluster 0.27.3: die abgeleitete Annotation
+            #            <app>-secret-key nennt den Haupteintrag mit Suffix
+            #            (zot -> <cluster>-zot; vorher fehlte das Suffix und
+            #            das ExternalSecret fand nichts). dependsOn unveraendert.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.3"
             pulls = [
                 "platform"
                 "remote-cluster"
