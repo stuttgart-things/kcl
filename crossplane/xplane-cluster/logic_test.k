@@ -1307,6 +1307,23 @@ _extraAll = {
             admin_password = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
         }}]
     })
+    "app-secret-profile-harbor" = _asp("harbor", {
+        mount = "cicd"
+        entries = [{suffix = "-harbor", keys = {
+            admin_password = {generate = {length = 24, charset = "alphanumeric"}, overridable = True}
+            secret_key = {
+                generate = {length = 16, charset = "alphanumeric"}
+            }
+        }}]
+    })
+    "app-secret-profile-dapr-workflows" = _asp("dapr-workflows", {
+        mount = "cicd"
+        entries = [{suffix = "-dapr-workflows", keys = {
+            redisPassword = {generate = {length = 32, charset = "alphanumeric"}, overridable = True}
+            githubToken = {shared = "git-pat"}
+            backstageToken = {shared = "backstage-token"}
+        }}]
+    })
     "app-secret-profile-kargo" = _asp("kargo", {
         mount = "kargo"
         entries = [{suffix = "", keys = {
@@ -1330,6 +1347,7 @@ _appEnv = {
         shared = {
             "git-pat" = {mount = "homerun2", entry = "_git-pat"}
             "object-store-backup" = {mount = "schmetterpause", entry = "_backup"}
+            "backstage-token" = {mount = "cicd", entry = "_backstage-token"}
         }
         reservedEntries = {schmetterpause = ["schmetterpause", "schmetterpause-backup", "schmetterpause-scoreboard", "zaehlwerk"]}
         writer = {providerConfigName = "vault-cluster-secrets"}
@@ -1480,6 +1498,43 @@ test_suffixed_main_entry_reaches_the_secret_key = lambda {
     assert [x.path for x in _p.sets[0].secrets] == ["c9-zot"]
     _a = l.appSecretArgocd(_p)
     assert _a.annotations["cicd-platform.stuttgart-things.com/zot-secret-store"] == "vault-cicd"
+    assert _a.annotations["cicd-platform.stuttgart-things.com/zot-secret-key"] == "c9-zot"
+}
+
+# kargo, harbor and workflows all live under cicd-platform. Keyed per profile,
+# the last one won: an order [kargo, harbor] got harbor-secret-* but no
+# kargo-secret-*, and kargo-api waited forever for kargo-admin (2026-10-20).
+# The umbrella now carries the union of its profiles. Two stores (vault-kargo,
+# vault-cicd, plus vault-homerun2 for git-pat) means no single `secret-store`.
+test_profiles_sharing_an_umbrella_all_reach_its_annotations = lambda {
+    _o = _appOrder | {clusterName = "c9", profiles = ["security", "storage-openebs", "kargo", "harbor", "workflows"], secretStores = []}
+    _p = _plan(_o)
+    assert [s.app for s in _p.sets] == ["kargo", "harbor", "dapr-workflows"]
+    assert list(_p.platforms) == ["cicd-platform"]
+    assert sorted(_p.platforms["cicd-platform"].stores) == ["cicd", "homerun2", "kargo"]
+    _a = l.appSecretArgocd(_p)
+    assert _a.labels == {"cicd-platform.stuttgart-things.com/secrets-config" = "true"}
+    assert _a.annotations == {
+        "cicd-platform.stuttgart-things.com/kargo-secret-store" = "vault-kargo"
+        "cicd-platform.stuttgart-things.com/kargo-secret-key" = "c9"
+        "cicd-platform.stuttgart-things.com/harbor-secret-store" = "vault-cicd"
+        "cicd-platform.stuttgart-things.com/harbor-secret-key" = "c9-harbor"
+        "cicd-platform.stuttgart-things.com/dapr-workflows-secret-store" = "vault-cicd"
+        "cicd-platform.stuttgart-things.com/dapr-workflows-secret-key" = "c9-dapr-workflows"
+        "cicd-platform.stuttgart-things.com/shared-git-pat-secret-store" = "vault-homerun2"
+        "cicd-platform.stuttgart-things.com/shared-git-pat-secret-key" = "_git-pat"
+        "cicd-platform.stuttgart-things.com/shared-backstage-token-secret-store" = "vault-cicd"
+        "cicd-platform.stuttgart-things.com/shared-backstage-token-secret-key" = "_backstage-token"
+    }
+}
+
+# Same umbrella, same store: harbor + zot both on the cicd mount keep the
+# single `secret-store` the fallback-reading AppSets (github-arc) use.
+test_profiles_sharing_an_umbrella_and_a_store_keep_the_single_store = lambda {
+    _o = _appOrder | {clusterName = "c9", profiles = ["security", "storage-openebs", "harbor", "zot"], secretStores = []}
+    _a = l.appSecretArgocd(_plan(_o))
+    assert _a.annotations["cicd-platform.stuttgart-things.com/secret-store"] == "vault-cicd"
+    assert _a.annotations["cicd-platform.stuttgart-things.com/harbor-secret-key"] == "c9-harbor"
     assert _a.annotations["cicd-platform.stuttgart-things.com/zot-secret-key"] == "c9-zot"
 }
 
