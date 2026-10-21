@@ -4,7 +4,7 @@ import .main as c
 
 test_machinery_is_registered = lambda {
     assert "machinery" in c.catalog
-    assert c.get("machinery").crossplaneVersion == "2.3.3"
+    assert c.get("machinery").crossplaneVersion == "2.4.2"
     assert c.get("machinery").namespace == "crossplane-system"
 }
 

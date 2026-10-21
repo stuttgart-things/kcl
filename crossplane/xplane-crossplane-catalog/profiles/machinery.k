@@ -24,8 +24,16 @@ import ..schema as s
 # pins explicitly are now pinned here too (flux#506). The short-named Functions
 # are the one place this catalog is AHEAD of kind5 (auto-ready, go-templating,
 # environment-configs): the play's helm pins lag, and they follow the catalog.
+#
+# 0.28.0 (2026-10-21, stuttgart-things#3798 wave 3): Crossplane 2.4.2 (the
+# Argo catalog's version, live on labda-cicd-test1), provider-kubernetes
+# 1.4.1, proxmox-bpg 1.22.0, and the function pairs to the newest release
+# INSIDE the dependsOn ranges of crossplane-configurations: auto-ready v0.6.9
+# (<v0.7.0), go-templating v0.12.6 (<v0.13.0), environment-configs v0.7.6
+# (<v0.8.0). Held: function-kcl (cicd-test4 incident, below) and
+# patch-and-transform (v0.10.9 is the newest xpkg.upbound.io has).
 machinery: s.Profile = {
-    crossplaneVersion = "2.3.3"
+    crossplaneVersion = "2.4.2"
     packages = [
         # --- providers ------------------------------------------------------
         # The long name is deliberate: it is what the package manager derives
@@ -100,13 +108,13 @@ machinery: s.Profile = {
             kind = "Provider"
             name = "crossplane-contrib-provider-kubernetes"
             # Nearly every Configuration here pulls it (>=v1.2.0,<v2.0.0).
-            package = "xpkg.crossplane.io/crossplane-contrib/provider-kubernetes:v1.2.1"
+            package = "xpkg.crossplane.io/crossplane-contrib/provider-kubernetes:v1.4.1"
         }
         s.Package {
             kind = "Provider"
             name = "valkiriaaquaticamendi-provider-proxmox-bpg"
             # proxmoxvm pulls it (>=v1.15.0,<v2.0.0).
-            package = "xpkg.upbound.io/valkiriaaquaticamendi/provider-proxmox-bpg:v1.18.0"
+            package = "xpkg.upbound.io/valkiriaaquaticamendi/provider-proxmox-bpg:v1.22.0"
             # Upjet: every reconcile shells out to terraform with the bpg/proxmox
             # binary. At the default 10m poll and nine Proxmox resources on
             # u26-kind3 that was a terraform run about every 70 seconds, the
@@ -238,6 +246,10 @@ machinery: s.Profile = {
             # und der deploy-crossplane-Wait laeuft in den Timeout. Erst
             # anheben, wenn die Configurations die Spanne weiten.
             #
+            # v0.6.9 (2026-10-21, vorher v0.6.8): das Neueste der 0.6er-Linie
+            # auf xpkg.upbound.io (crossplane.io hat schon v0.6.10; der Twin
+            # bleibt bei derselben Version wie hier).
+            #
             # v0.6.8 statt v0.6.5 (zuletzt 2026-09-04): die 0.6er-Linie lebt
             # WEITER, v0.6.6 bis v0.6.8 sind NACH v0.7.0 erschienen und sind
             # reine CVE-Backports (Go 1.25.12, x/net, x/text, grpc). Unter der
@@ -250,7 +262,7 @@ machinery: s.Profile = {
             # this section. On crossplane.io this entry had the SAME SOURCE as
             # the dependsOn-derived twin: one package under two CR names, which
             # is a duplicate Lock node.
-            package = "xpkg.upbound.io/crossplane-contrib/function-auto-ready:v0.6.8"
+            package = "xpkg.upbound.io/crossplane-contrib/function-auto-ready:v0.6.9"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         s.Package {
@@ -260,7 +272,7 @@ machinery: s.Profile = {
             # machinery ran v0.6.9 against this catalog's v0.6.8 (2026-09-22).
             # The <v0.7.0 ceiling above holds here too -- the resolver honours
             # the dependsOn range, but a pin says so.
-            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.8"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.6.9"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
@@ -272,28 +284,28 @@ machinery: s.Profile = {
             #   crossplane-contrib-function-go-templating-064e60c64420 v0.12.5
             # one source, two CR names -- and with it 0/9 providers, 0/10
             # functions and 0/32 configurations Healthy.
-            package = "xpkg.upbound.io/crossplane-contrib/function-go-templating:v0.12.4"
+            package = "xpkg.upbound.io/crossplane-contrib/function-go-templating:v0.12.6"
             apiVersion = "pkg.crossplane.io/v1beta1"
         }
         s.Package {
             kind = "Function"
             name = "crossplane-contrib-function-go-templating"
             # Floated to v0.12.5 on machinery before it was pinned here.
-            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.4"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.6"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
             kind = "Function"
             name = "function-environment-configs"
             # xpkg.upbound.io since 0.8.0, same reason as the two above.
-            package = "xpkg.upbound.io/crossplane-contrib/function-environment-configs:v0.7.4"
+            package = "xpkg.upbound.io/crossplane-contrib/function-environment-configs:v0.7.6"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
             kind = "Function"
             name = "crossplane-contrib-function-environment-configs"
             # Floated to v0.7.5 on machinery before it was pinned here.
-            package = "xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.7.4"
+            package = "xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.7.6"
             apiVersion = "pkg.crossplane.io/v1"
         }
         s.Package {
