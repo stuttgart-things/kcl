@@ -577,7 +577,11 @@ machinery: s.Profile = {
             # (crossplane-configurations#548). provider-proxmox-bpg v1.22.0
             # rebooted two LabUL VMs at once on its first reconcile
             # (stuttgart-things#3962). No new dependsOn floor.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.18.0"
+            #
+            # v0.19.0: the target node goes to initProvider (ignore_changes),
+            # so a VM Proxmox migrated no longer plans as destroy + recreate
+            # (crossplane-configurations#549). No new dependsOn floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.19.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
