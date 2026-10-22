@@ -572,7 +572,12 @@ machinery: s.Profile = {
             #
             # v0.17.0: spec.ansible.inventoryGroups, same as vspherevm v0.13.0
             # above (crossplane-configurations#521). No new dependsOn floor.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.17.0"
+            #
+            # v0.18.0: rebootAfterUpdate false unless the XR asks
+            # (crossplane-configurations#548). provider-proxmox-bpg v1.22.0
+            # rebooted two LabUL VMs at once on its first reconcile
+            # (stuttgart-things#3962). No new dependsOn floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.18.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
