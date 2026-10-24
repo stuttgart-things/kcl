@@ -56,6 +56,13 @@ spec:
       description: "data key inside the kubeconfig Secret"
       hidden: true
 
+    - name: preserveKubeconfigServer
+      title: Preserve Kubeconfig Server URL
+      type: boolean
+      default: true
+      description: "must stay true for kind — there is no networkKey, so data.server can only come from the kubeconfig"
+      hidden: true
+
     - name: argocdNamespace
       title: ArgoCD Namespace
       type: string
