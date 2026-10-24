@@ -1,0 +1,71 @@
+---
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: native-vm-labda-vsphere
+  title: VM (labda-vsphere)
+  description: Create a vSphere VM in LabDA (NativeVsphereVM, EnvironmentConfig vspherevm-labda) — same object the Backstage create-vm template orders.
+  tags:
+    - vm
+    - vsphere
+    - crossplane
+spec:
+  type: xr-native-vm
+  source: oci://ghcr.io/stuttgart-things/xr-native-vm
+  tag: 0.1.0
+  parameters:
+    # Template selector: the lab decides the kind and the EnvironmentConfig
+    - name: templateName
+      title: Lab
+      type: string
+      default: labda-vsphere
+      hidden: true
+
+    - name: name
+      title: VM Name
+      type: string
+      required: true
+      default: demo-vm
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: "VM and hostname; the XR is named <name>-vm"
+
+    - name: size
+      title: Size
+      type: string
+      default: medium
+      enum:
+        - small
+        - medium
+        - large
+        - xlarge
+      description: "small 2/4G/40G, medium 4/8G/64G, large 8/16G/100G, xlarge 16/24G/200G (cpu/ram/disk)"
+
+    - name: ansible
+      title: Run Ansible
+      type: boolean
+      default: true
+      description: "emit the VM's AnsibleRun once it has an IP"
+
+    - name: playbooks
+      title: Playbooks
+      type: string
+      default: sthings.baseos.setup
+      description: "comma-separated, run in order"
+
+    - name: extraEnvSecretName
+      title: Extra Env Secret
+      type: string
+      default: ""
+      description: "Secret in tekton-ci whose keys become env vars in the pipeline pod (e.g. github-runner-token)"
+
+    - name: claimNamespace
+      title: Claim Namespace
+      type: string
+      default: default
+      hidden: true
+
+    - name: managementCluster
+      title: Management Cluster
+      type: string
+      default: machinery
+      hidden: true
