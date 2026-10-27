@@ -10,7 +10,7 @@ import ..schema as s
 # unblocks them.
 externalSecrets: s.App = {
     artifact = "oci://ghcr.io/stuttgart-things/flux/infra/external-secrets"
-    defaultVersion = "v1.158.0"
+    defaultVersion = "v1.200.3"
     components = [
         s.Component {
             name = "install"
