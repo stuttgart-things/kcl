@@ -198,18 +198,19 @@ test_crd_observe_object_carries_the_composition_resource_name = lambda {
     assert _o.metadata.namespace == "default"
 }
 
-# --- provider runtime --------------------------------------------------------
+# --- provider runtime (stuttgart-things#4210) --------------------------------
 _pkg = lambda name: str -> any {
     [p for p in l.packages(_min) if p.name == name][0]
 }
 
 # packages() rebuilds every Package, and until 0.7.0 it dropped env and
-# resources on the floor: a ManagementPlane-built cluster ran its upjet
+# resources on the floor (workspace arrived in 0.8.0): a ManagementPlane-built cluster ran its upjet
 # providers at the image defaults. The fields have to survive the copy.
 test_packages_keep_the_runtime_fields = lambda {
     _b = _pkg("valkiriaaquaticamendi-provider-proxmox-bpg")
     assert _b.env.PROVIDER_POLL == "1h"
     assert _b.resources.limits.cpu == "2"
+    assert _b.workspace.claimName == "valkiriaaquaticamendi-provider-proxmox-bpg-workspace"
 }
 
 # Only providers whose runtime the catalog describes get a config of their
@@ -221,20 +222,62 @@ test_runtime_config_is_owned_only_where_the_catalog_describes_it = lambda {
     assert _owned == ["upbound-provider-opentofu", "valkiriaaquaticamendi-provider-proxmox-bpg"], "unexpected: ${_owned}"
 }
 
-# Same shape as flux's generator: container package-runtime, env sorted,
-# resources as given, selector {} -- and nothing else, so Crossplane's own
-# defaults (securityContext, strategy) stay in force.
-test_runtime_config_carries_env_and_resources_only = lambda {
-    _d = l.runtimeConfigManifest(_pkg("upbound-provider-opentofu"))
+# The workspace: PVC volume, mount over /tmp (upjet's os.TempDir()), and the
+# FULL pod securityContext -- a template securityContext replaces Crossplane's
+# default instead of merging, so fsGroup alone would drop runAsNonRoot.
+test_proxmox_bpg_runtime_config_mounts_its_workspace = lambda {
+    _d = l.runtimeConfigManifest(_pkg("valkiriaaquaticamendi-provider-proxmox-bpg"))
     assert _d.kind == "DeploymentRuntimeConfig"
-    assert _d.metadata.name == "upbound-provider-opentofu"
+    assert _d.metadata.name == "valkiriaaquaticamendi-provider-proxmox-bpg"
     _s = _d.spec.deploymentTemplate.spec
     assert _s.selector == {}, "required by the schema"
+    _pod = _s.template.spec
+    _c = _pod.containers[0]
+    assert _c.name == "package-runtime", "the template is merged onto this container by name"
+    assert _c.volumeMounts == [{name = "workspace", mountPath = "/tmp"}]
+    assert _pod.volumes == [{name = "workspace", persistentVolumeClaim.claimName = "valkiriaaquaticamendi-provider-proxmox-bpg-workspace"}]
+    assert _pod.securityContext == {runAsNonRoot = True, runAsUser = 2000, runAsGroup = 2000, fsGroup = 2000}
+    assert [e.name for e in _c.env] == ["HOME", "PROVIDER_POLL", "PROVIDER_SYNC"], "env sorted, like the flux generator"
+    assert [e.value for e in _c.env if e.name == "HOME"] == ["/tmp"], "HOME on the workspace volume (SSH snippet upload)"
+    assert _c.resources.requests.memory == "256Mi"
+}
+
+# RWO: no surge, so two pods of one revision never share the state. NOT
+# type=Recreate -- Crossplane applies the Deployment as a JSON merge patch,
+# the existing rollingUpdate would survive, and the API server rejects
+# rollingUpdate under Recreate.
+test_workspace_rollout_never_surges = lambda {
+    _s = l.runtimeConfigManifest(_pkg("valkiriaaquaticamendi-provider-proxmox-bpg")).spec.deploymentTemplate.spec
+    assert _s.strategy.type == "RollingUpdate"
+    assert _s.strategy.rollingUpdate.maxSurge == 0
+    assert _s.strategy.rollingUpdate.maxUnavailable == 1
+}
+
+# A provider without a workspace gets env/resources only -- no securityContext,
+# no volume, no strategy. Crossplane's defaults stay in force.
+test_runtime_config_without_workspace_stays_minimal = lambda {
+    _s = l.runtimeConfigManifest(_pkg("upbound-provider-opentofu")).spec.deploymentTemplate.spec
     assert "strategy" not in _s
     _pod = _s.template.spec
     assert "securityContext" not in _pod
-    _c = _pod.containers[0]
-    assert _c.name == "package-runtime", "the template is merged onto this container by name"
-    assert [e.name for e in _c.env] == ["CROSSPLANE_OPENTOFU_PROVIDER_POLL", "CROSSPLANE_OPENTOFU_PROVIDER_SYNC"]
-    assert _c.resources.requests.memory == "256Mi"
+    assert "volumes" not in _pod
+    assert "volumeMounts" not in _pod.containers[0]
+    assert _pod.containers[0].env[0].name == "CROSSPLANE_OPENTOFU_PROVIDER_POLL"
+}
+
+test_workspace_claim_uses_the_default_storage_class = lambda {
+    _c = l.workspaceClaimManifest(_pkg("valkiriaaquaticamendi-provider-proxmox-bpg"), "crossplane-system")
+    assert _c.kind == "PersistentVolumeClaim"
+    assert _c.metadata == {name = "valkiriaaquaticamendi-provider-proxmox-bpg-workspace", namespace = "crossplane-system"}
+    assert _c.spec.accessModes == ["ReadWriteOnce"]
+    assert _c.spec.resources.requests.storage == "1Gi"
+    assert "storageClassName" not in _c.spec, "omitted = the cluster default"
+}
+
+# The claim holds terraform state for live VMs. Deleting it with its Object is
+# the orphaned-VM failure it exists to prevent.
+test_workspace_claim_is_never_deleted_by_its_object = lambda {
+    assert "Delete" not in l.workspaceManagementPolicies
+    assert "*" not in l.workspaceManagementPolicies
+    assert "Create" in l.workspaceManagementPolicies
 }
