@@ -23,7 +23,7 @@ test_profile_defaults_to_machinery = lambda {
 # The catalog carries the fleet's version; an XR may sit behind it. A cluster
 # mid-incident must be able to stay on an older core while the catalog moves.
 test_crossplane_version_can_be_overridden = lambda {
-    assert l.crossplaneVersion(_min) == "2.3.3"
+    assert l.crossplaneVersion(_min) == "2.4.2"
     assert l.crossplaneVersion({clusterName = "c", crossplaneVersion = "2.2.1"}) == "2.2.1"
 }
 
@@ -196,4 +196,45 @@ test_crd_observe_object_carries_the_composition_resource_name = lambda {
     _o = l.crdObserveObject("x-crd-helm", "default", "c.helm.m.crossplane.io", "ziel")
     assert _o.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "x-crd-helm"
     assert _o.metadata.namespace == "default"
+}
+
+# --- provider runtime --------------------------------------------------------
+_pkg = lambda name: str -> any {
+    [p for p in l.packages(_min) if p.name == name][0]
+}
+
+# packages() rebuilds every Package, and until 0.7.0 it dropped env and
+# resources on the floor: a ManagementPlane-built cluster ran its upjet
+# providers at the image defaults. The fields have to survive the copy.
+test_packages_keep_the_runtime_fields = lambda {
+    _b = _pkg("valkiriaaquaticamendi-provider-proxmox-bpg")
+    assert _b.env.PROVIDER_POLL == "1h"
+    assert _b.resources.limits.cpu == "2"
+}
+
+# Only providers whose runtime the catalog describes get a config of their
+# own. A provider with an EXTERNAL runtimeConfig is not one of them, and it is
+# not referenced either: nothing on a ManagementPlane cluster is known to ship
+# it, and a Provider pointed at a missing config does not start.
+test_runtime_config_is_owned_only_where_the_catalog_describes_it = lambda {
+    _owned = sorted([p.name for p in l.packages(_min) if l.ownsRuntimeConfig(p)])
+    assert _owned == ["upbound-provider-opentofu", "valkiriaaquaticamendi-provider-proxmox-bpg"], "unexpected: ${_owned}"
+}
+
+# Same shape as flux's generator: container package-runtime, env sorted,
+# resources as given, selector {} -- and nothing else, so Crossplane's own
+# defaults (securityContext, strategy) stay in force.
+test_runtime_config_carries_env_and_resources_only = lambda {
+    _d = l.runtimeConfigManifest(_pkg("upbound-provider-opentofu"))
+    assert _d.kind == "DeploymentRuntimeConfig"
+    assert _d.metadata.name == "upbound-provider-opentofu"
+    _s = _d.spec.deploymentTemplate.spec
+    assert _s.selector == {}, "required by the schema"
+    assert "strategy" not in _s
+    _pod = _s.template.spec
+    assert "securityContext" not in _pod
+    _c = _pod.containers[0]
+    assert _c.name == "package-runtime", "the template is merged onto this container by name"
+    assert [e.name for e in _c.env] == ["CROSSPLANE_OPENTOFU_PROVIDER_POLL", "CROSSPLANE_OPENTOFU_PROVIDER_SYNC"]
+    assert _c.resources.requests.memory == "256Mi"
 }

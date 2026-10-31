@@ -58,6 +58,8 @@ packages = lambda spec: {str:} -> [cs.Package] {
         pulls = p.pulls
         providerCrd = p.providerCrd
         clusterRole = p.clusterRole
+        env = p.env
+        resources = p.resources
     } for p in profile(spec).packages]
 }
 
@@ -74,6 +76,41 @@ unknownOverrides = lambda spec: {str:} -> [str] {
 # everything else is v1.
 packageApiVersion = lambda p: cs.Package -> str {
     p.apiVersion or "pkg.crossplane.io/v1"
+}
+
+# --- provider runtime --------------------------------------------------------
+# A Provider the catalog gives env or resources runs with a
+# DeploymentRuntimeConfig named like itself, plus a runtimeConfigRef to it.
+# Shape-identical to stuttgart-things/flux hack/gen-crossplane-profile.py, so a
+# management cluster built by Crossplane and one built by Flux are the same.
+#
+# The catalog's `runtimeConfig` (a DRC something ELSE ships) is NOT referenced
+# here: on a ManagementPlane-built cluster nobody is known to ship
+# provider-kubeconfig / provider-minio, and a Provider pointed at a missing
+# config does not start. That has always been so here, and stays so.
+ownsRuntimeConfig = lambda p: cs.Package -> bool {
+    p.kind == "Provider" and bool(p?.env or p?.resources)
+}
+
+runtimeConfigManifest = lambda p: cs.Package -> {str:} {
+    _env = p?.env or {}
+    _container = {
+        name = "package-runtime"
+        if _env:
+            env = [{name = k, value = _env[k]} for k in sorted(_env)]
+        if p?.resources:
+            resources = p.resources
+    }
+    {
+        apiVersion = "pkg.crossplane.io/v1beta1"
+        kind = "DeploymentRuntimeConfig"
+        metadata.name = p.name
+        spec.deploymentTemplate.spec = {
+            # Required by the schema; Crossplane sets the real selector.
+            selector = {}
+            template.spec.containers = [_container]
+        }
+    }
 }
 
 # --- gates -----------------------------------------------------------------
