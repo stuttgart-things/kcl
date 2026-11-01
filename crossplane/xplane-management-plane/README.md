@@ -12,17 +12,29 @@ packages and provider configs that let it build other clusters.
 ```
 
 plus, with the packages, one `DeploymentRuntimeConfig` Object per Provider the
-catalog gives `env` or `resources`.
+catalog gives `env`, `resources` or a `workspace`, and one
+`PersistentVolumeClaim` Object per `workspace`.
 
 ## Provider runtime
 
 Until 0.7.0 `packages()` rebuilt each catalog entry without `env` and
 `resources`, so a ManagementPlane-built cluster ran its upjet providers at the
-image defaults — the load the catalog's tuning exists to prevent. Now a
-Provider with either gets a `DeploymentRuntimeConfig` named like itself and a
-`runtimeConfigRef` to it, shape-identical to what stuttgart-things/flux
-`hack/gen-crossplane-profile.py` renders, so the two build paths give the same
-cluster.
+image defaults — the load the catalog's tuning exists to prevent. Since 0.7.0
+(and `workspace` since 0.8.0, catalog 0.31.0) a Provider with any of `env`,
+`resources`, `workspace` gets a
+`DeploymentRuntimeConfig` named like itself and a `runtimeConfigRef` to it,
+shape-identical to what stuttgart-things/flux `hack/gen-crossplane-profile.py`
+renders, so the two build paths give the same cluster.
+
+`workspace` (proxmox-bpg, stuttgart-things#4210) adds a PVC in the target
+namespace, mounted at `/tmp` — upjet keeps one terraform workspace per managed
+resource there, and losing it during a delete drops the finalizer without
+destroying the VM. The DRC then also carries the full pod `securityContext`
+(a template one REPLACES Crossplane's default rather than merging, so
+`runAsNonRoot` / `runAsUser` / `runAsGroup` are restated next to `fsGroup`) and a
+RollingUpdate with `maxSurge: 0`. The PVC's Object has no `Delete` management
+policy: deleting the claim with its Object would be the very state loss it
+prevents.
 
 The catalog's `runtimeConfig` (a config something else ships) is still not
 referenced: nothing on a ManagementPlane cluster is known to ship

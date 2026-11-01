@@ -161,12 +161,16 @@ _packageObject = lambda p -> any {
 }
 
 # --- 3) in-cluster provider configs ----------------------------------------
-# A provider's own DeploymentRuntimeConfig. Emitted with the packages (same
-# gate): the Provider retries until its config exists.
+# A provider's own DeploymentRuntimeConfig, and its workspace claim. Emitted
+# with the packages (same gate): the Provider retries until its config exists.
 _runtimeProviders = [p for p in _packages if l.ownsRuntimeConfig(p)]
+_workspaceProviders = [p for p in _runtimeProviders if p?.workspace]
 
 _drcName = lambda p -> str {
     "{}-drc-{}".format(_name, p.name)
+}
+_pvcName = lambda p -> str {
+    "{}-pvc-{}".format(_name, p.name)
 }
 
 _runtimeConfigObject = lambda p -> any {
@@ -183,6 +187,28 @@ _runtimeConfigObject = lambda p -> any {
         }
         spec = {
             forProvider.manifest = l.runtimeConfigManifest(p)
+            providerConfigRef = {
+                name = _k8sPcr
+                kind = "ClusterProviderConfig"
+            }
+        }
+    }
+}
+
+_workspaceClaimObject = lambda p -> any {
+    {
+        apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+        kind = "Object"
+        metadata = {
+            name = _pvcName(p)
+            namespace = _xrNs
+            annotations = {
+                "krm.kcl.dev/composition-resource-name" = _pvcName(p)
+            }
+        }
+        spec = {
+            managementPolicies = l.workspaceManagementPolicies
+            forProvider.manifest = l.workspaceClaimManifest(p, _ns)
             providerConfigRef = {
                 name = _k8sPcr
                 kind = "ClusterProviderConfig"
@@ -302,4 +328,4 @@ _status = {
     }
 }
 
-items = [_core] + ([_rbac] if l.clusterAdminEnabled(_spec) else []) + ([_packageObject(p) for p in _packages] if _pkgOpen else []) + ([_runtimeConfigObject(p) for p in _runtimeProviders] if _pkgOpen else []) + ([_crdObserveObject(c) for c in _crds] if _pkgOpen else []) + ([_providerConfigObject(i, pc) for i, pc in _profile.providerConfigs] if _pcOpen else []) + [_status]
+items = [_core] + ([_rbac] if l.clusterAdminEnabled(_spec) else []) + ([_packageObject(p) for p in _packages] if _pkgOpen else []) + ([_runtimeConfigObject(p) for p in _runtimeProviders] if _pkgOpen else []) + ([_workspaceClaimObject(p) for p in _workspaceProviders] if _pkgOpen else []) + ([_crdObserveObject(c) for c in _crds] if _pkgOpen else []) + ([_providerConfigObject(i, pc) for i, pc in _profile.providerConfigs] if _pcOpen else []) + [_status]

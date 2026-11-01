@@ -60,6 +60,7 @@ packages = lambda spec: {str:} -> [cs.Package] {
         clusterRole = p.clusterRole
         env = p.env
         resources = p.resources
+        workspace = p.workspace
     } for p in profile(spec).packages]
 }
 
@@ -79,7 +80,7 @@ packageApiVersion = lambda p: cs.Package -> str {
 }
 
 # --- provider runtime --------------------------------------------------------
-# A Provider the catalog gives env or resources runs with a
+# A Provider the catalog gives env, resources or a workspace runs with a
 # DeploymentRuntimeConfig named like itself, plus a runtimeConfigRef to it.
 # Shape-identical to stuttgart-things/flux hack/gen-crossplane-profile.py, so a
 # management cluster built by Crossplane and one built by Flux are the same.
@@ -89,17 +90,39 @@ packageApiVersion = lambda p: cs.Package -> str {
 # provider-kubeconfig / provider-minio, and a Provider pointed at a missing
 # config does not start. That has always been so here, and stays so.
 ownsRuntimeConfig = lambda p: cs.Package -> bool {
-    p.kind == "Provider" and bool(p?.env or p?.resources)
+    p.kind == "Provider" and bool(p?.env or p?.resources or p?.workspace)
+}
+
+# The pod securityContext a workspace needs. Rendering one REPLACES
+# Crossplane's default (runAsNonRoot, runAsUser/Group 2000) instead of merging
+# with it, so all of it is restated next to fsGroup.
+workspaceSecurityContext = lambda w -> {str:} {
+    {
+        runAsNonRoot = True
+        runAsUser = 2000
+        runAsGroup = 2000
+        fsGroup = w.fsGroup
+    }
 }
 
 runtimeConfigManifest = lambda p: cs.Package -> {str:} {
     _env = p?.env or {}
+    _w = p?.workspace
     _container = {
         name = "package-runtime"
         if _env:
             env = [{name = k, value = _env[k]} for k in sorted(_env)]
         if p?.resources:
             resources = p.resources
+        if _w:
+            volumeMounts = [{name = "workspace", mountPath = _w.mountPath}]
+    }
+    _podSpec = {
+        if _w:
+            securityContext = workspaceSecurityContext(_w)
+        containers = [_container]
+        if _w:
+            volumes = [{name = "workspace", persistentVolumeClaim.claimName = _w.claimName}]
     }
     {
         apiVersion = "pkg.crossplane.io/v1beta1"
@@ -108,10 +131,41 @@ runtimeConfigManifest = lambda p: cs.Package -> {str:} {
         spec.deploymentTemplate.spec = {
             # Required by the schema; Crossplane sets the real selector.
             selector = {}
-            template.spec.containers = [_container]
+            # ReadWriteOnce: never two pods of one revision on the volume. A
+            # RollingUpdate with no surge is a recreate that a JSON merge patch
+            # can still apply to an existing Deployment -- switching `type` to
+            # Recreate would leave its rollingUpdate behind and be rejected.
+            if _w:
+                strategy = {
+                    type = "RollingUpdate"
+                    rollingUpdate = {maxSurge = 0, maxUnavailable = 1}
+                }
+            template.spec = _podSpec
         }
     }
 }
+
+workspaceClaimManifest = lambda p: cs.Package, ns: str -> {str:} {
+    _w = p.workspace
+    {
+        apiVersion = "v1"
+        kind = "PersistentVolumeClaim"
+        metadata = {
+            name = _w.claimName
+            namespace = ns
+        }
+        spec = {
+            accessModes = ["ReadWriteOnce"]
+            if _w?.storageClassName:
+                storageClassName = _w.storageClassName
+            resources.requests.storage = _w.size
+        }
+    }
+}
+
+# The claim holds terraform state for live infrastructure. Never deleted with
+# the Object: losing it is exactly the orphaned-VM failure it exists to prevent.
+workspaceManagementPolicies = ["Observe", "Create", "Update", "LateInitialize"]
 
 # --- gates -----------------------------------------------------------------
 # The order is forced by CRDs, not by preference: the pkg.crossplane.io CRDs
