@@ -11,6 +11,24 @@ packages and provider configs that let it build other clusters.
 3. kubernetes.m.crossplane.io Object  one per in-cluster ProviderConfig
 ```
 
+plus, with the packages, one `DeploymentRuntimeConfig` Object per Provider the
+catalog gives `env` or `resources`.
+
+## Provider runtime
+
+Until 0.7.0 `packages()` rebuilt each catalog entry without `env` and
+`resources`, so a ManagementPlane-built cluster ran its upjet providers at the
+image defaults — the load the catalog's tuning exists to prevent. Now a
+Provider with either gets a `DeploymentRuntimeConfig` named like itself and a
+`runtimeConfigRef` to it, shape-identical to what stuttgart-things/flux
+`hack/gen-crossplane-profile.py` renders, so the two build paths give the same
+cluster.
+
+The catalog's `runtimeConfig` (a config something else ships) is still not
+referenced: nothing on a ManagementPlane cluster is known to ship
+`provider-kubeconfig` or `provider-minio`, and a Provider pointed at a missing
+config does not start.
+
 ## What it installs is not in the XR
 
 The package set comes from
