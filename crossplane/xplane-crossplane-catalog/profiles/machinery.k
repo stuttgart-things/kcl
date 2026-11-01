@@ -32,6 +32,10 @@ import ..schema as s
 # (<v0.7.0), go-templating v0.12.6 (<v0.13.0), environment-configs v0.7.6
 # (<v0.8.0). Held: function-kcl (cicd-test4 incident, below) and
 # patch-and-transform (v0.10.9 is the newest xpkg.upbound.io has).
+#
+# 0.31.0 (2026-10-31, stuttgart-things#4210): proxmox-bpg gets a persistent
+# workspace -- a PVC over /tmp -- so its per-MR terraform state survives a pod
+# restart. No package version moves.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -123,10 +127,33 @@ machinery: s.Profile = {
             env = {
                 PROVIDER_POLL = "1h"
                 PROVIDER_SYNC = "6h"
+                # A writable HOME, on the workspace volume. bpg uploads cloud-init
+                # snippets over SSH, and the SSH client wants $HOME/.ssh; the
+                # image's HOME is /, unwritable by UID 2000 ("mkdir /.ssh:
+                # permission denied"). Safe for terraform: the image points it
+                # at its CLI config with TF_CLI_CONFIG_FILE=/terraform/.terraformrc,
+                # not ~/.terraformrc, so the filesystem mirror does not move.
+                # Replaces the proxmoxvm capability chart's provider-proxmox-bpg
+                # DRC, which nothing references since the catalog owns the
+                # runtimeConfigRef.
+                HOME = "/tmp"
             }
             resources = {
                 requests = {cpu = "100m", memory = "256Mi"}
                 limits = {cpu = "2", memory = "2Gi"}
+            }
+            # CLI-based upjet: one terraform workspace per MR under /tmp. On the
+            # container's writable layer a restart during a delete lets upjet
+            # drop the finalizer without destroying the VM (stuttgart-things#4210,
+            # crossplane/upjet#803). The PVC keeps /tmp across restarts.
+            #
+            # s.Workspace, NOT a bare dict: kcl test here passes either way, but
+            # a CONSUMER (xplane-management-plane, flux's generator) evaluating
+            # the dict form fails with "expect xplane_crossplane_catalog.Workspace,
+            # got dict" -- the implicit conversion resolves the type against the
+            # module root instead of schema.k.
+            workspace = s.Workspace {
+                claimName = "valkiriaaquaticamendi-provider-proxmox-bpg-workspace"
             }
         }
         s.Package {
