@@ -113,6 +113,36 @@ terraform per managed resource per poll, which held u26-kind3 at load 8 and cost
 ~3950 control-plane restarts in 39 days. `env` values are strings, and the schema
 rejects either field on anything but a Provider.
 
+### Provider runtime: `workspace`
+
+A Provider may also carry `workspace` — a PersistentVolumeClaim (`claimName`,
+`size` default `1Gi`, optional `storageClassName`, default the cluster's)
+mounted at `mountPath` (default `/tmp`). Consumers render the PVC in the
+provider's namespace and add the volume, the mount and a pod `securityContext`
+(`fsGroup`, default 2000, plus Crossplane's own `runAsNonRoot` / `runAsUser` /
+`runAsGroup` 2000 — a template securityContext replaces Crossplane's default
+instead of merging) to the same `DeploymentRuntimeConfig` as `env` and
+`resources`. The DRC also gets RollingUpdate with `maxSurge: 0` so two
+pods never share the volume during a rollout.
+
+`valkiriaaquaticamendi-provider-proxmox-bpg` carries one. It is a CLI-based
+upjet provider: one Terraform workspace per managed resource under
+`/tmp/<MR uid>/`, on the container's writable layer. A restart throws the state
+away, and for a resource that is being DELETED upjet does not rebuild it —
+destroy runs against an empty state, succeeds, and the finalizer goes while
+the VM keeps running
+([stuttgart-things#4210](https://github.com/stuttgart-things/stuttgart-things/issues/4210),
+[crossplane/upjet#803](https://github.com/crossplane/upjet/issues/803)).
+`claimName` is explicit and must never change: a renamed claim is a new, empty
+volume. Not for `provider-vault` (no-fork upjet, state rebuilt from the MR) or
+`provider-opentofu` (kubernetes state backend). `workspace` and `runtimeConfig`
+are mutually exclusive.
+
+proxmox-bpg also carries `env.HOME=/tmp`, on that volume: its SSH client (cloud-init
+snippet upload) needs a writable `$HOME/.ssh`, and the image's HOME is `/`.
+Terraform is unaffected — the image sets `TF_CLI_CONFIG_FILE=/terraform/.terraformrc`,
+so its provider mirror is not looked up under `~`.
+
 ## Absences that are deliberate
 
 | not listed | why |
@@ -152,6 +182,7 @@ returns the whole set: the honest answer to what is actually on the cluster.
 - `provider-kubernetes` is pinned under the derived name, never the short one
 - pulled providers are pinned on exactly the registry their `dependsOn` names
 - opentofu and proxmox-bpg carry the poll/sync tuning
+- proxmox-bpg keeps its workspace on a PVC at `/tmp`, and nothing else does; its HOME is on it
 - `ProviderConfig`s are `in-cluster` only, carrying no credentials
 
 ## Profiles

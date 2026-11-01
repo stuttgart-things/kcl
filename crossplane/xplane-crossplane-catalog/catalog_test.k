@@ -221,6 +221,37 @@ test_upjet_providers_are_slowed_down = lambda {
     assert _p["upbound-provider-opentofu"].resources.limits.cpu == "2"
 }
 
+# The CLI-based upjet provider keeps its per-MR terraform state in /tmp. On the
+# container's writable layer a restart during a delete makes upjet destroy
+# against an empty state and drop the finalizer with the VM still running
+# (stuttgart-things#4210). The claim name is pinned: a rename is a new, empty
+# volume, i.e. the very loss this field prevents.
+test_proxmox_bpg_keeps_its_workspace_on_a_pvc = lambda {
+    _p = {p.name: p for p in c.byKind(c.get("machinery"), "Provider")}
+    _w = _p["valkiriaaquaticamendi-provider-proxmox-bpg"].workspace
+    assert _w, "proxmox-bpg without a persistent workspace loses tfstate on restart"
+    assert _w.claimName == "valkiriaaquaticamendi-provider-proxmox-bpg-workspace"
+    assert _w.mountPath == "/tmp", "upjet takes os.TempDir(); it has no workspace-dir flag"
+    assert _w.fsGroup == 2000, "Crossplane's default provider UID/GID"
+    assert _w.size == "1Gi"
+    assert not _w?.storageClassName, "the cluster default (openebs-hostpath) unless stated"
+}
+
+# bpg's SSH snippet upload needs a writable $HOME/.ssh; the image's HOME is /.
+# It sits on the workspace volume. NOT a problem for terraform, which finds its
+# CLI config (the provider mirror) through TF_CLI_CONFIG_FILE, not ~/.terraformrc.
+test_proxmox_bpg_has_a_writable_home_on_the_workspace = lambda {
+    _b = [p for p in c.byKind(c.get("machinery"), "Provider") if p.name == "valkiriaaquaticamendi-provider-proxmox-bpg"][0]
+    assert _b.env.HOME == _b.workspace.mountPath, "HOME must be on the writable workspace volume"
+}
+
+# Only the provider that needs it. provider-vault is no-fork (state rebuilt
+# from the MR), provider-opentofu keeps state in its kubernetes backend.
+test_only_cli_upjet_providers_get_a_workspace = lambda {
+    _with = sorted([p.name for p in c.get("machinery").packages if p?.workspace])
+    assert _with == ["valkiriaaquaticamendi-provider-proxmox-bpg"], "unexpected workspace: ${_with}"
+}
+
 # Each provider gets one in-cluster ProviderConfig, and they carry no
 # credentials — the ServiceAccount is the identity. Per-datacentre configs
 # (vSphere, Proxmox, Vault) are environment-specific and stay out of the catalog.

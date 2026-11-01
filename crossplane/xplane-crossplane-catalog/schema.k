@@ -12,6 +12,45 @@ per-datacentre placement — stays out, in the XR or an EnvironmentConfig, for t
 reason the flux catalog states: duplicating it here would guarantee drift.
 """
 
+schema Workspace:
+    """A PVC mounted into the provider's `package-runtime` container.
+
+    Consumers render three things from it, all in the provider's namespace:
+    the PersistentVolumeClaim, a pod volume referencing it, and a volumeMount
+    at `mountPath`. They name the volume `workspace`."""
+    claimName: str
+    """metadata.name of the PersistentVolumeClaim. Explicit rather than derived:
+    renaming it is a new, EMPTY volume -- exactly the state loss this exists to
+    prevent -- so it must never change as a side effect of something else."""
+
+    size: str = "1Gi"
+    """Generous. A workspace is main.tf.json, the state and a .terraform whose
+    provider is a SYMLINK into the image's unpacked filesystem mirror -- kilobytes
+    per managed resource, not the provider binary. openebs-hostpath does not
+    enforce it anyway."""
+
+    storageClassName?: str
+    """Omitted = the cluster's default StorageClass (openebs-hostpath on both
+    machinery clusters). ReadWriteOnce, so a pod and its volume share a node."""
+
+    mountPath: str = "/tmp"
+    """/tmp, not a new directory plus TMPDIR: upjet has no workspace-dir flag
+    and takes os.TempDir(), and the image's /tmp is empty (its RUN step deletes
+    the zips it ADDed there), so mounting over it hides nothing."""
+
+    fsGroup: int = 2000
+    """Pod securityContext.fsGroup, so storage that honours it is writable by
+    the runtime UID. 2000 is Crossplane's default provider runAsUser/Group.
+
+    Rendering a pod securityContext REPLACES Crossplane's default one rather
+    than merging with it (DeploymentWithOptionalPodSecurityContext applies the
+    default only when the template has none), so consumers must emit
+    runAsNonRoot / runAsUser / runAsGroup alongside it."""
+
+    check:
+        mountPath.startswith("/"), "mountPath must be absolute"
+        claimName != "", "claimName must be set"
+
 schema Package:
     """One Crossplane package CR: a Provider, Function or Configuration."""
     kind: "Provider" | "Function" | "Configuration"
@@ -99,11 +138,29 @@ schema Package:
     resources?: {str:{str:str}}
     """requests / limits for the same container. Quantities as strings."""
 
+    workspace?: Workspace
+    """A PersistentVolumeClaim for the provider's on-disk working state,
+    rendered into the same DeploymentRuntimeConfig as env and resources.
+
+    For CLI-based upjet providers only. They keep one Terraform workspace per
+    managed resource under os.TempDir() -- `/tmp/<MR uid>/terraform.tfstate` --
+    and /tmp is the container's writable layer. A restart throws that state
+    away, and upjet does NOT rebuild it for a resource that is being deleted
+    (EnsureTFState skips when the MR carries a deletionTimestamp): destroy runs
+    against an empty state, succeeds, and the finalizer goes while the VM stays.
+    Reproduced on machinery-labul (stuttgart-things#4210, crossplane/upjet#803).
+
+    Not for no-fork upjet providers (provider-vault) -- they rebuild state from
+    the MR on every call -- nor for provider-opentofu, whose state is in the
+    kubernetes backend its in-cluster ProviderConfig configures."""
+
     check:
         ":" in package, "package must carry an explicit tag"
         not package.endswith(":latest"), "package must not use a floating tag"
         not env or kind == "Provider", "env is a provider runtime setting"
         not resources or kind == "Provider", "resources is a provider runtime setting"
+        not workspace or kind == "Provider", "workspace is a provider runtime setting"
+        not (workspace and runtimeConfig), "workspace is rendered into the provider's own DeploymentRuntimeConfig, and runtimeConfig points it at someone else's"
 
 schema ProviderConfig:
     """A cluster-scoped ProviderConfig pointing a provider at its OWN cluster.
