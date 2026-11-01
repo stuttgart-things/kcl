@@ -19,7 +19,9 @@ jobs:
   lint-repository:
     uses: stuttgart-things/github-workflow-templates/.github/workflows/call-repository-linting.yaml@main
     with:
-      runs-on: ubuntu-latest
+      # ubuntu-latest is Ubuntu 26.04 since ~2026-10-30; the Dagger engine v0.19.3
+      # crash-loops there (stuttgart-things/github-workflow-templates#226).
+      runs-on: ubuntu-24.04
       app-directory: "./"
       output-file: "/tmp/kcl-repo-findings.txt"
       continue-error: "true"
