@@ -1,10 +1,13 @@
 ---
+# Generated together with its sibling native-vm-*.yaml: keep both in step.
+# The module renders the same order as the Backstage template create-vm
+# (stuttgart-things/stuttgart-things hack/check-vm-kcl.py, #4295).
 apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
   name: native-vm-labda-vsphere
   title: VM (labda-vsphere)
-  description: Create a vSphere VM in LabDA (NativeVsphereVM, EnvironmentConfig vspherevm-labda) — same object the Backstage create-vm template orders.
+  description: vSphere VM in LabDA (NativeVsphereVM, EnvironmentConfig labda), built by machinery -- same order as the Backstage template create-vm.
   tags:
     - vm
     - vsphere
@@ -12,9 +15,10 @@ metadata:
 spec:
   type: xr-native-vm
   source: oci://ghcr.io/stuttgart-things/xr-native-vm
-  tag: 0.1.0
+  tag: 0.2.0
   parameters:
-    # Template selector: the lab decides the kind and the EnvironmentConfig
+    # Template selector: the lab decides the kind, the EnvironmentConfig and
+    # the factory (machinery).
     - name: templateName
       title: Lab
       type: string
@@ -29,6 +33,18 @@ spec:
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
       description: "VM and hostname; the XR is named <name>-vm"
 
+    - name: use_case
+      title: Use Case
+      type: string
+      default: baseos
+      enum:
+        - baseos
+        - kind
+        - dev
+        - rke2
+        - github-runner
+      description: "baseos; kind (a kind cluster); dev (developer VM, large/xlarge); rke2 (single node, not small); github-runner (org runners, large/xlarge)"
+
     - name: size
       title: Size
       type: string
@@ -40,32 +56,121 @@ spec:
         - xlarge
       description: "small 2/4G/40G, medium 4/8G/64G, large 8/16G/100G, xlarge 16/24G/200G (cpu/ram/disk)"
 
-    - name: ansible
-      title: Run Ansible
-      type: boolean
-      default: true
-      description: "emit the VM's AnsibleRun once it has an IP"
-
-    - name: playbooks
-      title: Playbooks
+    # ---- kind
+    - name: kind_workers
+      title: kind Workers
       type: string
-      default: sthings.baseos.setup
-      description: "comma-separated, run in order"
+      default: "1"
+      description: "kind: worker nodes of the kind cluster"
 
-    - name: extraEnvSecretName
-      title: Extra Env Secret
+    # ---- dev
+    - name: dev_features
+      title: Dev Features
+      type: array
+      multiselect: true
+      enum:
+        - toolchain
+        - docker
+        - go
+        - kind
+        - ansible
+        - pre-commit
+        - semantic-release
+        - nerdctl
+        - podman
+        - claude-code
+        - shell
+        - vhs
+        - dotfiles
+      default:
+        - toolchain
+        - docker
+        - go
+        - kind
+        - ansible
+        - pre-commit
+        - semantic-release
+        - nerdctl
+        - podman
+        - claude-code
+        - shell
+        - vhs
+        - dotfiles
+      description: "dev: what sthings.baseos.dev installs; kind brings Docker"
+
+    - name: dev_go_version
+      title: Go Version
+      type: string
+      default: "1.27.3"
+      description: "dev: Go version (feature go)"
+
+    - name: dev_kind_workers
+      title: Dev kind Workers
+      type: string
+      default: "3"
+      description: "dev: kind worker nodes (feature kind)"
+
+    - name: dev_kind_name
+      title: Dev kind Cluster Name
+      type: string
+      default: dev
+      description: "dev: kind cluster name (feature kind)"
+
+    # ---- github-runner
+    - name: runner_labels
+      title: Runner Labels
       type: string
       default: ""
-      description: "Secret in tekton-ci whose keys become env vars in the pipeline pod (e.g. github-runner-token)"
+      description: "github-runner: extra labels after self-hosted,Linux,X64 (comma-separated)"
 
-    - name: claimNamespace
-      title: Claim Namespace
+    - name: runner_count
+      title: Runner Count
       type: string
-      default: default
+      default: "1"
+      description: "github-runner: runners on the VM"
+
+    - name: runner_toolchain
+      title: Runner Tool Chain
+      type: boolean
+      default: true
+      description: "github-runner: install the CI tool chain of the dagger runners"
+
+    # ---- who and where (stuttgart-things#4276, #4296)
+    - name: owner
+      title: Ordered For
+      type: string
+      default: ""
+      description: "Backstage entity ref of the owner; empty = the orderer"
+
+    - name: requested_by
+      title: Requested By
+      type: string
+      default: ""
+      hidden: true
+      description: "the authenticated orderer (stamped by the API)"
+
+    - name: order_id
+      title: Order ID
+      type: string
+      default: ""
       hidden: true
 
-    - name: managementCluster
+    - name: management_cluster
       title: Management Cluster
       type: string
       default: machinery
       hidden: true
+
+    - name: source_path
+      title: Source Path
+      type: string
+      default: ""
+      hidden: true
+      description: "empty = the factory's orders directory/<name>.yaml"
+
+    - name: environment_config
+      title: EnvironmentConfig
+      type: string
+      default: ""
+      hidden: true
+      description: "empty = the lab's"

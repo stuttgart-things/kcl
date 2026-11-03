@@ -1,21 +1,47 @@
 # XR-NATIVE-VM
 
-KCL module for the native VM XRs on machinery (`resources.stuttgart-things.com/v1alpha1`):
+KCL module for VM orders on the native VM compositions
+(`resources.stuttgart-things.com/v1alpha1`, crossplane-configurations
+`vsphere-vm` / `proxmox-vm`).
 
-| Lab (`templateName`) | Kind | EnvironmentConfig |
+It renders **the same order as the Backstage template `create-vm`**
+(stuttgart-things/stuttgart-things `backstage/templates/create-vm`) for every
+lab × use case. `hack/check-vm-kcl.py` in stuttgart-things renders both and
+compares them, against the create-vm snapshots and the built orders as well
+(stuttgart-things#4295). Change the order logic in both places, or the check
+goes red.
+
+| Lab (`templateName` / `lab`) | Kind | EnvironmentConfig | Factory (management cluster) | Orders directory |
+|---|---|---|---|---|
+| `labda-vsphere` | `NativeVsphereVM` | `labda` | `machinery` | `clusters/labda/vsphere/machinery-orders-xrs` |
+| `labul-proxmox` (default) | `NativeProxmoxVM` | `labul` | `machinery-labul` | `clusters/labul/proxmox/machinery-labul-orders-xrs` |
+
+## Output
+
+A YAML stream:
+
+1. the XR (`<name>-vm`), annotated with `management-cluster`, `source-path`
+   (the file it belongs in), `requested-by`/`owner` when given, and
+   `prune: disabled`
+2. `dev` only: EnvironmentConfig `dev-machine-<name>` (dev-maintenance list),
+   same file as the XR
+3. `dev` only: ScrapeConfig `host-<name>` for the central Prometheus. Its own
+   file: the annotation `stuttgart-things.com/target-path` names it
+   (default `clusters/labda/vsphere/sthings-infra/monitoring/host-<name>.yaml`)
+
+## Use cases
+
+| `use_case` | Sizes | Plays after `sthings.baseos.setup` |
 |---|---|---|
-| `labda-vsphere` | `NativeVsphereVM` | `vspherevm-labda` |
-| `labul-proxmox` (default) | `NativeProxmoxVM` | `proxmoxvm-labul` |
+| `baseos` | all | – |
+| `kind` | all | `sthings.container.kind` (`kind_workers`) |
+| `dev` | large, xlarge | `sthings.baseos.dev`'s imports for the ticked `dev_features`, in its order; `sthings.baseos.node_exporter` last |
+| `rke2` | medium and up | `sthings.rke.rke2_cluster`, single node via `inventoryGroups` |
+| `github-runner` | large, xlarge | tool chain (`runner_toolchain`), `sthings.baseos.gh_runner`; `extraEnvSecretName: github-runner-token` |
 
-It renders the same object as the Backstage template `create-vm` (baseos use
-case): the same t-shirt sizes, the `management-cluster` and `prune: disabled`
-annotations, and the `sthings_build_*` markers (with
-`sthings_build_source=claim-machinery`). The output belongs in
-`clusters/labda/vsphere/machinery-xrs` of stuttgart-things/stuttgart-things.
-
-Replaces the `claim-xplane-vspherevm` (`VsphereVM`, OpenTofu) and
-`xr-virtualmachine` (`XVirtualMachine` → `VMProvision`) templates: machinery
-runs neither chain any more.
+The size rules, a wrong lab and an unknown use case are refusals (`assert`).
+Every order carries the `sthings_build_*` markers; `sthings_build_source` is
+`claim-machinery` unless `build_source` says otherwise.
 
 ## Sizes
 
@@ -30,24 +56,54 @@ runs neither chain any more.
 
 ## Parameters
 
+The names are the create-vm form's (its render-order step's values), so the
+form can switch its render step to claim-machinery-api unchanged.
+
 | name | default | |
 |---|---|---|
-| `templateName` | `labul-proxmox` | lab, see above |
+| `templateName` / `lab` | `labul-proxmox` | lab, see above |
 | `name` | `demo-vm` | VM and hostname; the XR is `<name>-vm` |
 | `size` | `medium` | small / medium / large / xlarge |
-| `ansible` | `true` | emit the VM's AnsibleRun |
-| `playbooks` | `sthings.baseos.setup` | comma-separated |
-| `extraEnvSecretName` | – | Secret in `tekton-ci` exposed as env to the pipeline |
-| `environmentConfig` | `labda` / `labul` | override |
-| `claimNamespace` | `default` | |
-| `managementCluster` | `machinery` | annotation and build marker |
+| `use_case` | `baseos` | baseos / kind / dev / rke2 / github-runner |
+| `kind_workers` | `1` | kind |
+| `dev_features` | all | dev; list or comma-separated; `[]` = none |
+| `dev_go_version` | `1.27.3` | dev, feature go |
+| `dev_kind_workers` | `3` | dev, feature kind |
+| `dev_kind_name` | `dev` | dev, feature kind |
+| `runner_labels` | – | github-runner, after `self-hosted,Linux,X64` |
+| `runner_count` | `1` | github-runner |
+| `runner_toolchain` | `true` | github-runner |
+| `requested_by` | – | annotation `requested-by` (stamped by the API) |
+| `owner` | `requested_by` | annotation `owner` |
+| `order_id` | – | annotation `order-id` on every document, label on the XR |
+| `management_cluster` | the lab's factory | annotation and build marker |
+| `management_lab` | the factory's lab | build marker |
+| `source_path` | `<orders directory>/<name>.yaml` | annotation `source-path` |
+| `environment_config` | `labda` / `labul` | `spec.environmentConfig` |
+| `claim_namespace` | `default` | |
+| `monitoring_path` | see Output | dev's ScrapeConfig file |
+| `build_source` | `claim-machinery` | `sthings_build_source` (the check passes `create-vm`) |
+| `ansible` | `true` | `false` renders `ansible.enabled: false` |
+
+The placement parameters (`management_cluster`, `management_lab`,
+`source_path`, `environment_config`) are for an order service that places
+orders itself (stuttgart-things#4296); their defaults are today's values.
+
+A value counts as unset when it is missing or empty, so `kind_workers=0` and
+`dev_features=[]` are kept. claim-machinery-api passes strings unquoted
+(`-D key=value`), so a version like `1.30` arrives as the float `1.3`: send
+three-part versions.
+
+`managementCluster`, `environmentConfig` and `claimNamespace` (0.1.0) are
+still read as aliases. 0.1.0's `playbooks` and `extraEnvSecretName` are gone:
+the use case decides them.
 
 ## Run
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.1.0 \
-  -D templateName=labda-vsphere -D name=my-vm -D size=large \
-  -D playbooks=sthings.baseos.setup,sthings.baseos.node_exporter
+kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.2.0 \
+  -D templateName=labda-vsphere -D name=my-vm -D size=large -D use_case=dev \
+  -D 'dev_features=["go","kind"]'
 ```
 
 ## Templates
@@ -55,7 +111,10 @@ kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.1.0 \
 - `templates/native-vm-labda-vsphere.yaml`
 - `templates/native-vm-labul-proxmox.yaml`
 
+Both list the same parameters; only the lab differs. Keep them in step.
+
 ## Schemas
 
 `v1alpha1/` and `k8s/` are generated from the XRD's CRDs on machinery with
-`kcl import -m crd` (status removed).
+`kcl import -m crd` (status removed). The module type-checks the XR against
+them but emits a plain dict, so schema defaults do not leak into the order.
