@@ -141,6 +141,9 @@ spec:
       type: string
       default: ""
       description: "Backstage entity ref of the owner; empty = the orderer"
+      # With order auth on, claim-machinery-api allows only the login or one
+      # of its groups (an admin: any) (claim-machinery-api#122).
+      identity: owner
 
     - name: requested_by
       title: Requested By
@@ -148,6 +151,8 @@ spec:
       default: ""
       hidden: true
       description: "the authenticated orderer (stamped by the API)"
+      # With order auth on, set from the login; another value is refused.
+      identity: user
 
     - name: order_id
       title: Order ID
