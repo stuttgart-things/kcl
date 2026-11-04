@@ -73,8 +73,8 @@ form can switch its render step to claim-machinery-api unchanged.
 | `runner_labels` | – | github-runner, after `self-hosted,Linux,X64` |
 | `runner_count` | `1` | github-runner |
 | `runner_toolchain` | `true` | github-runner |
-| `requested_by` | – | annotation `requested-by` (stamped by the API) |
-| `owner` | `requested_by` | annotation `owner` |
+| `requested_by` | – | annotation `requested-by`; `identity: user` in the templates: claim-machinery-api with order auth sets it from the login (claim-machinery-api#122) |
+| `owner` | `requested_by` | annotation `owner`; `identity: owner`: with order auth only the login or one of its groups (admins: any) |
 | `order_id` | – | annotation `order-id` on every document, label on the XR |
 | `management_cluster` | the lab's factory | annotation and build marker |
 | `management_lab` | the factory's lab | build marker |
