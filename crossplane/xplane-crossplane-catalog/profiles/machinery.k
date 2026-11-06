@@ -36,6 +36,10 @@ import ..schema as s
 # 0.31.0 (2026-10-31, stuttgart-things#4210): proxmox-bpg gets a persistent
 # workspace -- a PVC over /tmp -- so its per-MR terraform state survives a pod
 # restart. No package version moves.
+#
+# 0.32.0 (2026-11-06, crossplane-configurations#554): vspherevm v0.14.0 and
+# proxmoxvm v0.20.0 -- spec.ansible.runID re-runs a VM's AnsibleRun on purpose.
+# Both raise dependsOn ansible-run to >=v0.3.2, which machinery already runs.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -575,7 +579,12 @@ machinery: s.Profile = {
             # v0.13.0: spec.ansible.inventoryGroups puts the VM IP into a named
             # inventory group (crossplane-configurations#521) -- what rke2 needs
             # and the Backstage template create-vm offers. No new dependsOn floor.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.13.0"
+            #
+            # v0.14.0: spec.ansible.runID retries the AnsibleRun deliberately --
+            # deleting it re-adopted the completed PipelineRun and never re-ran
+            # (crossplane-configurations#554/#555). dependsOn ansible-run raised
+            # to >=v0.3.2 (machinery runs v0.3.2).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.14.0"
             providerCrd = "clusterproviderconfigs.vspherevm.m.stuttgart-things.com"
             pulls = ["ansible-run"]
         }
@@ -608,7 +617,11 @@ machinery: s.Profile = {
             # v0.19.0: the target node goes to initProvider (ignore_changes),
             # so a VM Proxmox migrated no longer plans as destroy + recreate
             # (crossplane-configurations#549). No new dependsOn floor.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.19.0"
+            #
+            # v0.20.0: spec.ansible.runID, same as vspherevm v0.14.0 above
+            # (crossplane-configurations#554/#555). dependsOn ansible-run
+            # raised to >=v0.3.2.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.20.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
