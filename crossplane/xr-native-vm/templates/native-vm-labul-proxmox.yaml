@@ -7,7 +7,7 @@ kind: ClaimTemplate
 metadata:
   name: native-vm-labul-proxmox
   title: VM (labul-proxmox)
-  description: Proxmox VM in LabUL (NativeProxmoxVM, EnvironmentConfig labul), built by machinery-labul -- same order as the Backstage template create-vm.
+  description: Proxmox VM in LabUL (NativeProxmoxVM, EnvironmentConfig labul), built by machinery-labul – same order as the Backstage template create-vm.
   tags:
     - vm
     - proxmox
@@ -29,7 +29,7 @@ spec:
       title: VM Name
       type: string
       required: true
-      default: demo-vm
+      default: demo
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
       description: "VM and hostname; the XR is named <name>-vm"
 

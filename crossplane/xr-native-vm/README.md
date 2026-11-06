@@ -62,7 +62,7 @@ form can switch its render step to claim-machinery-api unchanged.
 | name | default | |
 |---|---|---|
 | `templateName` / `lab` | `labul-proxmox` | lab, see above |
-| `name` | `demo-vm` | VM and hostname; the XR is `<name>-vm` |
+| `name` | `demo` | VM and hostname; the XR is `<name>-vm` |
 | `size` | `medium` | small / medium / large / xlarge |
 | `use_case` | `baseos` | baseos / kind / dev / rke2 / github-runner |
 | `kind_workers` | `1` | kind |

@@ -7,7 +7,7 @@ kind: ClaimTemplate
 metadata:
   name: native-vm-labda-vsphere
   title: VM (labda-vsphere)
-  description: vSphere VM in LabDA (NativeVsphereVM, EnvironmentConfig labda), built by machinery -- same order as the Backstage template create-vm.
+  description: vSphere VM in LabDA (NativeVsphereVM, EnvironmentConfig labda), built by machinery – same order as the Backstage template create-vm.
   tags:
     - vm
     - vsphere
@@ -29,7 +29,7 @@ spec:
       title: VM Name
       type: string
       required: true
-      default: demo-vm
+      default: demo
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
       description: "VM and hostname; the XR is named <name>-vm"
 

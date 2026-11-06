@@ -90,7 +90,7 @@ assert _useCase not in ["dev", "github-runner"] or _sizeName in ["large", "xlarg
 assert _useCase != "rke2" or _sizeName != "small", "use_case rke2 needs size medium or larger"
 _size = _sizes[_sizeName]
 
-_name = _str("name", "demo-vm")
+_name = _str("name", "demo")
 # Explicit values beat the size.
 _cpu = _str("cpu", _size.cpu)
 _memory = _str("memory", _size.memory)
