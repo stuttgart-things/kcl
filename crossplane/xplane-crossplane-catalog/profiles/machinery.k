@@ -44,6 +44,10 @@ import ..schema as s
 # 0.33.0 (2026-11-07, crossplane-configurations#558): proxmoxvm v0.21.0 -- the
 # EnvironmentVM no longer late-initializes, which stops the guest agent's
 # macAddresses from updating every VM every few seconds.
+#
+# 0.34.0 (2026-11-07, crossplane-configurations#556): harvester-vm v0.1.12 ->
+# v0.2.0 -- spec.ansible.runID, plus the VMI watch of v0.1.13 and hostDevices
+# of v0.1.14. dependsOn ansible-run raised to >=v0.3.2.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -646,7 +650,11 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-harvester-vm"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/harvester-vm:v0.1.12"
+            # v0.2.0: spec.ansible.runID re-runs the AnsibleRun on purpose, as in
+            # vspherevm v0.14.0 (crossplane-configurations#556/#559); dependsOn
+            # ansible-run raised to >=v0.3.2. Also brings v0.1.13 (watch on the
+            # VMI Object) and v0.1.14 (spec.vm.hostDevices).
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/harvester-vm:v0.2.0"
             pulls = ["volume-claim", "cloud-config", "ansible-run"]
         }
         s.Package {
