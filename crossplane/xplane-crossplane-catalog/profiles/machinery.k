@@ -40,6 +40,10 @@ import ..schema as s
 # 0.32.0 (2026-11-06, crossplane-configurations#554): vspherevm v0.14.0 and
 # proxmoxvm v0.20.0 -- spec.ansible.runID re-runs a VM's AnsibleRun on purpose.
 # Both raise dependsOn ansible-run to >=v0.3.2, which machinery already runs.
+#
+# 0.33.0 (2026-11-07, crossplane-configurations#558): proxmoxvm v0.21.0 -- the
+# EnvironmentVM no longer late-initializes, which stops the guest agent's
+# macAddresses from updating every VM every few seconds.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -621,7 +625,14 @@ machinery: s.Profile = {
             # v0.20.0: spec.ansible.runID, same as vspherevm v0.14.0 above
             # (crossplane-configurations#554/#555). dependsOn ansible-run
             # raised to >=v0.3.2.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.20.0"
+            #
+            # v0.21.0: managementPolicies without LateInitialize on the
+            # EnvironmentVM -- late-init copied the guest agent's macAddresses
+            # (docker0, veths) into forProvider and every VM was updated every
+            # few seconds (crossplane-configurations#558/#560). Existing
+            # EnvironmentVMs keep the copied value until it is removed once
+            # (proxmoxvm README). No new dependsOn floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.21.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
