@@ -128,7 +128,7 @@ _allDevFeatures = ["toolchain", "docker", "go", "kind", "ansible", "pre-commit",
 _devFeaturesIn = _list("dev_features")
 _f = _devFeaturesIn if _devFeaturesIn != None else _allDevFeatures
 _docker = "docker" in _f or "kind" in _f
-_devGoVersion = _str("dev_go_version", "1.27.3")
+_devGoVersion = _str("dev_go_version", "1.27.4")
 _devKindWorkers = _str("dev_kind_workers", "3")
 _devKindName = _str("dev_kind_name", "dev")
 

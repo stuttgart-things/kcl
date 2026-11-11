@@ -67,7 +67,7 @@ form can switch its render step to claim-machinery-api unchanged.
 | `use_case` | `baseos` | baseos / kind / dev / rke2 / github-runner |
 | `kind_workers` | `1` | kind |
 | `dev_features` | all | dev; list or comma-separated; `[]` = none |
-| `dev_go_version` | `1.27.3` | dev, feature go |
+| `dev_go_version` | `1.27.4` | dev, feature go |
 | `dev_kind_workers` | `3` | dev, feature kind |
 | `dev_kind_name` | `dev` | dev, feature kind |
 | `runner_labels` | – | github-runner, after `self-hosted,Linux,X64` |
@@ -101,7 +101,7 @@ the use case decides them.
 ## Run
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.2.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.2.1 \
   -D templateName=labda-vsphere -D name=my-vm -D size=large -D use_case=dev \
   -D 'dev_features=["go","kind"]'
 ```
