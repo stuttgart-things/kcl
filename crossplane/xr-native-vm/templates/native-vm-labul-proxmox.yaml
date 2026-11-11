@@ -16,6 +16,10 @@ spec:
   type: xr-native-vm
   source: oci://ghcr.io/stuttgart-things/xr-native-vm
   tag: 0.2.1
+  # Order = layout order: name, use case, the fields of the chosen use case,
+  # size, who. showWhen/enumWhen (claim-machinery-api#135) hide fields that
+  # do not apply and narrow size per use case; clients that do not know them
+  # show every field. main.k's asserts stay the last line of defence.
   parameters:
     # Template selector: the lab decides the kind, the EnvironmentConfig and
     # the factory (machinery-labul).
@@ -43,18 +47,7 @@ spec:
         - dev
         - rke2
         - github-runner
-      description: "baseos; kind (a kind cluster); dev (developer VM, large/xlarge); rke2 (single node, not small); github-runner (org runners, large/xlarge)"
-
-    - name: size
-      title: Size
-      type: string
-      default: medium
-      enum:
-        - small
-        - medium
-        - large
-        - xlarge
-      description: "small 2/4G/40G, medium 4/8G/64G, large 8/16G/100G, xlarge 16/24G/200G (cpu/ram/disk)"
+      description: "baseos; kind (the VM is a kind cluster); dev (developer VM, large/xlarge); rke2 (single node, not small); github-runner (org runners, large/xlarge)"
 
     # ---- kind
     - name: kind_workers
@@ -62,6 +55,8 @@ spec:
       type: string
       default: "1"
       description: "kind: worker nodes of the kind cluster"
+      showWhen:
+        use_case: [kind]
 
     # ---- dev
     - name: dev_features
@@ -96,25 +91,36 @@ spec:
         - shell
         - vhs
         - dotfiles
-      description: "dev: what sthings.baseos.dev installs; kind brings Docker"
+      description: "dev: what sthings.baseos.dev installs; kind = a kind cluster inside the dev VM (installs Docker too)"
+      showWhen:
+        use_case: [dev]
 
     - name: dev_go_version
       title: Go Version
       type: string
       default: "1.27.4"
       description: "dev: Go version (feature go)"
+      showWhen:
+        use_case: [dev]
+        dev_features: [go]
 
     - name: dev_kind_workers
       title: Dev kind Workers
       type: string
       default: "3"
-      description: "dev: kind worker nodes (feature kind)"
+      description: "dev: kind worker nodes of the kind cluster inside the dev VM (feature kind)"
+      showWhen:
+        use_case: [dev]
+        dev_features: [kind]
 
     - name: dev_kind_name
       title: Dev kind Cluster Name
       type: string
       default: dev
-      description: "dev: kind cluster name (feature kind)"
+      description: "dev: kind cluster name of the kind cluster inside the dev VM (feature kind)"
+      showWhen:
+        use_case: [dev]
+        dev_features: [kind]
 
     # ---- github-runner
     - name: runner_labels
@@ -122,18 +128,43 @@ spec:
       type: string
       default: ""
       description: "github-runner: extra labels after self-hosted,Linux,X64 (comma-separated)"
+      showWhen:
+        use_case: [github-runner]
 
     - name: runner_count
       title: Runner Count
       type: string
       default: "1"
       description: "github-runner: runners on the VM"
+      showWhen:
+        use_case: [github-runner]
 
     - name: runner_toolchain
       title: Runner Tool Chain
       type: boolean
       default: true
       description: "github-runner: install the CI tool chain of the dagger runners"
+      showWhen:
+        use_case: [github-runner]
+
+    - name: size
+      title: Size
+      type: string
+      default: medium
+      enum:
+        - small
+        - medium
+        - large
+        - xlarge
+      description: "small 2/4G/40G, medium 4/8G/64G, large 8/16G/100G, xlarge 16/24G/200G (cpu/ram/disk)"
+      # Same rules as main.k's asserts. The default medium is not allowed
+      # for dev / github-runner: clients pick the first allowed value (the
+      # API's /ui does); an order that omits size for those is refused (400).
+      enumWhen:
+        use_case:
+          dev: [large, xlarge]
+          github-runner: [large, xlarge]
+          rke2: [medium, large, xlarge]
 
     # ---- who and where (stuttgart-things#4276, #4296)
     - name: owner

@@ -113,6 +113,15 @@ kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.2.1 \
 
 Both list the same parameters; only the lab differs. Keep them in step.
 
+The parameters are ordered as the form asks them: name, use case, the
+fields of that use case, size, who. `showWhen` hides the fields of the other
+use cases (`dev_go_version` / `dev_kind_*` also need their feature ticked) and
+`enumWhen` narrows `size` per use case, the same rules as the asserts in
+`main.k` (claim-machinery-api >= 0.28.0, which validates an order against
+them; older versions ignore both fields). The `size` default stays `medium`:
+for `dev` and `github-runner` a client picks the first allowed value, and an
+order that sends no size for them is refused, as `main.k` refuses it.
+
 ## Schemas
 
 `v1alpha1/` and `k8s/` are generated from the XRD's CRDs on machinery with
