@@ -4,4 +4,4 @@ edition = "v0.12.3"
 version = "0.8.2"
 
 [dependencies]
-xplane-crossplane-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-crossplane-catalog", tag = "0.34.0" }
+xplane-crossplane-catalog = { oci = "oci://ghcr.io/stuttgart-things/xplane-crossplane-catalog", tag = "0.35.0" }
