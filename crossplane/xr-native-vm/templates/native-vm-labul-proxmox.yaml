@@ -15,7 +15,7 @@ metadata:
 spec:
   type: xr-native-vm
   source: oci://ghcr.io/stuttgart-things/xr-native-vm
-  tag: 0.2.1
+  tag: 0.3.0
   # Order = layout order: name, use case, the fields of the chosen use case,
   # size, who. showWhen/enumWhen (claim-machinery-api#135) hide fields that
   # do not apply and narrow size per use case; clients that do not know them

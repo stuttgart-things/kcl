@@ -43,6 +43,26 @@ The size rules, a wrong lab and an unknown use case are refusals (`assert`).
 Every order carries the `sthings_build_*` markers; `sthings_build_source` is
 `claim-machinery` unless `build_source` says otherwise.
 
+## OS
+
+`os` picks the template on LabDA vSphere (0.3.0, stuttgart-things#4489):
+
+| `os` | template | written to the order |
+|---|---|---|
+| `ubuntu26` (default) | the `labda` EnvironmentConfig's default (`sthings-u26`) | nothing: the order is byte-identical to one without `os` |
+| `rocky10` | `templates.rocky10` of that EnvironmentConfig (`sthings-rocky10`, guestId `rhel9_64Guest`) | `spec.vm.os: rocky10` |
+
+The order names only the OS; the vspherevm Composition (>= v0.15.0) looks up
+`templateUuid` **and** `guestId` in the EnvironmentConfig's `templates` table
+(the stuttgart-things vspherevm chart >= 0.16.0 renders it). vCenter refuses a
+Rocky clone with the Ubuntu guestId, so the two always travel together.
+
+Refusals (`assert`): an unknown `os`; `rocky10` on `labul-proxmox` (no Rocky
+template there, and the labul template does not offer the field); `rocky10`
+with any use case but `baseos` -- the kind / dev / rke2 / github-runner plays
+assume apt. The labda template shows the field only for `baseos` (`showWhen`).
+create-vm has no OS field, so `hack/check-vm-kcl.py` parity is unaffected.
+
 ## Sizes
 
 | size | cpu | ram (MB) | disk (GB) |
@@ -65,6 +85,7 @@ form can switch its render step to claim-machinery-api unchanged.
 | `name` | `demo` | VM and hostname; the XR is `<name>-vm` |
 | `size` | `medium` | small / medium / large / xlarge |
 | `use_case` | `baseos` | baseos / kind / dev / rke2 / github-runner |
+| `os` | `ubuntu26` | labda-vsphere + baseos only: `ubuntu26` / `rocky10`, see OS |
 | `kind_workers` | `1` | kind |
 | `dev_features` | all | dev; list or comma-separated; `[]` = none |
 | `dev_go_version` | `1.27.4` | dev, feature go |
@@ -101,7 +122,7 @@ the use case decides them.
 ## Run
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.2.1 \
+kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.3.0 \
   -D templateName=labda-vsphere -D name=my-vm -D size=large -D use_case=dev \
   -D 'dev_features=["go","kind"]'
 ```
@@ -111,7 +132,8 @@ kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.2.1 \
 - `templates/native-vm-labda-vsphere.yaml`
 - `templates/native-vm-labul-proxmox.yaml`
 
-Both list the same parameters; only the lab differs. Keep them in step.
+Both list the same parameters; only the lab differs -- except `os`, which
+only the labda template offers (see OS). Keep them in step.
 
 The parameters are ordered as the form asks them: name, use case, the
 fields of that use case, size, who. `showWhen` hides the fields of the other
