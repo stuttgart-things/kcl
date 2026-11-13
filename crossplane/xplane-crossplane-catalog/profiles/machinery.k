@@ -48,6 +48,10 @@ import ..schema as s
 # 0.34.0 (2026-11-07, crossplane-configurations#556): harvester-vm v0.1.12 ->
 # v0.2.0 -- spec.ansible.runID, plus the VMI watch of v0.1.13 and hostDevices
 # of v0.1.14. dependsOn ansible-run raised to >=v0.3.2.
+#
+# 0.35.0 (2026-11-13, stuttgart-things#4489): vspherevm v0.15.0 -- spec.vm.os
+# picks templateUuid + guestId from the EnvironmentConfig's templates table
+# (Rocky Linux 10 on LabDA). Additive; no new dependsOn floor.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -592,7 +596,13 @@ machinery: s.Profile = {
             # deleting it re-adopted the completed PipelineRun and never re-ran
             # (crossplane-configurations#554/#555). dependsOn ansible-run raised
             # to >=v0.3.2 (machinery runs v0.3.2).
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.14.0"
+            #
+            # v0.15.0: spec.vm.os selects an entry of the EnvironmentConfig's
+            # `templates` table, which supplies templateUuid AND guestId (a Rocky
+            # clone with ubuntu64Guest is refused by vCenter; crossplane-
+            # configurations#564, stuttgart-things#4489). os unset renders as
+            # before. No new dependsOn floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vspherevm:v0.15.0"
             providerCrd = "clusterproviderconfigs.vspherevm.m.stuttgart-things.com"
             pulls = ["ansible-run"]
         }
