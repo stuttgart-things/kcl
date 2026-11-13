@@ -15,7 +15,7 @@ metadata:
 spec:
   type: xr-native-vm
   source: oci://ghcr.io/stuttgart-things/xr-native-vm
-  tag: 0.2.1
+  tag: 0.3.0
   # Order = layout order: name, use case, the fields of the chosen use case,
   # size, who. showWhen/enumWhen (claim-machinery-api#135) hide fields that
   # do not apply and narrow size per use case; clients that do not know them
@@ -48,6 +48,22 @@ spec:
         - rke2
         - github-runner
       description: "baseos; kind (the VM is a kind cluster); dev (developer VM, large/xlarge); rke2 (single node, not small); github-runner (org runners, large/xlarge)"
+
+    # ---- baseos
+    # LabDA only (the labul-proxmox template has no OS choice): the vspherevm
+    # EnvironmentConfig's `templates` table maps the OS to templateUuid AND
+    # guestId (vspherevm >= v0.15.0, stuttgart-things#4489). baseos only: the
+    # other use cases' plays assume apt. main.k refuses rocky10 elsewhere.
+    - name: os
+      title: Operating System
+      type: string
+      default: ubuntu26
+      enum:
+        - ubuntu26
+        - rocky10
+      description: "baseos: ubuntu26 (Ubuntu 26.04, default) or rocky10 (Rocky Linux 10)"
+      showWhen:
+        use_case: [baseos]
 
     # ---- kind
     - name: kind_workers

@@ -76,6 +76,17 @@ _labShort = "labda" if _vsphere else "labul"
 _useCase = _str("use_case", "baseos")
 assert _useCase in ["baseos", "kind", "dev", "rke2", "github-runner"], "use_case must be baseos, kind, dev, rke2 or github-runner, got ${_useCase}"
 
+# OS of the VM (stuttgart-things#4489). A key of the vspherevm EnvironmentConfig's
+# `templates` table, which supplies templateUuid AND guestId (vspherevm >=
+# v0.15.0) -- the order never names a UUID. Only LabDA vSphere offers a second
+# OS, and only for baseos: the other use cases' plays assume apt (Ubuntu).
+# ubuntu26 is the environment's default template, so it is NOT written into the
+# order: an order without os renders byte-identical to before.
+_os = _str("os", "ubuntu26")
+assert _os in ["ubuntu26", "rocky10"], "os must be ubuntu26 or rocky10, got ${_os}"
+assert _os == "ubuntu26" or _vsphere, "os ${_os} is only offered for labda-vsphere"
+assert _os == "ubuntu26" or _useCase == "baseos", "os ${_os} is only offered for use_case baseos, got ${_useCase}"
+
 # Same t-shirt sizes as create-vm.
 _sizes = {
     small = {cpu = "2", memory = "4096", disk = "40"}
@@ -251,8 +262,10 @@ _ansible = {
     pipelineNamespace = "tekton-ci"
     crossplaneProviderConfig = "in-cluster"
     if _useCase == "github-runner":
+        # pragma: allowlist nextline secret
         extraEnvSecretName = "github-runner-token"
     if _useCase == "dev" and "dotfiles" in _f:
+        # pragma: allowlist nextline secret
         vaultSecretName = "vault-devvm-dotfiles-reader"
     playbooks = _playbooks
     if _useCase == "rke2":
@@ -286,7 +299,15 @@ _xrVsphere = {
     metadata = _metadata
     spec = {
         environmentConfig = _environmentConfig
-        vm = {name = _name, cpu = _cpu, ram = _memory, disk = _disk, tagsPolicy = "Merge"}
+        vm = {
+            name = _name
+            cpu = _cpu
+            ram = _memory
+            disk = _disk
+            if _os != "ubuntu26":
+                os = _os
+            tagsPolicy = "Merge"
+        }
         ansible = _ansible
     }
 }

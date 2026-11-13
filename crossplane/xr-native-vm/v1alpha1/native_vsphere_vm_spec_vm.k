@@ -65,6 +65,12 @@ schema NativeVsphereVMSpecVM:
 
     networkId : str, default is Undefined, optional
         network Id
+    os : str, default is Undefined, optional
+        Operating system to clone, as a key of the
+        EnvironmentConfig's `templates` table (e.g. `ubuntu26`,
+        `rocky10`), which supplies templateUuid AND guestId
+        together. Unset = the EnvironmentConfig's default.
+        (XRD vspherevm >= v0.15.0)
     ram : str, default is "4096", optional
         ram
     resourcePoolId : str, default is Undefined, optional
@@ -153,6 +159,8 @@ schema NativeVsphereVMSpecVM:
 
     networkId?: str
 
+    os?: str
+
     ram?: str = "4096"
 
     resourcePoolId?: str
@@ -168,5 +176,3 @@ schema NativeVsphereVMSpecVM:
     waitForGuestIpTimeout?: str = "5"
 
     waitForGuestNetTimeout?: str = "5"
-
-
