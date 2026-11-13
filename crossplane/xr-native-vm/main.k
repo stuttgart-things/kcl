@@ -262,9 +262,11 @@ _ansible = {
     pipelineNamespace = "tekton-ci"
     crossplaneProviderConfig = "in-cluster"
     if _useCase == "github-runner":
-        extraEnvSecretName = "github-runner-token"  # pragma: allowlist secret
+        # pragma: allowlist nextline secret
+        extraEnvSecretName = "github-runner-token"
     if _useCase == "dev" and "dotfiles" in _f:
-        vaultSecretName = "vault-devvm-dotfiles-reader"  # pragma: allowlist secret
+        # pragma: allowlist nextline secret
+        vaultSecretName = "vault-devvm-dotfiles-reader"
     playbooks = _playbooks
     if _useCase == "rke2":
         inventoryGroups = ["initial_master_node", "additional_master_nodes", "workers"]
