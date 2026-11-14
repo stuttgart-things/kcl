@@ -684,13 +684,35 @@ machinery: s.Profile = {
         }
         s.Package {
             kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-vsphere-vm"
+            # Listed although pulled (vm-provision's dependsOn) -- to PIN it:
+            # under the derived name this CR is the dependsOn node. v0.2.0:
+            # spec.vm.templateUuid (clone/destroy by UUID, module
+            # v2.12.0-1.2.0) and an optional EnvironmentConfig
+            # (crossplane-configurations#565). Was floating at v0.1.0.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vsphere-vm:v0.2.0"
+        }
+        s.Package {
+            kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-vm-provision"
+            # Listed although pulled (packer-release's dependsOn) -- to PIN it.
+            # v0.2.0: vm.templateUuid passed through to VsphereVM (#565). Was
+            # floating at v0.1.2.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/vm-provision:v0.2.0"
+        }
+        s.Package {
+            kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-packer-release"
             # v0.5.0: templateName/templateVmId on the status, the Proxmox test
             # VM cloned by name and promoted by VMID (#214), promoters default
             # to stage-time v0.13.6. Same dependsOn floors as v0.4.2.
             # v0.6.0: buildReason/buildMessage + condition BuildSucceeded -- stops
             # waiting on a failed nested build (#527).
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-release:v0.6.0"
+            # v0.7.0: the smoke-test VM clones by the build's template-uuid, so
+            # promote's rename no longer breaks its teardown (leaked a VM per
+            # release, crossplane-configurations#565). dependsOn vm-provision
+            # >= v0.2.0 -> pinned above.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/packer-release:v0.7.0"
         }
         s.Package {
             kind = "Configuration"
