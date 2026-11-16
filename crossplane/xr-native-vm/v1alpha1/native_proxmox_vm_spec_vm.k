@@ -74,6 +74,12 @@ schema NativeProxmoxVMSpecVM:
         NIC model (e.g. virtio, e1000).
     node : str, default is Undefined, optional
         Proxmox node name (nodeName).
+    os : str, default is Undefined, optional
+        Operating system to clone, as a key of the
+        EnvironmentConfig's `templates` table (e.g. `ubuntu26`,
+        `rocky10`), which supplies templateVmId (and optionally
+        templateNode). Unset = the EnvironmentConfig's default.
+        (XRD proxmoxvm >= v0.22.0)
     osType : str, default is Undefined, optional
         Proxmox OS type (e.g. l26 for Linux 2.6+/3.x).
     pool : str, default is Undefined, optional
@@ -192,6 +198,8 @@ schema NativeProxmoxVMSpecVM:
 
     node?: str
 
+    os?: str
+
     osType?: str
 
     pool?: str
@@ -209,5 +217,3 @@ schema NativeProxmoxVMSpecVM:
     vlanTag?: str
 
     vmId?: str
-
-
