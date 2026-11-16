@@ -52,6 +52,10 @@ import ..schema as s
 # 0.35.0 (2026-11-13, stuttgart-things#4489): vspherevm v0.15.0 -- spec.vm.os
 # picks templateUuid + guestId from the EnvironmentConfig's templates table
 # (Rocky Linux 10 on LabDA). Additive; no new dependsOn floor.
+#
+# 0.37.0 (2026-11-16): proxmoxvm v0.22.0 -- spec.vm.os picks the template VMID
+# from the EnvironmentConfig's templates table (Rocky Linux 10 on LabUL, VMID
+# 279). Additive; no new dependsOn floor.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -646,7 +650,12 @@ machinery: s.Profile = {
             # few seconds (crossplane-configurations#558/#560). Existing
             # EnvironmentVMs keep the copied value until it is removed once
             # (proxmoxvm README). No new dependsOn floor.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.21.0"
+            #
+            # v0.22.0: spec.vm.os selects an entry of the EnvironmentConfig's
+            # `templates` table, which supplies the template VMID (and
+            # optionally templateNode; crossplane-configurations#567). os unset
+            # renders as before. No new dependsOn floor.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/proxmoxvm:v0.22.0"
             pulls = ["ansible-run"]
         }
         # Dritter Hypervisor neben vSphere und Proxmox. Stand im Profil bisher
