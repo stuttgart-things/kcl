@@ -76,15 +76,14 @@ _labShort = "labda" if _vsphere else "labul"
 _useCase = _str("use_case", "baseos")
 assert _useCase in ["baseos", "kind", "dev", "rke2", "github-runner"], "use_case must be baseos, kind, dev, rke2 or github-runner, got ${_useCase}"
 
-# OS of the VM (stuttgart-things#4489). A key of the vspherevm EnvironmentConfig's
-# `templates` table, which supplies templateUuid AND guestId (vspherevm >=
-# v0.15.0) -- the order never names a UUID. Only LabDA vSphere offers a second
-# OS, and only for baseos: the other use cases' plays assume apt (Ubuntu).
-# ubuntu26 is the environment's default template, so it is NOT written into the
-# order: an order without os renders byte-identical to before.
+# OS of the VM (stuttgart-things#4489). A key of the EnvironmentConfig's
+# `templates` table: vspherevm (>= v0.15.0) takes templateUuid AND guestId from
+# it, proxmoxvm (>= v0.22.0) the template VMID -- the order never names a UUID
+# or VMID. Both labs offer rocky10, only for baseos: the other use cases' plays
+# assume apt (Ubuntu). ubuntu26 is the environment's default template, so it is
+# NOT written into the order: an order without os renders byte-identical to before.
 _os = _str("os", "ubuntu26")
 assert _os in ["ubuntu26", "rocky10"], "os must be ubuntu26 or rocky10, got ${_os}"
-assert _os == "ubuntu26" or _vsphere, "os ${_os} is only offered for labda-vsphere"
 assert _os == "ubuntu26" or _useCase == "baseos", "os ${_os} is only offered for use_case baseos, got ${_useCase}"
 
 # Same t-shirt sizes as create-vm.
@@ -318,7 +317,16 @@ _xrProxmox = {
     metadata = _metadata
     spec = {
         environmentConfig = _environmentConfig
-        vm = {name = _name, cpu = _cpu, memory = _memory, disk = _disk, agentEnabled = True, tagsPolicy = "Merge"}
+        vm = {
+            name = _name
+            cpu = _cpu
+            memory = _memory
+            disk = _disk
+            if _os != "ubuntu26":
+                os = _os
+            agentEnabled = True
+            tagsPolicy = "Merge"
+        }
         cloudInit = {ipv4Address = "dhcp"}
         ansible = _ansible
     }
