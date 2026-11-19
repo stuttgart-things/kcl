@@ -113,6 +113,11 @@ _platformEnabled = _spec?.platformEnabled if "platformEnabled" in _spec else Tru
 # anyone wants to discover.
 _mgmtEnabled = _spec?.managementPlaneEnabled if "managementPlaneEnabled" in _spec else False
 
+# Default OFF too (0.28.0, harvester#753): a read-only kubeconfig for clusterscope
+# means RBAC ON the built cluster and a credential platform hands out. Neither
+# should start appearing on existing stacks because the module was bumped.
+_csReaderEnabled = l.clusterscopeReaderEnabled(_spec)
+
 # --- observed children -----------------------------------------------------
 _byKind = lambda kind: str -> [any] {
     [v.Resource for _, v in _ocds if v?.Resource?.kind == kind]
@@ -187,6 +192,9 @@ _vssReady = lambda n: str -> bool {
     len([c for r in _byName(n) for c in (r?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
 }
 
+_csReaderObs = _byName("{}-clusterscope-reader".format(_name))
+_csReaderReady = len([1 for c in ((_csReaderObs[0] if _csReaderObs else {})?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
+
 _platObs = _byKind("Platform")
 _plat = _platObs[0] if _platObs else {}
 _platReady = len([c for c in (_plat?.status?.conditions or []) if c?.type == "Ready" and c?.status == "True"]) > 0
@@ -225,6 +233,12 @@ _platOpen = _platformEnabled and (_accessReady or len(_platObs) > 0)
 # reason: both need only the ClusterProviderConfigs, and neither needs the
 # other. They install in parallel — Crossplane and Flux do not contend.
 _mgmtOpen = _mgmtEnabled and (_accessReady or len(_mgmtObs) > 0)
+
+# The clusterscope reader needs what the Platform needs: an admin kubeconfig in
+# Vault that actually reaches the API server. ClusterAccess Ready is the proof
+# of both. Sticky like the rest -- and switching it OFF (enabled: false) is how
+# the Workspace, its RBAC and its Vault entry go away again.
+_csReaderOpen = _csReaderEnabled and (_accessReady or len(_csReaderObs) > 0)
 
 # Verbatim re-emission for the ansible children (see the module docstring).
 _reemit = lambda prev: any, stage: str -> {str:any} {
@@ -412,6 +426,20 @@ _usageGroups = [
     [l.usage(_vmKind, l.extraNodeName(_name, i), "ClusterAccess", "{}-access".format(_name), "access-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if (_extraOpen and _accessOpen) else []
     [l.usage(_vmKind, l.extraNodeName(_name, i), "Platform", "{}-platform".format(_name), "platform-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if (_extraOpen and _platOpen) else []
     [l.usage(_vmKind, l.extraNodeName(_name, i), "ManagementPlane", "{}-management-plane".format(_name), "mgmt-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if (_extraOpen and _mgmtOpen) else []
+    # The clusterscope reader Workspace destroys RBAC THROUGH the cluster and
+    # reads the admin kubeconfig to do it: the machine, the ClusterAccess and
+    # the kubeconfig entry's owner all have to outlive it, or its destroy fails
+    # against a dead API server / a deleted entry and the Workspace hangs on its
+    # finalizer. And, as for the Platform and the ManagementPlane, a guard on the
+    # stack itself: the three edges above cannot order a one-phase delete of the
+    # ClusterStack, so that delete is refused while the Workspace exists.
+    # Teardown phase 1 sets clusterscope.reader.enabled: false next to
+    # platformEnabled: false.
+    [l.usage(_machKind, _machName, "Workspace", "{}-clusterscope-reader".format(_name), "csreader-uses-" + _machLabel, True, _name)] if _csReaderOpen else []
+    [l.usage("ClusterAccess", "{}-access".format(_name), "Workspace", "{}-clusterscope-reader".format(_name), "csreader-uses-access", True, _name)] if (_csReaderOpen and _accessOpen) else []
+    [l.usage("Workspace", "{}-kubeconfig-vault".format(_name), "Workspace", "{}-clusterscope-reader".format(_name), "csreader-uses-kubeconfig-vault", True, _name)] if (_csReaderOpen and _kcVaultOpen) else []
+    [l.usage("ClusterStack", _name, "Workspace", "{}-clusterscope-reader".format(_name), "stack-uses-csreader", False, _name)] if _csReaderOpen else []
+    [l.usage(_vmKind, l.extraNodeName(_name, i), "Workspace", "{}-clusterscope-reader".format(_name), "csreader-uses-vm-{}".format(i), True, _name) for i in _extraIdx] if (_extraOpen and _csReaderOpen) else []
 ]
 _usages = sum(_usageGroups, [])
 
@@ -471,6 +499,9 @@ _dxrPatched = _dxr | {
             access = {ready = _accessReady, emitted = _accessOpen}
             platform = {ready = _platReady, emitted = _platOpen}
             managementPlane = {ready = _mgmtReady, emitted = _mgmtOpen}
+            # Only when asked for, so a stack without it keeps its status as is.
+            if _csReaderEnabled:
+                clusterscopeReader = {ready = _csReaderReady, emitted = _csReaderOpen}
             if _appNames:
                 appSecrets = {
                     profiles = _appNames
@@ -501,6 +532,7 @@ _groups = [
     # a teardown) must not delete the generated values a rebuild would reuse.
     [l.vaultSecretSetChild(_name, _ns, s) for s in _appPlan.sets]
     [l.managementPlaneChild(_name, _ns, _spec)] if _mgmtOpen else []
+    [l.clusterscopeReaderWorkspace(_name, _ns, _spec)] if _csReaderOpen else []
     _usages
     [_dxrPatched]
 ]

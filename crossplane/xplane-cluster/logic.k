@@ -1123,6 +1123,352 @@ kubeconfigWorkspace = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
     }
 }
 
+# --- a READ-ONLY kubeconfig for clusterscope (harvester#753) -----------------
+# clusterscope on platform reads the lab's clusters through the OpenBao mount
+# `clusterscope`, one entry per cluster, property `kubeconfig`. Those entries
+# must NEVER be the admin kubeconfigs in `kubeconfigs`: the ClusterSecretStore
+# that reads them can be referenced from any namespace on platform
+# (crossplane-configurations#454). Until 0.28.0 each entry was seeded by hand
+# (harvester clusters/platform/openbao/platform-eso/seed-clusterscope-kubeconfig.sh);
+# this Workspace does the same, opt-in, per ClusterStack:
+#
+#   1. reads the ADMIN kubeconfig from <kubeconfig mount>/<path> -- only to talk
+#      to the cluster, it is never written anywhere,
+#   2. creates ServiceAccount, ClusterRole, ClusterRoleBinding and a token
+#      Secret `clusterscope-reader` in kube-system -- the seed script's rules,
+#      get/list/watch only, NO Secrets, no writes,
+#   3. writes a kubeconfig with that token + the cluster CA to
+#      <reader mount>/<entry> with custom_metadata managed-by/cluster.
+#
+# Destroying it deletes the RBAC (and with it the token) and every version of
+# the entry. The token lives in the Workspace's TF state only: no outputs, so
+# nothing reaches the Workspace's status or the XR's.
+#
+# NO `${` ANYWHERE IN THIS STRING: KCL interpolates it inside string literals.
+# The kubeconfig is built with yamlencode instead of a heredoc for that reason
+# (and because yamlencode quotes for us).
+_CLUSTERSCOPE_READER_HCL = """terraform {
+  required_providers {
+    vault = {
+      source  = "hashicorp/vault"
+      version = "~> 3.25"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.38"
+    }
+  }
+}
+
+variable "vault_addr" {
+  type = string
+}
+
+variable "admin_mount" {
+  type = string
+}
+
+variable "admin_path" {
+  type = string
+}
+
+variable "reader_mount" {
+  type = string
+}
+
+variable "reader_path" {
+  type = string
+}
+
+variable "cluster_name" {
+  type = string
+}
+
+# Empty = the admin kubeconfig's server, as the seed script defaults it.
+variable "server" {
+  type    = string
+  default = ""
+}
+
+variable "vault_role_id" {
+  type = string
+}
+
+variable "vault_secret_id" {
+  type      = string
+  sensitive = true
+}
+
+provider "vault" {
+  address          = var.vault_addr
+  skip_tls_verify  = true
+  skip_child_token = true
+
+  auth_login {
+    path = "auth/approle/login"
+    parameters = {
+      role_id   = var.vault_role_id
+      secret_id = var.vault_secret_id
+    }
+  }
+}
+
+# The admin kubeconfig, only to create the RBAC below. Sensitive throughout.
+data "vault_kv_secret_v2" "admin" {
+  mount = var.admin_mount
+  name  = var.admin_path
+}
+
+locals {
+  admin = yamldecode(data.vault_kv_secret_v2.admin.data["kubeconfig"])
+  # The current context, as `kubectl config view --minify` picks it; the first
+  # entry when the kubeconfig names none.
+  admin_ctx = try(
+    [for c in local.admin.contexts : c.context if c.name == local.admin["current-context"]][0],
+    local.admin.contexts[0].context
+  )
+  admin_cluster = try(
+    [for c in local.admin.clusters : c.cluster if c.name == local.admin_ctx.cluster][0],
+    local.admin.clusters[0].cluster
+  )
+  admin_user = try(
+    [for u in local.admin.users : u.user if u.name == local.admin_ctx.user][0],
+    local.admin.users[0].user
+  )
+  admin_insecure = try(tobool(local.admin_cluster["insecure-skip-tls-verify"]), false)
+
+  server = var.server != "" ? var.server : local.admin_cluster.server
+
+  labels = {
+    "app.kubernetes.io/name"    = "clusterscope-reader"
+    "app.kubernetes.io/part-of" = "clusterscope"
+  }
+}
+
+# k3s/rke2 admin kubeconfigs carry a client certificate, Rancher-generated ones
+# a token; whichever is absent stays null.
+provider "kubernetes" {
+  host                   = local.admin_cluster.server
+  insecure               = local.admin_insecure
+  cluster_ca_certificate = local.admin_insecure ? null : try(base64decode(local.admin_cluster["certificate-authority-data"]), null)
+  client_certificate     = try(base64decode(local.admin_user["client-certificate-data"]), null)
+  client_key             = try(base64decode(local.admin_user["client-key-data"]), null)
+  token                  = try(local.admin_user.token, null)
+}
+
+resource "kubernetes_service_account_v1" "reader" {
+  metadata {
+    name      = "clusterscope-reader"
+    namespace = "kube-system"
+    labels    = local.labels
+  }
+}
+
+# EXACTLY what clusterscope reads (its own ClusterRole, clusterscope
+# kcl/clusterrole.k, plus ClusterStacks for the order view) -- kept identical to
+# seed-clusterscope-kubeconfig.sh. No Secrets, no writes.
+resource "kubernetes_cluster_role_v1" "reader" {
+  metadata {
+    name   = "clusterscope-reader"
+    labels = local.labels
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["nodes", "namespaces", "pods", "configmaps"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["apps"]
+    resources  = ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["kustomize.toolkit.fluxcd.io"]
+    resources  = ["kustomizations"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["source.toolkit.fluxcd.io"]
+    resources  = ["gitrepositories", "ocirepositories", "helmrepositories", "helmcharts"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["helm.toolkit.fluxcd.io"]
+    resources  = ["helmreleases"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["fluxcd.controlplane.io"]
+    resources  = ["fluxinstances"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["gateway.networking.k8s.io"]
+    resources  = ["gateways", "httproutes"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["argoproj.io"]
+    resources  = ["applications", "applicationsets", "appprojects"]
+    verbs      = ["get", "list", "watch"]
+  }
+  rule {
+    api_groups = ["config.stuttgart-things.com"]
+    resources  = ["clusterstacks"]
+    verbs      = ["get", "list", "watch"]
+  }
+}
+
+resource "kubernetes_cluster_role_binding_v1" "reader" {
+  metadata {
+    name   = "clusterscope-reader"
+    labels = local.labels
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role_v1.reader.metadata[0].name
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account_v1.reader.metadata[0].name
+    namespace = kubernetes_service_account_v1.reader.metadata[0].namespace
+  }
+}
+
+# Long-lived token, filled by the token controller. Deleting it (or destroying
+# this Workspace) revokes it.
+resource "kubernetes_secret_v1" "token" {
+  metadata {
+    name      = "clusterscope-reader-token"
+    namespace = "kube-system"
+    labels    = local.labels
+    annotations = {
+      "kubernetes.io/service-account.name" = kubernetes_service_account_v1.reader.metadata[0].name
+    }
+  }
+  type                           = "kubernetes.io/service-account-token"
+  wait_for_service_account_token = true
+}
+
+# kubernetes_secret_v1 hands data back DECODED, hence the base64encode for the
+# CA. User name and context follow the seed script.
+locals {
+  reader_kubeconfig = yamlencode({
+    apiVersion = "v1"
+    kind       = "Config"
+    clusters = [{
+      name = var.cluster_name
+      cluster = {
+        server                       = local.server
+        "certificate-authority-data" = base64encode(kubernetes_secret_v1.token.data["ca.crt"])
+      }
+    }]
+    users = [{
+      name = "clusterscope-reader"
+      user = { token = kubernetes_secret_v1.token.data["token"] }
+    }]
+    contexts = [{
+      name    = var.cluster_name
+      context = { cluster = var.cluster_name, user = "clusterscope-reader" }
+    }]
+    "current-context" = var.cluster_name
+  })
+}
+
+# delete_all_versions: destroy removes the metadata path, i.e. the whole entry,
+# not just the latest version.
+resource "vault_kv_secret_v2" "reader" {
+  mount               = var.reader_mount
+  name                = var.reader_path
+  delete_all_versions = true
+  data_json           = jsonencode({ kubeconfig = local.reader_kubeconfig })
+
+  custom_metadata {
+    data = {
+      "managed-by" = "crossplane"
+      "cluster"    = var.cluster_name
+    }
+  }
+
+  depends_on = [kubernetes_cluster_role_binding_v1.reader]
+}
+"""
+
+clusterscopeReader = lambda spec: {str:any} -> {str:any} {
+    (spec?.clusterscope or {})?.reader or {}
+}
+
+clusterscopeReaderEnabled = lambda spec: {str:any} -> bool {
+    """Default OFF. Explicit opt-in per order.
+
+    Unlike kubeconfig.lifecycle there is no per-provisioner default: this
+    creates RBAC ON the built cluster and a credential platform hands out, and
+    neither is something an existing stack should start doing after a module
+    bump.
+    """
+    clusterscopeReader(spec)?.enabled or False
+}
+
+clusterscopeReaderWorkspace = lambda name: str, ns: str, spec: {str:any} -> {str:any} {
+    """The Workspace that writes a READ-ONLY kubeconfig to <mount>/<entry>.
+
+    Values travel as Workspace vars, as on kubeconfigWorkspace: the module stays
+    a constant and no name lands inside a quoted HCL literal.
+    """
+    _cluster = spec?.clusterName or name
+    _kc = spec?.kubeconfig or {}
+    _lc = kubeconfigLifecycle(spec)
+    _r = clusterscopeReader(spec)
+
+    # Same Vault as the kubeconfig lifecycle unless stated: the reader reads the
+    # admin kubeconfig from there, and the lab keeps both mounts on one OpenBao.
+    _addr = _r?.vaultAddr or _lc?.vaultAddr or ""
+    assert _addr, "clusterscope.reader needs vaultAddr (or kubeconfig.lifecycle.vaultAddr) — the Workspace that writes the read-only kubeconfig of " + _cluster + " has to know which Vault holds kubeconfigs/ and clusterscope/"
+    {
+        apiVersion = "opentofu.m.upbound.io/v1beta1"
+        kind = "Workspace"
+        metadata = {
+            name = "{}-clusterscope-reader".format(name)
+            namespace = ns
+            annotations = {"krm.kcl.dev/composition-resource-name" = "clusterscope-reader"}
+        }
+        spec = {
+            providerConfigRef = {
+                name = _r?.providerConfigName or _lc?.providerConfigName or "in-cluster"
+                kind = "ClusterProviderConfig"
+            }
+            forProvider = {
+                source = "Inline"
+                module = _CLUSTERSCOPE_READER_HCL
+                vars = [
+                    {key = "vault_addr", value = _addr}
+                    # The admin kubeconfig: where the upload wrote it and
+                    # ClusterAccess reads it from.
+                    {key = "admin_mount", value = _lc?.mount or "kubeconfigs"}
+                    {key = "admin_path", value = _kc?.vaultPath or _cluster}
+                    {key = "reader_mount", value = _r?.mount or "clusterscope"}
+                    {key = "reader_path", value = _r?.entry or _cluster}
+                    {key = "cluster_name", value = _cluster}
+                    {key = "server", value = _r?.server or ""}
+                ]
+                # The kubeconfig-writer AppRole: it already reads
+                # kubeconfigs/data/+, and machinery-fleet adds the
+                # write-clusterscope-kubeconfigs policy to it (harvester#753).
+                varFiles = [{
+                    source = "SecretKey"
+                    format = "HCL"
+                    secretKeyRef = {
+                        name = _r?.credentialSecret or "vault-kubeconfig-writer"
+                        key = "terraform.tfvars"
+                    }
+                }]
+            }
+        }
+    }
+}
+
 # vaultSecretName says WHERE THE UPLOAD WRITES, providerConfigRef says WHERE THE
 # READ COMES FROM. They must mean the same Vault, and until 0.9.0 nothing enforced
 # that: the defaults `vault` and `vault-kubeconfigs` agreed by accident, but the
