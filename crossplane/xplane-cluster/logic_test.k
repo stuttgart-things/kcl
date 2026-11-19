@@ -973,6 +973,136 @@ test_kubeconfig_workspace_follows_an_overridden_vault_path = lambda {
     assert _vars["metadata_path"] == "kubeconfigs/metadata/clusters/rke2-1"
 }
 
+# --- the clusterscope reader (harvester#753) --------------------------------
+# Shaped like app-dev-hv: lifecycle on with the platform OpenBao, nothing about
+# clusterscope. That order must not grow a Workspace from a module bump.
+_appDevHvLike = {
+    provider = "harvester"
+    distribution = "rancher-k3s"
+    clusterName = "app-dev-hv"
+    kubeconfig = {
+        lifecycle = {vaultAddr = "https://openbao.platform.sthings.lab"}
+    }
+}
+
+_readerSpec = _appDevHvLike | {
+    clusterscope = {
+        reader = {enabled = True}
+    }
+}
+
+test_clusterscope_reader_is_off_by_default = lambda {
+    assert l.clusterscopeReaderEnabled(_appDevHvLike) == False
+    assert l.clusterscopeReaderEnabled({distribution = "rancher-rke2"}) == False
+    assert l.clusterscopeReaderEnabled(_appDevHvLike | {
+        clusterscope = {
+            reader = {enabled = False}
+        }
+    }) == False
+    assert l.clusterscopeReaderEnabled(_readerSpec) == True
+}
+
+test_clusterscope_reader_workspace_passes_values_as_vars = lambda {
+    _w = l.clusterscopeReaderWorkspace("app-dev-hv", "default", _readerSpec)
+    assert _w.apiVersion == "opentofu.m.upbound.io/v1beta1"
+    assert _w.kind == "Workspace"
+    assert _w.metadata.name == "app-dev-hv-clusterscope-reader"
+    assert _w.metadata.annotations["krm.kcl.dev/composition-resource-name"] == "clusterscope-reader"
+    assert _w.spec.providerConfigRef == {name = "in-cluster", kind = "ClusterProviderConfig"}
+    _vars = {v.key: v.value for v in _w.spec.forProvider.vars}
+    # vaultAddr falls back to the kubeconfig lifecycle's: same OpenBao.
+    assert _vars == {
+        vault_addr = "https://openbao.platform.sthings.lab"
+        admin_mount = "kubeconfigs"
+        admin_path = "app-dev-hv"
+        reader_mount = "clusterscope"
+        reader_path = "app-dev-hv"
+        cluster_name = "app-dev-hv"
+        server = ""
+    }
+}
+
+# The kubeconfig-writer AppRole, which machinery-fleet gives the
+# write-clusterscope-kubeconfigs policy -- no second credential to render.
+test_clusterscope_reader_workspace_uses_the_writer_credential = lambda {
+    _f = l.clusterscopeReaderWorkspace("app-dev-hv", "default", _readerSpec).spec.forProvider.varFiles[0]
+    assert _f.source == "SecretKey"
+    assert _f.format == "HCL"
+    assert _f.secretKeyRef == {name = "vault-kubeconfig-writer", key = "terraform.tfvars"}
+}
+
+test_clusterscope_reader_overrides_win = lambda {
+    _w = l.clusterscopeReaderWorkspace("xr", "ns", _appDevHvLike | {
+        kubeconfig = {
+            vaultPath = "clusters/app-dev-hv"
+            lifecycle = {vaultAddr = "https://openbao.platform.sthings.lab", mount = "kc"}
+        }
+        clusterscope = {
+            reader = {
+                enabled = True
+                vaultAddr = "https://other.example"
+                mount = "cs"
+                entry = "app-dev"
+                server = "https://10.0.0.5:6443"
+                credentialSecret = "vault-clusterscope-writer"
+                providerConfigName = "tofu"
+            }
+        }
+    })
+    _vars = {v.key: v.value for v in _w.spec.forProvider.vars}
+    assert _vars["vault_addr"] == "https://other.example"
+    assert _vars["admin_mount"] == "kc"
+    assert _vars["admin_path"] == "clusters/app-dev-hv"
+    assert _vars["reader_mount"] == "cs"
+    assert _vars["reader_path"] == "app-dev"
+    assert _vars["server"] == "https://10.0.0.5:6443"
+    assert _vars["cluster_name"] == "app-dev-hv"
+    assert _w.spec.forProvider.varFiles[0].secretKeyRef.name == "vault-clusterscope-writer"
+    assert _w.spec.providerConfigRef.name == "tofu"
+}
+
+# The module is a constant: no value of the order is baked into the HCL, and it
+# carries the seed script's rules -- read verbs only, never Secrets.
+test_clusterscope_reader_module_is_a_constant_and_read_only = lambda {
+    _m = l.clusterscopeReaderWorkspace("app-dev-hv", "default", _readerSpec).spec.forProvider.module
+    assert "app-dev-hv" not in _m
+    assert "openbao" not in _m
+    assert '"secrets"' not in _m
+    _forbidden = [v for v in ["create", "update", "patch", "delete", "escalate", "bind", "impersonate", "*"] if '"{}"'.format(v) in _m]
+    assert _forbidden == [], "reader ClusterRole must not grant " + ", ".join(_forbidden)
+    assert 'verbs      = ["get", "list", "watch"]' in _m
+    assert "kubernetes.io/service-account-token" in _m
+    assert "delete_all_versions = true" in _m
+    assert '"managed-by" = "crossplane"' in _m
+    # Nothing leaves TF state: no outputs that could reach a status.
+    assert "output " not in _m
+}
+
+# Rendered the way function-kcl runs it, minus Crossplane: the HCL must not
+# contain anything KCL interpolated (a stray `${` would have been eaten).
+test_clusterscope_reader_module_survives_kcl_strings = lambda {
+    _m = l.clusterscopeReaderWorkspace("app-dev-hv", "default", _readerSpec).spec.forProvider.module
+    assert "kubernetes_secret_v1.token.data[\"token\"]" in _m
+    assert "yamlencode(" in _m
+}
+
+test_clusterscope_reader_needs_a_vault = lambda {
+    _spec = {clusterName = "c", distribution = "k3s", clusterscope = {
+        reader = {enabled = True}
+    }}
+    assert l.clusterscopeReaderEnabled(_spec) == True
+    _r = l.clusterscopeReader(_spec)
+    assert (_r?.vaultAddr or "") == ""
+}
+
+test_clusterscope_reader_usage_groups_resolve = lambda {
+    _u = l.usage("Workspace", "c-kubeconfig-vault", "Workspace", "c-clusterscope-reader", "csreader-uses-kubeconfig-vault", True, "c")
+    assert _u.metadata.name == "c-csreader-uses-kubeconfig-vault"
+    assert _u.spec.of.apiVersion == "opentofu.m.upbound.io/v1beta1"
+    assert _u.spec.by.apiVersion == "opentofu.m.upbound.io/v1beta1"
+    assert _u.spec.by.resourceRef.name == "c-clusterscope-reader"
+}
+
 # --- Argo CD labels: profiles, derived facts, overrides -----------------------
 _rancherStack = {
     clusterName = "c6"

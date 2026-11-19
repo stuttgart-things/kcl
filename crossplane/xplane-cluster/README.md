@@ -89,6 +89,37 @@ The upload writes that Vault entry; nothing removed it. A torn-down cluster left
 - **Values travel as Workspace vars**, so the HCL stays a constant and a cluster name never lands inside a quoted HCL literal.
 - **One more Usage:** `ClusterAccess` reads the entry, so the Workspace outlives it.
 
+## A read-only kubeconfig for clusterscope (0.28.0)
+
+clusterscope on `platform` reads the lab's clusters through the OpenBao KV mount `clusterscope`, one entry per cluster, property `kubeconfig` ([harvester#753](https://github.com/stuttgart-things/harvester/issues/753)). Those must be **read-only ServiceAccount kubeconfigs, never the admin ones** in `kubeconfigs`: a ClusterSecretStore on platform can be referenced from any namespace ([crossplane-configurations#454](https://github.com/stuttgart-things/crossplane-configurations/issues/454)). Until now each entry was seeded by hand (`seed-clusterscope-kubeconfig.sh` in harvester); this does the same per ClusterStack, opt-in:
+
+```yaml
+spec:
+  clusterscope:
+    reader:
+      enabled: true          # default false
+      # all optional:
+      # vaultAddr: …         default kubeconfig.lifecycle.vaultAddr
+      # mount: clusterscope
+      # entry: <clusterName> the cluster's name in clusterscope
+      # server: https://…    default: the admin kubeconfig's server
+      # credentialSecret: vault-kubeconfig-writer
+      # providerConfigName: in-cluster  (else kubeconfig.lifecycle's)
+```
+
+It composes **one Workspace, `{name}-clusterscope-reader`**, once `ClusterAccess` is Ready (the Platform's gate, sticky like every gate). Its inline module
+
+1. reads the admin kubeconfig from `<kubeconfig.lifecycle.mount>/<kubeconfig.vaultPath or clusterName>` — only to reach the cluster, it is written nowhere,
+2. creates `ServiceAccount`, `ClusterRole`, `ClusterRoleBinding` and a `service-account-token` Secret, all `clusterscope-reader` in `kube-system`, with **exactly the seed script's rules**: get/list/watch on what clusterscope shows, no Secrets, no writes,
+3. writes a kubeconfig (server, the token Secret's `ca.crt`, the token, user `clusterscope-reader`) to `<mount>/<entry>` with `custom_metadata` `managed-by: crossplane`, `cluster: <clusterName>`.
+
+- **Destroy** removes the RBAC (revoking the token) and every version of the entry (`delete_all_versions`). `enabled: false` is how you get there.
+- **The token lives in TF state only.** The module has no outputs, so nothing reaches the Workspace's or the XR's status.
+- **Credential:** the kubeconfig-writer AppRole (`vault-kubeconfig-writer`), which already reads `kubeconfigs/data/+`; the OpenBao side gives it `write-clusterscope-kubeconfigs` (harvester `clusters/platform/openbao/machinery-fleet`). Without that policy the Workspace fails with a 403 on `clusterscope/data/<entry>` and the stack stays at `stages.clusterscopeReader.ready: false`.
+- **A cluster seeded by hand first** already has the four objects; the Workspace then fails with `AlreadyExists`. Delete them (`kubectl -n kube-system delete sa,secret clusterscope-reader clusterscope-reader-token; kubectl delete clusterrole,clusterrolebinding clusterscope-reader`) before opting in — the Vault entry itself is simply overwritten with a new version.
+- **Usages:** the machine, the `ClusterAccess` and the `kubeconfig-vault` Workspace outlive it (its destroy talks to the API server with the admin kubeconfig), plus a guard on the **ClusterStack itself**, as for the Platform: the stack cannot be deleted while the Workspace exists. Teardown phase 1 is therefore `platformEnabled: false` **and** `clusterscope.reader.enabled: false`.
+- **Status:** `status.stages.clusterscopeReader = {ready, emitted}`, only when enabled — a stack without it renders byte-identical to 0.27.4. The `status.ready` field ignores it; the XR's `Ready` condition (function-auto-ready) waits for it, as it does for `kubeconfig-vault`.
+
 ## Rancher builds the Harvester VM: a machine pool (0.22.0)
 
 On Harvester the rancher path has a second shape. Harvester is registered in
