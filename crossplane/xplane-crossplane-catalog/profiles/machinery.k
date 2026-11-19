@@ -56,6 +56,10 @@ import ..schema as s
 # 0.37.0 (2026-11-16): proxmoxvm v0.22.0 -- spec.vm.os picks the template VMID
 # from the EnvironmentConfig's templates table (Rocky Linux 10 on LabUL, VMID
 # 279). Additive; no new dependsOn floor.
+#
+# 0.38.0 (2026-11-19, harvester#753): cluster v0.17.0 -- opt-in
+# spec.clusterscope.reader writes a read-only kubeconfig for clusterscope per
+# ClusterStack. Additive (default off); no new dependsOn floor.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -558,7 +562,13 @@ machinery: s.Profile = {
             #            sich nicht mehr gegenseitig die abgeleiteten
             #            Secret-Annotationen (vorher fehlten kargo-secret-*).
             #            Goldens und dependsOn unveraendert.
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.16.4"
+            #   v0.17.0  xplane-cluster 0.28.0 (Katalog 0.38.0, harvester#753):
+            #            opt-in spec.clusterscope.reader (Standard aus) legt
+            #            nach ClusterAccess einen Lese-ServiceAccount an und
+            #            schreibt clusterscope/<cluster> in OpenBao. Ohne das
+            #            Feld rendern alle Goldens unveraendert; dependsOn
+            #            unveraendert.
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/cluster:v0.17.0"
             pulls = [
                 "platform"
                 "remote-cluster"
