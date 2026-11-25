@@ -51,6 +51,32 @@ schema Workspace:
         mountPath.startswith("/"), "mountPath must be absolute"
         claimName != "", "claimName must be set"
 
+schema TrustBundle:
+    """A CA bundle ConfigMap mounted into the provider's `package-runtime` container.
+
+    Consumers render three things from it, all in the provider's
+    DeploymentRuntimeConfig: a pod volume from the ConfigMap with
+    `optional: true` (named `trust-bundle`), a read-only volumeMount at
+    `mountPath`, and the env `SSL_CERT_DIR=/etc/ssl/certs:<mountPath>`.
+
+    Go reads every file in each SSL_CERT_DIR entry, and the system bundle file
+    is read regardless, so the image's own CAs stay trusted. `optional` keeps a
+    cluster without trust-manager starting the provider: it then just has no
+    extra CAs, which is the state it was in before."""
+    configMap: str = "cluster-trust-bundle"
+    """The ConfigMap trust-manager's `cluster-trust-bundle` Bundle writes into
+    every namespace: public CAs plus the lab's Vault PKI CA. A fleet name, not a
+    per-cluster value -- which is why it can sit in the catalog."""
+
+    mountPath: str = "/etc/ssl/custom"
+    """Same path as claim-machinery-api's mount of the same ConfigMap
+    (stuttgart-things/flux apps/claim-machinery-api)."""
+
+    check:
+        mountPath.startswith("/"), "mountPath must be absolute"
+        mountPath != "/etc/ssl/certs", "mounting over /etc/ssl/certs would hide the image's own CAs"
+        configMap != "", "configMap must be set"
+
 schema Package:
     """One Crossplane package CR: a Provider, Function or Configuration."""
     kind: "Provider" | "Function" | "Configuration"
@@ -154,12 +180,26 @@ schema Package:
     the MR on every call -- nor for provider-opentofu, whose state is in the
     kubernetes backend its in-cluster ProviderConfig configures."""
 
+    trustBundle?: TrustBundle
+    """Extra CAs for the provider's outbound TLS, rendered into the same
+    DeploymentRuntimeConfig as env, resources and workspace.
+
+    For providers whose OWN process talks to a lab endpoint. provider-opentofu
+    runs the zitadel provider inside its pod, and ZITADEL is served under the
+    lab's Vault PKI wildcard: without the lab CA every Workspace against it
+    fails the TLS handshake (zitadel-oidc-client pilot on machinery-dev,
+    2026-11-25). Not a substitute for runtimeConfig where a chart already ships
+    the CA (provider-kubeconfig)."""
+
     check:
         ":" in package, "package must carry an explicit tag"
         not package.endswith(":latest"), "package must not use a floating tag"
         not env or kind == "Provider", "env is a provider runtime setting"
         not resources or kind == "Provider", "resources is a provider runtime setting"
         not workspace or kind == "Provider", "workspace is a provider runtime setting"
+        not trustBundle or kind == "Provider", "trustBundle is a provider runtime setting"
+        not (trustBundle and runtimeConfig), "trustBundle is rendered into the provider's own DeploymentRuntimeConfig, and runtimeConfig points it at someone else's"
+        not (trustBundle and env and "SSL_CERT_DIR" in env), "SSL_CERT_DIR is rendered from trustBundle; setting it in env as well would make two values for one variable"
         not (workspace and runtimeConfig), "workspace is rendered into the provider's own DeploymentRuntimeConfig, and runtimeConfig points it at someone else's"
 
 schema ProviderConfig:
@@ -184,4 +224,3 @@ schema Profile:
 
     check:
         len(packages) > 0, "a profile installs at least one package"
-
