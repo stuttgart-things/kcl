@@ -211,6 +211,7 @@ test_packages_keep_the_runtime_fields = lambda {
     assert _b.env.PROVIDER_POLL == "1h"
     assert _b.resources.limits.cpu == "2"
     assert _b.workspace.claimName == "valkiriaaquaticamendi-provider-proxmox-bpg-workspace"
+    assert _pkg("upbound-provider-opentofu").trustBundle.configMap == "cluster-trust-bundle"
 }
 
 # Only providers whose runtime the catalog describes get a config of their
@@ -253,16 +254,35 @@ test_workspace_rollout_never_surges = lambda {
     assert _s.strategy.rollingUpdate.maxUnavailable == 1
 }
 
-# A provider without a workspace gets env/resources only -- no securityContext,
-# no volume, no strategy. Crossplane's defaults stay in force.
+# A provider without a workspace gets no securityContext and no strategy --
+# Crossplane's defaults stay in force. Its only volume is the trust bundle.
 test_runtime_config_without_workspace_stays_minimal = lambda {
     _s = l.runtimeConfigManifest(_pkg("upbound-provider-opentofu")).spec.deploymentTemplate.spec
     assert "strategy" not in _s
     _pod = _s.template.spec
     assert "securityContext" not in _pod
-    assert "volumes" not in _pod
-    assert "volumeMounts" not in _pod.containers[0]
+    assert [v.name for v in _pod.volumes] == ["trust-bundle"]
     assert _pod.containers[0].env[0].name == "CROSSPLANE_OPENTOFU_PROVIDER_POLL"
+}
+
+# The trust bundle (catalog 0.39.0): the zitadel provider inside opentofu's pod
+# talks to a ZITADEL under the lab's Vault PKI wildcard. optional: a cluster
+# without trust-manager still starts the provider. SSL_CERT_DIR keeps
+# /etc/ssl/certs first so the image's CAs stay.
+test_opentofu_runtime_config_mounts_the_trust_bundle = lambda {
+    _pod = l.runtimeConfigManifest(_pkg("upbound-provider-opentofu")).spec.deploymentTemplate.spec.template.spec
+    _c = _pod.containers[0]
+    assert _pod.volumes == [{name = "trust-bundle", configMap = {name = "cluster-trust-bundle", optional = True}}]
+    assert _c.volumeMounts == [{name = "trust-bundle", mountPath = "/etc/ssl/custom", readOnly = True}]
+    assert [e.value for e in _c.env if e.name == "SSL_CERT_DIR"] == ["/etc/ssl/certs:/etc/ssl/custom"]
+    assert [e.name for e in _c.env] == ["CROSSPLANE_OPENTOFU_PROVIDER_POLL", "CROSSPLANE_OPENTOFU_PROVIDER_SYNC", "SSL_CERT_DIR"], "env sorted, like the flux generator"
+}
+
+# Nothing else gains a volume: proxmox-bpg keeps exactly its workspace.
+test_trust_bundle_is_not_added_where_the_catalog_has_none = lambda {
+    _pod = l.runtimeConfigManifest(_pkg("valkiriaaquaticamendi-provider-proxmox-bpg")).spec.deploymentTemplate.spec.template.spec
+    assert [v.name for v in _pod.volumes] == ["workspace"]
+    assert "SSL_CERT_DIR" not in [e.name for e in _pod.containers[0].env]
 }
 
 test_workspace_claim_uses_the_default_storage_class = lambda {

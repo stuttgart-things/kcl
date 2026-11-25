@@ -12,7 +12,7 @@ packages and provider configs that let it build other clusters.
 ```
 
 plus, with the packages, one `DeploymentRuntimeConfig` Object per Provider the
-catalog gives `env`, `resources` or a `workspace`, and one
+catalog gives `env`, `resources`, a `workspace` or a `trustBundle`, and one
 `PersistentVolumeClaim` Object per `workspace`.
 
 ## Provider runtime
@@ -35,6 +35,13 @@ destroying the VM. The DRC then also carries the full pod `securityContext`
 RollingUpdate with `maxSurge: 0`. The PVC's Object has no `Delete` management
 policy: deleting the claim with its Object would be the very state loss it
 prevents.
+
+`trustBundle` (since 0.9.0, catalog 0.39.0; provider-opentofu) adds a pod
+volume from the CA ConfigMap (`cluster-trust-bundle`, `optional: true`), a
+read-only mount at its `mountPath` and `SSL_CERT_DIR=/etc/ssl/certs:<mountPath>`
+to the same DRC — the zitadel provider inside opentofu's pod needs the lab CA.
+Order is fixed and shared with the flux generator: env sorted by name, volumes
+and mounts `workspace` before `trust-bundle`.
 
 The catalog's `runtimeConfig` (a config something else ships) is still not
 referenced: nothing on a ManagementPlane cluster is known to ship
