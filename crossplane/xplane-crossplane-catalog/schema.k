@@ -224,3 +224,4 @@ schema Profile:
 
     check:
         len(packages) > 0, "a profile installs at least one package"
+
