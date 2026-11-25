@@ -61,6 +61,7 @@ packages = lambda spec: {str:} -> [cs.Package] {
         env = p.env
         resources = p.resources
         workspace = p.workspace
+        trustBundle = p.trustBundle
     } for p in profile(spec).packages]
 }
 
@@ -80,7 +81,7 @@ packageApiVersion = lambda p: cs.Package -> str {
 }
 
 # --- provider runtime --------------------------------------------------------
-# A Provider the catalog gives env, resources or a workspace runs with a
+# A Provider the catalog gives env, resources, a workspace or a trustBundle runs with a
 # DeploymentRuntimeConfig named like itself, plus a runtimeConfigRef to it.
 # Shape-identical to stuttgart-things/flux hack/gen-crossplane-profile.py, so a
 # management cluster built by Crossplane and one built by Flux are the same.
@@ -90,7 +91,7 @@ packageApiVersion = lambda p: cs.Package -> str {
 # provider-kubeconfig / provider-minio, and a Provider pointed at a missing
 # config does not start. That has always been so here, and stays so.
 ownsRuntimeConfig = lambda p: cs.Package -> bool {
-    p.kind == "Provider" and bool(p?.env or p?.resources or p?.workspace)
+    p.kind == "Provider" and bool(p?.env or p?.resources or p?.workspace or p?.trustBundle)
 }
 
 # The pod securityContext a workspace needs. Rendering one REPLACES
@@ -105,24 +106,37 @@ workspaceSecurityContext = lambda w -> {str:} {
     }
 }
 
+# The env a trustBundle adds. Go reads every file in each SSL_CERT_DIR entry
+# and the system bundle file regardless, so the image's own CAs stay trusted.
+trustBundleEnv = lambda t -> {str:str} {
+    {SSL_CERT_DIR = "/etc/ssl/certs:${t.mountPath}"}
+}
+
 runtimeConfigManifest = lambda p: cs.Package -> {str:} {
-    _env = p?.env or {}
     _w = p?.workspace
+    _t = p?.trustBundle
+
+    # The catalog rejects SSL_CERT_DIR in env beside a trustBundle, so the
+    # union never has to pick a winner.
+    _env = (p?.env or {}) | (trustBundleEnv(_t) if _t else {})
+    # Fixed order, workspace first, shared with the flux generator.
+    _mounts = ([{name = "workspace", mountPath = _w.mountPath}] if _w else []) + ([{name = "trust-bundle", mountPath = _t.mountPath, readOnly = True}] if _t else [])
+    _volumes = ([{name = "workspace", persistentVolumeClaim.claimName = _w.claimName}] if _w else []) + ([{name = "trust-bundle", configMap = {name = _t.configMap, optional = True}}] if _t else [])
     _container = {
         name = "package-runtime"
         if _env:
             env = [{name = k, value = _env[k]} for k in sorted(_env)]
         if p?.resources:
             resources = p.resources
-        if _w:
-            volumeMounts = [{name = "workspace", mountPath = _w.mountPath}]
+        if _mounts:
+            volumeMounts = _mounts
     }
     _podSpec = {
         if _w:
             securityContext = workspaceSecurityContext(_w)
         containers = [_container]
-        if _w:
-            volumes = [{name = "workspace", persistentVolumeClaim.claimName = _w.claimName}]
+        if _volumes:
+            volumes = _volumes
     }
     {
         apiVersion = "pkg.crossplane.io/v1beta1"
