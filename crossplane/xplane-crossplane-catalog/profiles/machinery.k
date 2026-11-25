@@ -99,6 +99,10 @@ machinery: s.Profile = {
                 requests = {cpu = "100m", memory = "256Mi"}
                 limits = {cpu = "2", memory = "2Gi"}
             }
+            # The zitadel provider runs in this pod (zitadel-oidc-client), and
+            # ZITADEL sits behind the lab's Vault PKI wildcard. Without the lab
+            # CA the TLS handshake fails before any plan.
+            trustBundle = s.TrustBundle {}
         }
         s.Package {
             kind = "Provider"

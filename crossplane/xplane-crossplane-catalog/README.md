@@ -138,6 +138,26 @@ volume. Not for `provider-vault` (no-fork upjet, state rebuilt from the MR) or
 `provider-opentofu` (kubernetes state backend). `workspace` and `runtimeConfig`
 are mutually exclusive.
 
+### Provider runtime: `trustBundle`
+
+A Provider may carry `trustBundle` — a CA bundle ConfigMap (`configMap`,
+default `cluster-trust-bundle`, the target of the fleet's trust-manager
+Bundle) mounted read-only at `mountPath` (default `/etc/ssl/custom`).
+Consumers add to the same `DeploymentRuntimeConfig` as `env` and `resources`:
+
+- a pod volume `trust-bundle` from the ConfigMap, `optional: true`, so a
+  cluster without trust-manager still starts the provider,
+- a read-only volumeMount at `mountPath`,
+- env `SSL_CERT_DIR=/etc/ssl/certs:<mountPath>`. Go reads every file in each
+  directory, and the system bundle file regardless, so the image's own CAs stay.
+
+`upbound-provider-opentofu` carries one. The zitadel provider runs inside its
+pod, and ZITADEL is served under the lab's Vault PKI wildcard: without the lab
+CA every Workspace against it fails the TLS handshake (zitadel-oidc-client
+pilot on machinery-dev, 2026-11-25, verified with exactly this mount and
+value). `trustBundle` and `runtimeConfig` are mutually exclusive, and `env`
+must not set `SSL_CERT_DIR` beside it.
+
 proxmox-bpg also carries `env.HOME=/tmp`, on that volume: its SSH client (cloud-init
 snippet upload) needs a writable `$HOME/.ssh`, and the image's HOME is `/`.
 Terraform is unaffected — the image sets `TF_CLI_CONFIG_FILE=/terraform/.terraformrc`,
@@ -183,6 +203,7 @@ returns the whole set: the honest answer to what is actually on the cluster.
 - pulled providers are pinned on exactly the registry their `dependsOn` names
 - opentofu and proxmox-bpg carry the poll/sync tuning
 - proxmox-bpg keeps its workspace on a PVC at `/tmp`, and nothing else does; its HOME is on it
+- opentofu trusts `cluster-trust-bundle`, and nothing else carries a trustBundle
 - `ProviderConfig`s are `in-cluster` only, carrying no credentials
 
 ## Profiles

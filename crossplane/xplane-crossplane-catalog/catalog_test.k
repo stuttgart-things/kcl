@@ -252,6 +252,24 @@ test_only_cli_upjet_providers_get_a_workspace = lambda {
     assert _with == ["valkiriaaquaticamendi-provider-proxmox-bpg"], "unexpected workspace: ${_with}"
 }
 
+# The zitadel provider runs inside provider-opentofu's pod and ZITADEL is
+# served under the lab's Vault PKI wildcard. Without the lab CA every Workspace
+# against it fails the TLS handshake (zitadel-oidc-client pilot, 2026-11-25).
+test_opentofu_trusts_the_cluster_trust_bundle = lambda {
+    _p = {p.name: p for p in c.byKind(c.get("machinery"), "Provider")}
+    _t = _p["upbound-provider-opentofu"].trustBundle
+    assert _t, "provider-opentofu without the lab CA cannot reach a lab ZITADEL"
+    assert _t.configMap == "cluster-trust-bundle", "the trust-manager Bundle's target"
+    assert _t.mountPath == "/etc/ssl/custom"
+}
+
+# Only where a provider's own process needs it. provider-kubeconfig gets its CA
+# from the provider-kubeconfig-vault chart through runtimeConfig instead.
+test_only_opentofu_gets_a_trust_bundle = lambda {
+    _with = sorted([p.name for p in c.get("machinery").packages if p?.trustBundle])
+    assert _with == ["upbound-provider-opentofu"], "unexpected trustBundle: ${_with}"
+}
+
 # Each provider gets one in-cluster ProviderConfig, and they carry no
 # credentials — the ServiceAccount is the identity. Per-datacentre configs
 # (vSphere, Proxmox, Vault) are environment-specific and stay out of the catalog.
