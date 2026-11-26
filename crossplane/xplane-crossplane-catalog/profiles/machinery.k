@@ -60,6 +60,11 @@ import ..schema as s
 # 0.38.0 (2026-11-19, harvester#753): cluster v0.17.0 -- opt-in
 # spec.clusterscope.reader writes a read-only kubeconfig for clusterscope per
 # ClusterStack. Additive (default off); no new dependsOn floor.
+#
+# 0.40.0 (2026-11-26, crossplane-configurations#482, stuttgart-things#4855):
+# zitadel-oidc-client v0.2.0 added (first consumer: the Argo CD login of
+# oidc-test1, from machinery-dev); minio v0.1.0 -> v0.1.2 (status.share
+# renders [] instead of null, #577). No new dependsOn floor.
 machinery: s.Profile = {
     crossplaneVersion = "2.4.2"
     packages = [
@@ -777,7 +782,21 @@ machinery: s.Profile = {
         s.Package {
             kind = "Configuration"
             name = "stuttgart-things-crossplane-configurations-minio"
-            package = "ghcr.io/stuttgart-things/crossplane-configurations/minio:v0.1.0"
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/minio:v0.1.2"
+        }
+        # zitadel-oidc-client (crossplane-configurations#575/#576): one ZITADEL
+        # OIDC app per XR, client ID + secret to Vault -- e.g. the Argo CD login
+        # of a cluster the machinery builds (stuttgart-things#4855). Nothing
+        # pulls it. Its dependsOn (provider-opentofu >=v1.0.3, provider-vault
+        # >=v4.0.4, go-templating <v0.13.0, auto-ready <v0.7.0) is all above.
+        # Cluster facts, not here: an opentofu ClusterProviderConfig whose
+        # backend keeps the state (S3, crossplane-configurations#482), a vault
+        # ClusterProviderConfig that may write the entry, and the machine key
+        # Secret next to the XR.
+        s.Package {
+            kind = "Configuration"
+            name = "stuttgart-things-crossplane-configurations-zitadel-oidc-client"
+            package = "ghcr.io/stuttgart-things/crossplane-configurations/zitadel-oidc-client:v0.2.0"
         }
         # capability und argocd-cluster: NICHTS zieht die beiden ueber dependsOn,
         # sie existieren also nur dort, wo jemand sie installiert. Auf u26-kind3
