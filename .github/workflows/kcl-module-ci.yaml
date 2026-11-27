@@ -262,12 +262,49 @@ jobs:
           echo "MODULE_NAME=$MODULE_NAME" >> $GITHUB_ENV
           echo "MODULE_VERSION=$MODULE_VERSION" >> $GITHUB_ENV
 
+  # One module version = one OCI tag = one git tag `<module>-<version>` =
+  # one template state (stuttgart-things/claim-machinery-api#153): a change to
+  # a module's released files needs a new kcl.mod version, and its
+  # ClaimTemplates must carry that version as spec.tag. Markdown and tests/
+  # are not released files. tests/lint/module-release.py check-bump.
+  release-check:
+    needs: detect-changed-modules
+    if: github.event_name == 'pull_request' && needs.detect-changed-modules.outputs.modules != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+
+      - run: pip install --quiet --disable-pip-version-check pyyaml
+
+      - name: A released change bumps the version; templates carry it
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MODULES: ${{ needs.detect-changed-modules.outputs.modules }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2046
+          python3 tests/lint/module-release.py check-bump \
+            --base "${BASE_SHA}" --head "${HEAD_SHA}" \
+            $(printf '%s' "${MODULES}" | jq -r '.[]')
+
   publish-to-oci:
     needs: [detect-changed-modules, lint-and-test]
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
       || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # contents: write for the git tag <module>-<version> (step "Git tag").
+    permissions:
+      contents: write
+      packages: write
     strategy:
       matrix:
         module: ${{ fromJson(needs.detect-changed-modules.outputs.modules) }}
@@ -276,6 +313,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # the tag step looks up the commit that set a version
+          fetch-depth: 0
 
       - name: Install KCL
         run: |
@@ -480,6 +520,48 @@ jobs:
           else
             echo "⚠️  Could not determine package visibility"
           fi
+
+      # The git tag <module>-<version> that claim-machinery-api profiles pin
+      # their template URLs to (stuttgart-things/claim-machinery-api#153).
+      # Just published: on this commit. Version already in the registry and
+      # no tag yet (backfill, e.g. workflow_dispatch): on the commit that set
+      # the version, and only if the module's released files did not change
+      # since -- otherwise this fails and the module needs a new version.
+      # An existing tag is NEVER moved: pointing elsewhere fails the job.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+
+      - run: pip install --quiet --disable-pip-version-check pyyaml
+
+      - name: Git tag
+        env:
+          MODULE: ${{ matrix.module }}
+          NAME: ${{ steps.metadata.outputs.name }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          PUBLISHED: ${{ steps.check-version.outputs.exists == 'false' }}
+        run: |
+          set -euo pipefail
+          TAG="${NAME}-${VERSION}"
+          if [ "${PUBLISHED}" = "true" ]; then
+            TARGET=$(python3 tests/lint/module-release.py tag-target --sha "${GITHUB_SHA}" --published "${MODULE}")
+          else
+            TARGET=$(python3 tests/lint/module-release.py tag-target --sha "${GITHUB_SHA}" "${MODULE}")
+          fi
+          EXISTING=$(git ls-remote --tags origin "refs/tags/${TAG}" | cut -f1)
+          if [ -n "${EXISTING}" ]; then
+            # a lightweight tag: the ref is the commit
+            if [ "${EXISTING}" = "${TARGET}" ]; then
+              echo "✅ ${TAG} already on ${TARGET}"
+              exit 0
+            fi
+            echo "::error::${TAG} exists on ${EXISTING}, expected ${TARGET}. A tag is never moved -- release a new version."
+            exit 1
+          fi
+          git tag "${TAG}" "${TARGET}"
+          git push origin "refs/tags/${TAG}"
+          echo "🏷️  ${TAG} -> ${TARGET}"
+          echo "**Git tag:** \`${TAG}\` → \`${TARGET}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create release summary
         if: steps.check-version.outputs.exists == 'false'

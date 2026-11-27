@@ -123,7 +123,7 @@ the use case decides them.
 ## Run
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.4.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-native-vm --tag 0.4.1 \
   -D templateName=labda-vsphere -D name=my-vm -D size=large -D use_case=dev \
   -D 'dev_features=["go","kind"]'
 ```

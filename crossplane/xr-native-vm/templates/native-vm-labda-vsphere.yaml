@@ -15,7 +15,7 @@ metadata:
 spec:
   type: xr-native-vm
   source: oci://ghcr.io/stuttgart-things/xr-native-vm
-  tag: 0.4.0
+  tag: 0.4.1
   # LOCKED while LabDA has no vCenter access (stuttgart-things#5038): only the
   # admin role may order (claim-machinery-api AUTH_ADMIN_ROLES =
   # backstage-platform on machinery and machinery-labul; admins pass any
