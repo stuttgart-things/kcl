@@ -1,0 +1,121 @@
+---
+# A MinIO bucket as an order (stuttgart-things#4822): the MinioBucket XR of
+# crossplane-configurations storage/minio, rendered by xr-minio-bucket. The
+# same shape as the hand-written buckets in machinery-xrs/ (tests/ compares
+# them): bucket, one user with every operation on it, its keys in
+# Secret <secret_namespace>/<name> on the management cluster.
+apiVersion: resources.stuttgart-things.com/v1alpha1
+kind: ClaimTemplate
+metadata:
+  name: minio-bucket
+  title: MinIO Bucket
+  description: S3 bucket on a lab MinIO (MinioBucket) with a writer user whose keys land in a Secret on the management cluster. Orphan by default -- a teardown keeps the data.
+  tags:
+    - minio
+    - s3
+    - storage
+    - crossplane
+spec:
+  type: xr-minio-bucket
+  source: oci://ghcr.io/stuttgart-things/xr-minio-bucket
+  tag: 0.1.0
+  # Platform team only for now (stuttgart-things#4822). Admins
+  # (AUTH_ADMIN_ROLES) may order anyway.
+  orderRoles:
+    - backstage-platform
+  parameters:
+    - name: name
+      title: Bucket Name
+      type: string
+      required: true
+      pattern: "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+      description: "Bucket and XR name (3-63 characters, a-z 0-9 -). Cannot be changed later."
+
+    # The NAME means the same MinIO on every management cluster: minio-labda
+    # = LabDA (sthings-platform), only on machinery; minio = LabUL
+    # (platform-sthings), on machinery and machinery-labul.
+    - name: provider_config
+      title: MinIO
+      type: string
+      default: minio-labda
+      enum:
+        - minio-labda
+        - minio
+      description: "minio-labda: LabDA MinIO (minio.sthings-platform.4sthings.tiab.ssc.sva.de); minio: LabUL MinIO (artifacts.platform.sthings-vsphere.labul.sva.de)"
+      enumWhen:
+        management_cluster:
+          machinery-labul: [minio]
+
+    # Crossplane knows Delete/Orphan; the Composition maps DeleteIfEmpty to
+    # provider-minio's bucketDeletionPolicy, whose delete refuses a bucket
+    # with objects in it (MinIO BucketNotEmpty) -- the bucket stays and the
+    # teardown waits. DeleteAll is never offered (main.k refuses it).
+    - name: deletion_policy
+      title: On Teardown
+      type: string
+      default: Orphan
+      enum:
+        - Orphan
+        - DeleteIfEmpty
+      description: "Orphan (default): the bucket and its data stay on the MinIO. DeleteIfEmpty: an empty bucket is removed; a bucket with objects is never deleted. User, policy and key Secret go in both cases."
+
+    - name: user
+      title: Writer User
+      type: boolean
+      default: true
+      description: "Create user <name>-writer (every operation on this bucket) with its keys in Secret default/<name> on the management cluster"
+
+    # ---- who and where (stuttgart-things#4276, #4296)
+    - name: owner
+      title: Ordered For
+      type: string
+      default: ""
+      description: "Backstage entity ref of the owner; empty = the orderer"
+      identity: owner
+
+    - name: requested_by
+      title: Requested By
+      type: string
+      default: ""
+      hidden: true
+      description: "the authenticated orderer (stamped by the API)"
+      identity: user
+
+    - name: order_id
+      title: Order ID
+      type: string
+      default: ""
+      hidden: true
+
+    - name: management_cluster
+      title: Management Cluster
+      type: string
+      default: machinery
+      hidden: true
+
+    - name: source_path
+      title: Source Path
+      type: string
+      default: ""
+      hidden: true
+      description: "empty = the management cluster's orders directory/minio-<name>.yaml"
+
+    - name: access_name
+      title: Access Entry
+      type: string
+      default: writer
+      hidden: true
+      description: "name of the access entry; the user is <name>-<access_name>"
+
+    - name: secret_namespace
+      title: Secret Namespace
+      type: string
+      default: default
+      hidden: true
+      description: "namespace of the key Secret on the management cluster"
+
+    - name: region
+      title: Region
+      type: string
+      default: us-east-1
+      hidden: true

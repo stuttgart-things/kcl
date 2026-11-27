@@ -1,0 +1,67 @@
+---
+# Backup targets for the lab IdPs on the infra clusters (stuttgart-things#4154):
+# ONE bucket per ZITADEL instance, each on the MinIO of its own lab, for the
+# nightly pg_dump CronJob next to the instance
+# (clusters/labul/vsphere/infra-sthings/apps/zitadel-backup.yaml,
+# clusters/labda/vsphere/sthings-infra/apps/zitadel-backup.yaml). The same
+# pattern as the Harvester lab's platform-zitadel-backup (harvester#574).
+#
+#   MinioBucket (storage/minio)
+#     -> bucket + policy + user <bucket>-backup on the lab's MinIO
+#     -> keys in Secret default/<bucket> on THIS cluster (machinery)
+#
+# The infra clusters have no external-secrets source for these keys, so they
+# go there as SOPS Secrets zitadel-backup-s3 (apps/zitadel-backup-s3.enc.yaml
+# per cluster, commands in each cluster's README.md, "ZITADEL BACKUP").
+#
+# The platform cluster's MinIO, not the infra cluster's: the backup lives on
+# another VM than ZITADEL, so a lost infra node (openebs-hostpath) does not
+# take it along. Not off-site -- both are in the same lab.
+#
+# `deletionPolicy` stays at Orphan and pruning is off: deleting this file (or
+# the XR) must not take the backups with it.
+apiVersion: storage.stuttgart-things.com/v1alpha1
+kind: MinioBucket
+metadata:
+  name: labul-infra-zitadel-backup
+  namespace: default
+  annotations:
+    stuttgart-things.com/management-cluster: machinery
+    stuttgart-things.com/source-path: clusters/labda/vsphere/machinery-xrs/minio-zitadel-backup.yaml
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  # The LabUL MinIO (platform-sthings, artifacts.platform.sthings-vsphere.labul.sva.de).
+  providerConfigRef:
+    name: minio
+  bucketName: labul-infra-zitadel-backup
+  region: us-east-1
+  access:
+    # Write, list and delete: the CronJob uploads and removes what is older
+    # than its retention.
+    - name: backup
+      scope: bucket
+      connectionSecret:
+        name: labul-infra-zitadel-backup
+        namespace: default
+---
+apiVersion: storage.stuttgart-things.com/v1alpha1
+kind: MinioBucket
+metadata:
+  name: labda-infra-zitadel-backup
+  namespace: default
+  annotations:
+    stuttgart-things.com/management-cluster: machinery
+    stuttgart-things.com/source-path: clusters/labda/vsphere/machinery-xrs/minio-zitadel-backup.yaml
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  # The LabDA MinIO (sthings-platform, minio.sthings-platform.4sthings.tiab.ssc.sva.de).
+  providerConfigRef:
+    name: minio-labda
+  bucketName: labda-infra-zitadel-backup
+  region: us-east-1
+  access:
+    - name: backup
+      scope: bucket
+      connectionSecret:
+        name: labda-infra-zitadel-backup
+        namespace: default
