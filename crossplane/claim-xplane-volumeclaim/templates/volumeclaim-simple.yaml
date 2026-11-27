@@ -11,7 +11,7 @@ metadata:
 spec:
   type: volumeclaim
   source: oci://ghcr.io/stuttgart-things/claim-xplane-volumeclaim
-  tag: 0.1.3
+  tag: 0.1.4
   parameters:
     # Template selector
     - name: templateName

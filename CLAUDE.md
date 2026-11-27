@@ -81,6 +81,32 @@ grants anonymous read, not write. See
 - Published tags are **immutable** — never republish an existing version; CI skips
   it and `task push-module` refuses it. Ship fixes as a new version instead
 
+### Git tags `<module>-<version>` (claim-machinery-api#153)
+
+Every published module version also gets a git tag `<module>-<version>`
+(e.g. `xr-native-vm-0.4.1`), set by `publish-to-oci` in
+`kcl-module-ci.yaml` on the commit that was published. claim-machinery-api
+profiles pin their template URLs to these tags instead of `refs/heads/main`.
+
+- **A change to a module's released files needs a new `kcl.mod` version** --
+  `templates/` included. Released files = everything under the module except
+  Markdown and `tests/`. The PR check `release-check`
+  (`tests/lint/module-release.py check-bump`) refuses it otherwise, and every
+  ClaimTemplate under `<module>/templates/` must carry `spec.tag` == that
+  version.
+- **A tag is never moved.** If `<module>-<version>` already points elsewhere,
+  the publish job fails; release a new version instead.
+- **Backfill** (version already in the registry, no tag yet):
+  `gh workflow run kcl-module-ci.yaml -f module=<module-dir>` tags the commit
+  that set the version, and only if the released files did not change since.
+
+Check locally:
+
+```bash
+python3 tests/lint/module-release.py check-bump --base origin/main --head HEAD crossplane/<module>
+python3 tests/lint/module-release.py tag-target --sha HEAD crossplane/<module>
+```
+
 ### Pinning a module version
 
 A `:version` suffix in the URL path is **not** a pin. It is parsed as part of
