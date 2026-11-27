@@ -32,6 +32,9 @@ test_refuses_bad_names = lambda {
     assert _refused({name = "my.bucket"})
     assert _refused({name = "-bucket"})
     assert _refused({name = "xn--bucket"})
+    # 51 characters: over machinery-order-service's limit; 50 pass.
+    assert _refused({name = "a" * 51})
+    assert not _refused({name = "a" * 50})
 }
 
 test_refuses_unknown_cluster_without_source_path = lambda {

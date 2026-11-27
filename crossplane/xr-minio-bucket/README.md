@@ -40,9 +40,17 @@ from the ManagementCluster's `ordersPath`).
 | `minio-labda` (default) | LabDA, sthings-platform (`minio.sthings-platform.4sthings.tiab.ssc.sva.de`) | `machinery` |
 | `minio` | LabUL, platform-sthings (`artifacts.platform.sthings-vsphere.labul.sva.de`) | `machinery`, `machinery-labul` |
 
-The name means the same MinIO on every management cluster. `minio-labda` with
-`management_cluster: machinery-labul` is refused (that ProviderConfig does not
-exist there); the ClaimTemplate narrows the enum the same way (`enumWhen`).
+**`minio-labda` exists only on `machinery`.** **`minio` is the LabUL MinIO on
+both management clusters** -- also on `machinery` (LabDA), where it is not the
+lab's own MinIO: a bucket ordered there with `minio` lands in LabUL. So the
+name means the same MinIO wherever it is used, and the template can serve both
+profiles. `minio-labda` with `management_cluster: machinery-labul` is refused
+(that ProviderConfig does not exist there); the ClaimTemplate narrows the enum
+the same way (`enumWhen`).
+
+Defined in stuttgart-things: `clusters/labda/vsphere/machinery-fleet-state/`
+`minio-labda.yaml` and `providerconfigs.yaml` (`minio`),
+`clusters/labul/proxmox/machinery-labul-fleet-state/providerconfigs.yaml` (`minio`).
 
 ## Teardown: what is deleted
 
@@ -72,7 +80,7 @@ if it is really unwanted.
 
 - `deletion_policy` other than `Orphan` / `DeleteIfEmpty` (`DeleteAll` named explicitly)
 - `provider_config` other than `minio-labda` / `minio`, or not present on the management cluster
-- `name` not 3-63 of `a-z0-9-` starting and ending alphanumeric, or starting with `xn--` / `sthree-`
+- `name` not 3-50 of `a-z0-9-` (S3 allows 63; 50 is machinery-order-service's limit for the order file name, so claims and the service accept the same names) starting and ending alphanumeric, or starting with `xn--` / `sthree-`
 - an unknown management cluster without `source_path`
 
 ## Run

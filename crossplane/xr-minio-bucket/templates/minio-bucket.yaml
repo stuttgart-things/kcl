@@ -28,8 +28,11 @@ spec:
       title: Bucket Name
       type: string
       required: true
-      pattern: "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
-      description: "Bucket and XR name (3-63 characters, a-z 0-9 -). Cannot be changed later."
+      # 50, not S3's 63: the limit of machinery-order-service (order file name).
+      pattern: "^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$"
+      minLength: 3
+      maxLength: 50
+      description: "Bucket and XR name (3-50 characters, a-z 0-9 -). Cannot be changed later."
 
     # The NAME means the same MinIO on every management cluster: minio-labda
     # = LabDA (sthings-platform), only on machinery; minio = LabUL

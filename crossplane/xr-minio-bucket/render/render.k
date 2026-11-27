@@ -50,7 +50,10 @@ DELETION_POLICIES = ["Orphan", "DeleteIfEmpty"]
 
 render = lambda p: {str:} -> [{str:}] {
     _name = _str(p, "name", "demo-bucket")
-    assert regex.match(_name, r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"), "name must be 3-63 characters of a-z, 0-9 and -, starting and ending alphanumeric, got ${_name}"
+    # 3-50, not S3's 63: machinery-order-service names the order file after it
+    # and refuses names over 50 (internal/intake dnsLabel), so claims and the
+    # service accept the same names.
+    assert regex.match(_name, r"^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$"), "name must be 3-50 characters of a-z, 0-9 and -, starting and ending alphanumeric, got ${_name}"
     # MinIO reserves these prefixes; S3 refuses an IP-like name, which the
     # pattern above (no dots) already rules out.
     assert not _name.startswith("xn--") and not _name.startswith("sthree-"), "name must not start with xn-- or sthree-, got ${_name}"
