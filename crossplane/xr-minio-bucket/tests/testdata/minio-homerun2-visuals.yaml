@@ -1,0 +1,42 @@
+---
+# Pictures for the LED panel: the radio's gif spots and jingles
+# (homerun2-radio-pitcher spots.yaml `image:`, slot param `jingle:`) name an
+# https:// URL here, and the led-catcher fetches and caches it.
+#
+#   MinioBucket (storage/minio)
+#     -> bucket homerun2-visuals on the LabUL MinIO
+#        (https://artifacts.platform.sthings-vsphere.labul.sva.de/homerun2-visuals/<file>)
+#     -> anonymous GetObject on its objects (no listing): the catcher fetches
+#        without keys; the pictures are not secret
+#     -> user homerun2-visuals-writer, keys in Secret default/homerun2-visuals
+#        on machinery, for uploads (mc cp)
+#
+# The catcher caches by URL: a changed picture gets a new file name
+# (station-id-v2.gif), never the old one overwritten. The catcher trusts the
+# MinIO certificate through the cluster-trust-bundle
+# (clusters/labul/vsphere/platform-sthings/apps/platform.yaml).
+# Orphan, pruning off, as the other buckets.
+apiVersion: storage.stuttgart-things.com/v1alpha1
+kind: MinioBucket
+metadata:
+  name: homerun2-visuals
+  namespace: default
+  annotations:
+    stuttgart-things.com/management-cluster: machinery
+    stuttgart-things.com/source-path: clusters/labda/vsphere/machinery-xrs/minio-homerun2-visuals.yaml
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  # The LabUL MinIO (platform-sthings), next to k8s-cluster-report.
+  providerConfigRef:
+    name: minio
+  bucketName: homerun2-visuals
+  region: us-east-1
+  bucketPolicy: |
+    {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::homerun2-visuals/*"]}]}
+  access:
+    # Uploads of new pictures: every operation on this bucket.
+    - name: writer
+      scope: bucket
+      connectionSecret:
+        name: homerun2-visuals
+        namespace: default
