@@ -6,8 +6,8 @@ apiVersion: resources.stuttgart-things.com/v1alpha1
 kind: ClaimTemplate
 metadata:
   name: native-vm-labda-vsphere
-  title: VM (labda-vsphere)
-  description: vSphere VM in LabDA (NativeVsphereVM, EnvironmentConfig labda), built by machinery – same order as the Backstage template create-vm.
+  title: VM (labda-vsphere) – admins only
+  description: "LOCKED, admins only: LabDA has no vCenter access (stuttgart-things/stuttgart-things#5038), so a new vSphere VM cannot be built. vSphere VM in LabDA (NativeVsphereVM, EnvironmentConfig labda), built by machinery – same order as the Backstage template create-vm."
   tags:
     - vm
     - vsphere
@@ -16,6 +16,15 @@ spec:
   type: xr-native-vm
   source: oci://ghcr.io/stuttgart-things/xr-native-vm
   tag: 0.4.0
+  # LOCKED while LabDA has no vCenter access (stuttgart-things#5038): only the
+  # admin role may order (claim-machinery-api AUTH_ADMIN_ROLES =
+  # backstage-platform on machinery and machinery-labul; admins pass any
+  # orderRoles anyway). Everybody else gets 403 "missing role for this
+  # template". The template stays in the profiles and visible, so releasing
+  # it again when the vCenter is back is removing these lines and restoring
+  # title and description.
+  orderRoles:
+    - backstage-platform
   # Order = layout order: name, use case, the fields of the chosen use case,
   # size, who. showWhen/enumWhen (claim-machinery-api#135) hide fields that
   # do not apply and narrow size per use case; clients that do not know them
