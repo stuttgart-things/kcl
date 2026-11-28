@@ -52,7 +52,7 @@ no `platformFeatures` are selected, the `clusterLabels` default
 Recreate the `philly` cluster from the labul lab with a single command:
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D name=philly \
   -D networkKey=10.31.101 \
   -D clusterName=philly \
@@ -95,7 +95,7 @@ items:
 Pipe directly to `kubectl`:
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D name=philly \
   -D networkKey=10.31.101 \
   -D createDNS=true \
@@ -168,7 +168,7 @@ reservation there is no IP or FQDN for `data.server`, so it has to come from
 the kubeconfig. That mirrors the CRD's own fourth `XValidation` rule.
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D name=labda-dev-a \
   -D clusterType=default \
   -D skipReservation=true \
@@ -180,7 +180,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
 ### Minimal — defaults (renders a `philly`-like cluster)
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D createDNS=true \
   -D preserveKubeconfigServer=true \
   -D releaseOnDelete=true
@@ -189,7 +189,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
 ### Different cluster, different network pool
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D name=austin \
   -D networkKey=10.31.105 \
   -D clusterName=austin \
@@ -201,7 +201,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
 ### Use clusterbook FQDN as ArgoCD server URL
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D name=denver \
   -D networkKey=10.31.103 \
   -D createDNS=true \
@@ -213,7 +213,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
 ### Enrich an existing ArgoCD cluster Secret
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D name=denver \
   -D networkKey=10.31.103 \
   -D createDNS=true \
@@ -223,7 +223,7 @@ kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
 ### Custom selector labels for ApplicationSets
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.0 \
+kcl run oci://ghcr.io/stuttgart-things/clusterbook-cluster-gen --tag 0.7.1 \
   -D name=edge-1 \
   -D networkKey=10.31.110 \
   -D createDNS=true \
