@@ -18,13 +18,13 @@ render a `VMProvision` (OpenTofu Workspace); `harvester` renders a `HarvesterVM`
 
 ```bash
 # minimal - a small vSphere VM in labul (os=ubuntu24, ansible=true by default)
-kcl run oci://ghcr.io/stuttgart-things/xr-virtualmachine --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-virtualmachine --tag 0.1.1 \
   -D templateName=minimal -D name=vm-min -D size=small -D provider=vsphere -D environment=labul
 ```
 
 ```bash
 # detailed - a medium Harvester VM, ansible off, explicit providerRef override
-kcl run oci://ghcr.io/stuttgart-things/xr-virtualmachine --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-virtualmachine --tag 0.1.1 \
   -D templateName=detailed -D name=vm-harv -D size=medium -D provider=harvester \
   -D environment=labul -D os=ubuntu24 -D count=1 -D ansible=false \
   -D providerRefName=default -D providerRefKind=ClusterProviderConfig

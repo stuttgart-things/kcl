@@ -22,14 +22,14 @@ only pick the playbook(s), the target host(s) and the Crossplane wrap settings.
 
 ```bash
 # minimal - a bare PipelineRun wrapper
-kcl run oci://ghcr.io/stuttgart-things/xr-ansiblerun --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-ansiblerun --tag 0.1.1 \
   -D templateName=minimal -D name=ansible-run -D pipelineRunName=run-ansible \
   -D namespace=tekton-ci -D crossplaneProviderConfig=in-cluster
 ```
 
 ```bash
 # baseos - run sthings.baseos.setup against a single host (mirrors the proven XR)
-kcl run oci://ghcr.io/stuttgart-things/xr-ansiblerun --tag 0.1.0 \
+kcl run oci://ghcr.io/stuttgart-things/xr-ansiblerun --tag 0.1.1 \
   -D templateName=baseos -D name=ansible-run-test \
   -D pipelineRunName=run-ansible-baseos -D namespace=tekton-ci \
   -D hosts=192.168.10.149 -D crossplaneProviderConfig=in-cluster \
